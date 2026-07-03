@@ -4,21 +4,21 @@
 
 An end-game extension mod for **Factorio: Space Age** that prolongs the endgame with new orbital production, asteroid processing, and biology challenges once the Solar System Edge is behind you.
 
-## Prequel: The Silence After the Edge
+## Prequel: Beyond the Plateau
 
-Space Age moved the finish line to the Solar System Edge — a platform built from Promethium science, flown out past Aquilo, triggering a victory screen and a Galaxy of Fame upload. Getting there is a real, earned project. What's left afterward isn't:
+Space Age provides a fantastic, tightly-tuned progression through the Solar System. The challenge of the Shattered Planet, the logistics of your first space platforms, and the rush of automating the final science packs are genuine highlights that make the game feel cohesive and rewarding.
 
-> "I don't feel that much accomplished, it just make me think that if my platform could already leave the system, why did I have to do all that stuff?" — [Antonio (BR), Steam Community](https://steamcommunity.com/app/427520/discussions/0/4634862193089805970/?ctp=2)
+However, once you have conquered the unique demands of each planet and established a steady flow of their rare materials to your platform, the gameplay shifts. The "puzzles" that defined your journey — managing heat on Aquilo, dealing with spoilage on Gleba, or energy constraints on Fulgora — are replaced by a static, repetitive loop.
 
 > "The current metagame leaves me feeling hollow, empty. Like in the end nothing really mattered that I achieved." — [numgun, Factorio Forums](https://forums.factorio.com/viewtopic.php?t=58404)
 
-The remaining tech tree keeps handing out upgrades anyway, and almost all of it is the same upgrade: modules that make the science you're already producing slightly cheaper, slightly faster, slightly more automated. **Productivity of producing science, in service of producing more science. A closed loop dressed up as a tech tree, and closed loops don't feel like goals.**
+At this point, the tech tree continues to offer upgrades, but they feel meaningless: **productivity of producing science, in service of producing more science.** The factory continues to grow, but the nature of the challenge stops evolving.
 
-S.I.O.S. breaks that loop without asking you to fly anywhere new — it turns the asteroids already drifting past your platform, and the orbit of a planet you've already conquered, into a fresh set of problems actually worth solving.
+S.I.O.S. (Singularity-Integrated Optimized Synthesis) is designed to push past this plateau. It doesn't shorten your journey or skip the planets; it asks you to take the mastery you've gained and synthesize it into new, complex orbital infrastructure. By turning your space platform into a "Grand Unified Factory," S.I.O.S. keeps the challenge of logistics-as-a-puzzle alive long after the planets are secured, ensuring the endgame remains as engaging as the first rocket launch.
 
 ## Overview
 
-S.I.O.S. is a high-tier industrial expansion designed for the Space Age endgame. Once you have mastered the distinct challenges of Vulcan, Fulgora, Gleba, and Aquilo, this mod provides the final technological bridge: the ability to bring planetary-tier production into orbit.
+S.I.O.S. is a high-tier industrial expansion designed for the Space Age endgame. Once you have mastered the distinct challenges of Vulcanus, Fulgora, Gleba, and Aquilo, this mod synthesizes that mastery into a new arena: the ability to bring planetary-tier production into orbit.
 
 By utilizing asteroids as a primary chemical feedstock and mastering orbital-scale biological cultivation, S.I.O.S. transforms your space platform into a Grand Unified Factory, capable of producing every science pack in the game without the need for constant planetary maintenance.
 
@@ -98,6 +98,6 @@ Calcite is left to existing Oxide asteroid processing, which already produces it
 
 ## The Endgame Challenge
 
-S.I.O.S. is not a "shortcut." It is a test of your mastery over Factorio's logistical systems. Success requires balancing your energy grid to support 500MW+ synthesis machines and using circuit networks to optimize chemical yields.
+S.I.O.S. is not a "shortcut" past the post-game plateau — it's a replacement for it. Success requires balancing your energy grid to support 500MW+ synthesis machines and using circuit networks to optimize chemical yields, the same logistics-as-a-puzzle mastery the planets demanded, now applied in orbit.
 
-It is the final milestone for the factory that must grow.
+It is the next milestone for the factory that must grow.
