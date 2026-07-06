@@ -1,26 +1,20 @@
-# Factorio S.I.O.S. Mod
+# Factorio SPACELAB Mod
 
-**S.I.O.S.** stands for **Singularity-Integrated Optimized Synthesis**.
+**SPACELAB** stands for **Space Platform Asteroid Complete Extraction: Laboratories with Advanced Biotech**.
 
-An end-game extension mod for **Factorio: Space Age** that prolongs the endgame with new orbital production, asteroid processing, and biology challenges once the Solar System Edge is behind you.
+An end-game extension mod for **Factorio: Space Age** that prolongs the endgame with complete asteroid extraction, orbital laboratories, and advanced biotech challenges once the Solar System Edge is behind you.
 
 ## Prequel: Beyond the Plateau
 
-Space Age provides a fantastic, tightly-tuned progression through the Solar System. The challenge of the Shattered Planet, the logistics of your first space platforms, and the rush of automating the final science packs are genuine highlights that make the game feel cohesive and rewarding.
+Space Age already delivers a complete arc, from first orbital logistics to the Solar System Edge. SPACELAB starts after that arc, where the factory can keep expanding into a new kind of goal instead of only repeating its final optimization loop.
 
-However, once you have conquered the unique demands of each planet and established a steady flow of their rare materials to your platform, the gameplay shifts. The "puzzles" that defined your journey — managing heat on Aquilo, dealing with spoilage on Gleba, or energy constraints on Fulgora — are replaced by a static, repetitive loop.
-
-> "The current metagame leaves me feeling hollow, empty. Like in the end nothing really mattered that I achieved." — [numgun, Factorio Forums](https://forums.factorio.com/viewtopic.php?t=58404)
-
-At this point, the tech tree continues to offer upgrades, but they feel meaningless: **productivity of producing science, in service of producing more science.** The factory continues to grow, but the nature of the challenge stops evolving.
-
-S.I.O.S. (Singularity-Integrated Optimized Synthesis) is designed to push past this plateau. It doesn't shorten your journey or skip the planets; it asks you to take the mastery you've gained and synthesize it into new, complex orbital infrastructure. By turning your space platform into a "Grand Unified Factory," S.I.O.S. keeps the challenge of logistics-as-a-puzzle alive long after the planets are secured, ensuring the endgame remains as engaging as the first rocket launch.
+The main motivation is the point where upgrades risk becoming **meaningless: productivity of producing science, in service of producing more science.** SPACELAB turns that momentum toward alternative possibilities: asteroid-based chemistry, orbital biological systems, and a space platform that becomes a new production frontier rather than only a launch destination.
 
 ## Overview
 
-S.I.O.S. is a high-tier industrial expansion designed for the Space Age endgame. Once you have mastered the distinct challenges of Vulcanus, Fulgora, Gleba, and Aquilo, this mod synthesizes that mastery into a new arena: the ability to bring planetary-tier production into orbit.
+SPACELAB is a high-tier industrial expansion for building a self-sufficient orbital industry. It uses asteroid debris as broad chemical feedstock and adds advanced Bio-Lab recipes so space platforms can support complex material, agricultural, and biological chains.
 
-By utilizing asteroids as a primary chemical feedstock and mastering orbital-scale biological cultivation, S.I.O.S. transforms your space platform into a Grand Unified Factory, capable of producing every science pack in the game without the need for constant planetary maintenance.
+Instead of replacing the existing journey, SPACELAB extends it with future-facing infrastructure: complete asteroid extraction, high-energy synthesis, orbital cultivation, and closed-loop production that gives late-game factories new systems to design, balance, and scale.
 
 ## Design Philosophy
 
@@ -36,7 +30,7 @@ By utilizing asteroids as a primary chemical feedstock and mastering orbital-sca
 
 ### Asteroid Feedstock
 
-Not all asteroid chunks are created equal. S.I.O.S. distinguishes between three common feedstock types and one rare one, all processed through the Crusher in increasing order of required tech:
+Not all asteroid chunks are created equal. SPACELAB distinguishes between three common feedstock types and one rare one, all processed through the Crusher in increasing order of required tech:
 
 - **Metallic Asteroid:** The most common chunk type, dense with iron and copper ore. New Crusher tech extracts bulk Stone from it directly, with a follow-up tier adding a rare chance at Flurolite.
 - **Carbonic Asteroid:** Rich in carbon compounds, these chunks are the platform's primary carbon feedstock. Same two-tier Stone-then-Flurolite Crusher progression as Metallic.
@@ -52,7 +46,7 @@ Calcite is left to existing Oxide asteroid processing, which already produces it
 
 ### New Buildings
 
-- **Orbital Bio-Lab:** An advanced facility that allows for the growth of Gleba's two staple crops, **Yumako Fruit** and **Jellynut**, and the incubation of Biter/Pentapod eggs in orbit.
+- **Orbital Bio-Lab:** An advanced facility that allows for the growth of Gleba's two staple crops, **Yumako Fruit** and **Jellynut**, and separate incubation of Biter and Pentapod eggs in orbit, using high-energy water hydrolysis to supply oxygen for sealed growth chambers.
 
 ### Existing Building Integration
 
@@ -85,19 +79,20 @@ Calcite is left to existing Oxide asteroid processing, which already produces it
 
 | Recipe | Time | Inputs | Outputs | Notes |
 | --- | --- | --- | --- | --- |
-| Yumako Cultivation | 60s | Nutrient Paste, Water | 2 Yumako Fruit (Spoilage enabled) | Mirrors the Gleba surface growth cycle; feed into Yumako Mash processing same as on-planet. |
-| Jellynut Cultivation | 60s | Nutrient Paste, Water | 2 Jellynut (Spoilage enabled) | Grown alongside Yumako so the platform can produce both halves of the Bioflux/Nutrients chain without importing either crop. |
-| Egg Incubation | 120s | Nutrient Paste, Heat | 1 Biter/Pentapod Egg | Long incubation reflects the difficulty of maintaining a stable low-gravity nest environment. |
+| Yumako Cultivation | 60s | Nutrient Paste, Water, High Energy, Nitrogen, Calcite, Carbon, 1 Yumako Seed | 10 Yumako Fruit | Mirrors the Gleba surface growth cycle; seed stock, oxygen from hydrolyzed water, and mineral/gas conditioning keep orbital cultivation tied to a maintained biological loop. |
+| Jellynut Cultivation | 60s | Nutrient Paste, Water, High Energy, Nitrogen, Calcite, Carbon, 1 Jellynut Seed | 10 Jellynut | Grown alongside Yumako so the platform can produce both halves of the Bioflux/Nutrients chain without importing either crop. |
+| Biter Egg Incubation | 120s | Nutrient Paste, Bioflux, Water, Heat, High Energy, Nitrogen, Calcite, Carbon, 1 Biter Egg | 10 Biter Eggs | Long incubation reflects the difficulty of maintaining a stable oxygenated low-gravity nest environment for a terrestrial nest organism. |
+| Pentapod Egg Incubation | 120s | Nutrient Paste, Bioflux, Water, Heat, High Energy, Nitrogen, Calcite, Carbon, 1 Pentapod Egg | 10 Pentapod Eggs | Separate incubation keeps Gleba-native egg biology distinct from Biter egg handling while preserving the same orbital support requirements. |
 
 ## Scientific Justification
 
 - **Ammonia from Stone:** Carbonaceous asteroids contain nitrogen-bearing phyllosilicates. A Cryogenic Plant uses high-pressure and heat processing to extract ammonia directly from stone.
 - **Stone from Crushing:** Vanilla asteroid processing never yields Stone, but mechanical shattering of any silicate or metallic body inherently produces mineral rubble regardless of composition. The Stone-Focused Crusher variants isolate that rubble without the finer sieving needed to detect Flurolite traces, which is why they're the cheaper, earlier-tech option.
 - **Flurolite Chemistry:** Lithium and fluorine are geochemically linked in evolved crustal granites. Flurolite represents the trace rare-earth inclusions found within shattered planetary crusts, processed through cryogenic plant distillation. Red Asteroids carry the richest concentration, but trace inclusions also turn up in ordinary Metallic, Carbonic, and Oxide chunks; finding them requires the finer sieving of the higher-tier Flurolite-Focused Crusher variants, at the cost of some Stone throughput. Calcite recovery is left untouched on the existing Oxide processing recipe, which already yields it in ample quantity.
-- **Orbital Bio-Lab:** Rather than "stabilizing" life, the Bio-Lab provides the precise environmental parameters, including heat, light, and nutrients, required to maintain planetary species in a low-gravity environment while keeping the high-stakes spoilage mechanics of Space Age intact. Yumako and Jellynut are cultivated as a matched pair, exactly as they grow together on Gleba, so the platform's Bioflux and Nutrients chains stay self-sufficient.
+- **Orbital Bio-Lab:** Rather than "stabilizing" life, the Bio-Lab provides the precise environmental parameters, including heat, light, nutrients, Bioflux enrichment, nitrogen atmosphere, calcite buffering, carbon feedstock, and high-energy water hydrolysis for oxygen supply, required to maintain planetary species in a low-gravity environment while keeping the high-stakes spoilage mechanics of Space Age intact. Yumako and Jellynut are cultivated from their corresponding seeds as a matched pair, exactly as they grow together on Gleba, while Biter and Pentapod eggs require separate incubation recipes so the platform's Bioflux, Nutrients, and egg chains stay self-sufficient.
 
 ## The Endgame Challenge
 
-S.I.O.S. is not a "shortcut" past the post-game plateau — it's a replacement for it. Success requires balancing your energy grid to support 500MW+ synthesis machines and using circuit networks to optimize chemical yields, the same logistics-as-a-puzzle mastery the planets demanded, now applied in orbit.
+SPACELAB is not a "shortcut" past the post-game plateau — it's a replacement for it. Success requires balancing your energy grid to support 500MW+ synthesis machines, complete asteroid extraction, and advanced biotech loops while using circuit networks to optimize chemical yields, the same logistics-as-a-puzzle mastery the planets demanded, now applied in orbit.
 
 It is the next milestone for the factory that must grow.
