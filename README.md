@@ -112,3 +112,16 @@ Calcite is left to existing Oxide asteroid processing, which already produces it
 SPACELAB is not a "shortcut" past the post-game plateau — it's a replacement for it. Success requires balancing your energy grid to support 500MW+ synthesis machines, complete asteroid extraction, and advanced biotech loops while using circuit networks to optimize chemical yields, the same logistics-as-a-puzzle mastery the planets demanded, now applied in orbit.
 
 It is the next milestone for the factory that must grow.
+
+## Asset Attribution
+
+SPACELAB currently uses several visual resources derived from the **Space Exploration** mod as local bundled assets. Source mod page: <https://mods.factorio.com/mod/space-exploration>.
+
+**Important:** these assets are temporary beta placeholders only. Because of the Space Exploration asset license, the final release version of SPACELAB must replace them with original or otherwise properly licensed assets and must not contain any Space Exploration-derived resources.
+
+Space Exploration-derived resources currently used in this mod:
+
+- **Growth Facility graphics:** entity animation, shadow, item icon, and technology icon assets adapted from Space Exploration's Growth Facility / Zero-G growth facility resources.
+- **Flurolite placeholder graphics:** current Flurolite entity sheet and icon variants are adapted from Space Exploration beryllium ore graphics and renamed for local SPACELAB use.
+
+These assets are included only to support beta-stage local prototype development and visual continuity while replacement art is prepared.
