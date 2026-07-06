@@ -1,5 +1,9 @@
 # Factorio SPACELAB Mod
 
+<p align="center">
+  <img src="thumbnail.png" alt="SPACELAB mod thumbnail" width="128">
+</p>
+
 **SPACELAB** stands for **Space Platform Asteroid Complete Extraction: Laboratories with Advanced Biotech**.
 
 An end-game extension mod for **Factorio: Space Age** that prolongs the endgame with complete asteroid extraction, orbital laboratories, and advanced biotech challenges once the Solar System Edge is behind you.
@@ -12,7 +16,7 @@ The main motivation is the point where upgrades risk becoming **meaningless: pro
 
 ## Overview
 
-SPACELAB is a high-tier industrial expansion for building a self-sufficient orbital industry. It uses asteroid debris as broad chemical feedstock and adds advanced Bio-Lab recipes so space platforms can support complex material, agricultural, and biological chains.
+SPACELAB is a high-tier industrial expansion for building a self-sufficient orbital industry. It uses asteroid debris as broad chemical feedstock and adds advanced Growth Facility recipes so space platforms can support complex material, agricultural, and biological chains.
 
 Instead of replacing the existing journey, SPACELAB extends it with future-facing infrastructure: complete asteroid extraction, high-energy synthesis, orbital cultivation, and closed-loop production that gives late-game factories new systems to design, balance, and scale.
 
@@ -27,69 +31,81 @@ Instead of replacing the existing journey, SPACELAB extends it with future-facin
 ### New Materials
 
 - **Flurolite (Fluoro-Spodumene):** A rare, trace mineral found as a byproduct of asteroid processing. It is the mandatory precursor for high-tier chemical synthesis.
+- **Uranium Ore:** A very low-probability heavy trace byproduct recovered from advanced asteroid processing, with Red Asteroids carrying the richest traces.
 
 ### Asteroid Feedstock
 
 Not all asteroid chunks are created equal. SPACELAB distinguishes between three common feedstock types and one rare one, all processed through the Crusher in increasing order of required tech:
 
-- **Metallic Asteroid:** The most common chunk type, dense with iron and copper ore. New Crusher tech extracts bulk Stone from it directly, with a follow-up tier adding a rare chance at Flurolite.
-- **Carbonic Asteroid:** Rich in carbon compounds, these chunks are the platform's primary carbon feedstock. Same two-tier Stone-then-Flurolite Crusher progression as Metallic.
-- **Oxide Asteroid:** Ice-bearing chunks that supplement on-platform water production. Same two-tier Stone-then-Flurolite Crusher progression as Metallic.
-- **Red Asteroid:** A rare, high-value chunk laced with heavy trace metals, requiring the most advanced Crusher tech. Its "Shattered Synthesis" processing is the single richest source of Holmium and Tungsten outside of Aquilo mining, alongside the best per-chunk Flurolite odds.
+- **Metallic Asteroid:** The most common chunk type, dense with iron and copper ore. New Crusher tech extracts bulk Stone from it directly, with a follow-up tier adding rare chances at Flurolite and Uranium Ore.
+- **Carbonic Asteroid:** Rich in carbon compounds, these chunks are the platform's primary carbon feedstock. Same two-tier Stone-then-Flurolite Crusher progression as Metallic, including a trace Uranium Ore roll at the advanced tier.
+- **Oxide Asteroid:** Ice-bearing chunks that supplement on-platform water production. Same two-tier Stone-then-Flurolite Crusher progression as Metallic, including a trace Uranium Ore roll at the advanced tier.
+- **Red Asteroid:** A rare, high-value chunk laced with heavy trace metals, requiring the most advanced Crusher tech. Its "Shattered Synthesis" processing is the single richest source of Holmium and Tungsten outside of Aquilo mining, alongside the best per-chunk Flurolite and Uranium Ore odds.
 
 These three common types share a two-tier recipe progression:
 
 - **Stone-Focused** (early, cheap tech): maximizes raw Stone recovery alongside the base ore. Useful the moment a platform needs Stone at all, since vanilla asteroid processing never yields it, and it doesn't require unlocking Flurolite tech.
-- **Flurolite-Focused** (later tech, gated behind Stone-Focused): trades some of that Stone yield for a trace chance at Flurolite, giving platforms far from a Red Asteroid field an alternate Flurolite pipeline once they need one.
+- **Flurolite-Focused** (later tech, gated behind Stone-Focused): trades some of that Stone yield for trace chances at Flurolite and Uranium Ore, giving platforms far from a Red Asteroid field alternate rare-material rolls once they need them.
 
 Calcite is left to existing Oxide asteroid processing, which already produces it in ample quantity.
 
 ### New Buildings
 
-- **Orbital Bio-Lab:** An advanced facility that allows for the growth of Gleba's two staple crops, **Yumako Fruit** and **Jellynut**, and separate incubation of Biter and Pentapod eggs in orbit, using high-energy water hydrolysis to supply oxygen for sealed growth chambers.
+<p align="center">
+  <img src="graphics/icons/growth-facility.png" alt="Growth Facility" width="96">
+</p>
+
+- **Growth Facility:** An advanced facility that allows for the growth of Gleba's two staple crops, **Yumako Fruit** and **Jellynut**, and separate incubation of Biter and Pentapod eggs in orbit, using high-energy water hydrolysis to supply oxygen for sealed growth chambers.
 
 ### Existing Building Integration
 
-- **Crusher:** Now processes Metallic, Carbonic, and Oxide asteroid chunks, each with a Stone-Focused and a Flurolite-Focused recipe variant, before Red Asteroid shattering ("Shattered Synthesis") unlocks as the top tier.
+- **Crusher:** Now processes Metallic, Carbonic, and Oxide asteroid chunks, each with a Stone-Focused and a Flurolite-Focused recipe variant, before Red Asteroid shattering ("Shattered Synthesis") unlocks as the top tier with stronger rare byproduct odds, including Uranium Ore.
 - **Cryogenic Plant:** Handles ammonia extraction, lithium-focused condensation, and fluorine-focused condensation without introducing additional dedicated processing buildings.
 
 ## Recipe Inventory
 
+### Crafting
+
+| Recipe | Time | Exact Ingredients | Outputs | Notes |
+| --- | --- | --- | --- | --- |
+| Growth Facility | 10s | 1 Cryogenic Plant, 40 Low Density Structure, 4 Pump, 1 Heat Exchanger, 100 Small Lamp, 100 Refined Concrete, 50 Overgrowth Yumako Soil, 50 Overgrowth Jellynut Soil | 1 Growth Facility | The high-tier biotech building recipe ties the facility to Space Age cryogenics, heating, lighting, and advanced Gleba soils. |
+
 ### Crusher: Asteroid Processing
 
-| Recipe | Time | Inputs | Outputs | Notes |
+| Recipe | Time | Exact Ingredients | Outputs | Notes |
 | --- | --- | --- | --- | --- |
-| Metallic Crushing (Stone-Focused) | 2s | 1 Metallic Asteroid | 1 Iron Ore, 1 Copper Ore, 4 Stone | Early, cheap tech; the only way to get bulk Stone out of a Metallic chunk without touching Flurolite research. |
-| Carbonic Crushing (Stone-Focused) | 2s | 1 Carbonic Asteroid | 2 Carbon, 4 Stone | Primary orbital Carbon source; pairs well with Ammonia Extraction's Stone demand. |
-| Oxide Crushing (Stone-Focused) | 2s | 1 Oxide Asteroid | 2 Ice, 4 Stone | Supplements platform ice supply while giving the best Stone-per-chunk of the three common types. |
-| Metallic Crushing (Flurolite-Focused) | 3s | 1 Metallic Asteroid | 1 Iron Ore, 1 Copper Ore, 2 Stone, 5% Flurolite | Later tech, gated behind Stone-Focused; trades half the Stone yield for a Flurolite chance once you actually need one. |
-| Carbonic Crushing (Flurolite-Focused) | 3s | 1 Carbonic Asteroid | 2 Carbon, 2 Stone, 5% Flurolite | Same Carbon yield, lower Stone, adds a Flurolite roll. |
-| Oxide Crushing (Flurolite-Focused) | 3s | 1 Oxide Asteroid | 2 Ice, 2 Stone, 5% Flurolite | Same Ice yield, lower Stone, adds a Flurolite roll. Calcite is left to the existing (non-Flurolite) Oxide processing recipe. |
-| Shattered Synthesis | 4s | 1 Red Asteroid | 1 Holmium, 1 Tungsten, 2 Stone, 5% Flurolite | Most advanced Crusher tech; still the single richest per-chunk Flurolite chance in the game. |
+| Metallic Crushing (Stone-Focused) | 2s | 1 Metallic Asteroid Chunk | 1 Iron Ore, 1 Copper Ore, 4 Stone | Early, cheap tech; the only way to get bulk Stone out of a Metallic chunk without touching Flurolite research. |
+| Carbonic Crushing (Stone-Focused) | 2s | 1 Carbonic Asteroid Chunk | 2 Carbon, 4 Stone | Primary orbital Carbon source; pairs well with Ammonia Extraction's Stone demand. |
+| Oxide Crushing (Stone-Focused) | 2s | 1 Oxide Asteroid Chunk | 2 Ice, 4 Stone | Supplements platform ice supply while giving the best Stone-per-chunk of the three common types. |
+| Metallic Crushing (Flurolite-Focused) | 3s | 1 Metallic Asteroid Chunk | 1 Iron Ore, 1 Copper Ore, 2 Stone, 5% chance for 1 Flurolite, 1% chance for 1 Uranium Ore | Later tech, gated behind Stone-Focused; trades half the Stone yield for trace Flurolite and Uranium Ore rolls. |
+| Carbonic Crushing (Flurolite-Focused) | 3s | 1 Carbonic Asteroid Chunk | 2 Carbon, 2 Stone, 5% chance for 1 Flurolite, 1% chance for 1 Uranium Ore | Same Carbon yield, lower Stone, adds Flurolite and Uranium Ore rolls. |
+| Oxide Crushing (Flurolite-Focused) | 3s | 1 Oxide Asteroid Chunk | 2 Ice, 2 Stone, 5% chance for 1 Flurolite, 1% chance for 1 Uranium Ore | Same Ice yield, lower Stone, adds Flurolite and Uranium Ore rolls. Calcite is left to the existing non-Flurolite Oxide processing recipe. |
+| Shattered Synthesis | 4s | 1 Promethium Asteroid Chunk | 1 Holmium Ore, 1 Tungsten Ore, 2 Stone, 5% chance for 1 Flurolite, 3% chance for 1 Uranium Ore | Most advanced Crusher tech; Red Asteroids stay the best source of rare trace byproducts. |
 
 ### Cryogenic Plant
 
-| Recipe | Time | Inputs | Outputs | Notes |
+| Recipe | Time | Exact Ingredients | Outputs | Notes |
 | --- | --- | --- | --- | --- |
-| Ammonia Extraction | 5s | 5 Stone, 1 Water | 10 Ammonia Gas | Consumes the Stone surplus generated by asteroid crushing; no dedicated building needed. |
-| Lithium-Focused | 10s | 1 Flurolite, Power | 40 Lithium Brine, 10 Fluorine Gas | Same inputs as Fluorine-Focused; pick per-recipe based on which byproduct your chain is short on. |
-| Fluorine-Focused | 10s | 1 Flurolite, Power | 10 Lithium Brine, 40 Fluorine Gas | Mirror recipe of Lithium-Focused; run both in parallel to balance brine vs. gas demand. |
+| Ammonia Extraction | 5s | 5 Stone, 100 Water, 50 Steam | 10 Ammonia | Consumes Stone, Water, and Steam in a Cryogenic Plant; no dedicated building needed. |
+| Lithium-Focused Condensation | 10s | 1 Flurolite, 100 Steam | 40 Lithium Brine, 10 Fluorine | Pick this variant when Lithium Brine is the limiting product. |
+| Fluorine-Focused Condensation | 10s | 1 Flurolite, 100 Steam | 40 Fluorine, 10 Lithium Brine | Mirror recipe of Lithium-Focused; run both in parallel to balance brine vs. gas demand. |
 
-### Orbital Bio-Lab
+### Growth Facility
 
-| Recipe | Time | Inputs | Outputs | Notes |
+| Recipe | Time | Exact Ingredients | Outputs | Notes |
 | --- | --- | --- | --- | --- |
-| Yumako Cultivation | 60s | Nutrient Paste, Water, High Energy, Nitrogen, Calcite, Carbon, 1 Yumako Seed | 10 Yumako Fruit | Mirrors the Gleba surface growth cycle; seed stock, oxygen from hydrolyzed water, and mineral/gas conditioning keep orbital cultivation tied to a maintained biological loop. |
-| Jellynut Cultivation | 60s | Nutrient Paste, Water, High Energy, Nitrogen, Calcite, Carbon, 1 Jellynut Seed | 10 Jellynut | Grown alongside Yumako so the platform can produce both halves of the Bioflux/Nutrients chain without importing either crop. |
-| Biter Egg Incubation | 120s | Nutrient Paste, Bioflux, Water, Heat, High Energy, Nitrogen, Calcite, Carbon, 1 Biter Egg | 10 Biter Eggs | Long incubation reflects the difficulty of maintaining a stable oxygenated low-gravity nest environment for a terrestrial nest organism. |
-| Pentapod Egg Incubation | 120s | Nutrient Paste, Bioflux, Water, Heat, High Energy, Nitrogen, Calcite, Carbon, 1 Pentapod Egg | 10 Pentapod Eggs | Separate incubation keeps Gleba-native egg biology distinct from Biter egg handling while preserving the same orbital support requirements. |
+| Yumako Cultivation | 60s | 5 Nutrients, 100 Water, 1 Yumako Seed, 1 Calcite, 2 Carbon, 25 Ammonia | 10 Yumako | Products are preserved while they remain in the machine output, and the facility center glow tints dark red while this recipe runs. |
+| Jellynut Cultivation | 60s | 5 Nutrients, 100 Water, 1 Jellynut Seed, 1 Calcite, 2 Carbon, 25 Ammonia | 10 Jellynut | Grown alongside Yumako so the platform can produce both halves of the Bioflux/Nutrients chain without importing either crop. |
+| Biter Egg Incubation | 120s | 10 Nutrients, 1 Bioflux, 100 Water, 50 Steam, 1 Biter Egg, 1 Calcite, 2 Carbon, 25 Ammonia | 10 Biter Eggs | Long incubation reflects the difficulty of maintaining a stable oxygenated low-gravity nest environment for a terrestrial nest organism. |
+| Pentapod Egg Incubation | 120s | 10 Nutrients, 1 Bioflux, 100 Water, 50 Steam, 1 Pentapod Egg, 1 Calcite, 2 Carbon, 25 Ammonia | 10 Pentapod Eggs | Separate incubation keeps Gleba-native egg biology distinct from Biter egg handling while preserving the same orbital support requirements. |
 
 ## Scientific Justification
 
 - **Ammonia from Stone:** Carbonaceous asteroids contain nitrogen-bearing phyllosilicates. A Cryogenic Plant uses high-pressure and heat processing to extract ammonia directly from stone.
 - **Stone from Crushing:** Vanilla asteroid processing never yields Stone, but mechanical shattering of any silicate or metallic body inherently produces mineral rubble regardless of composition. The Stone-Focused Crusher variants isolate that rubble without the finer sieving needed to detect Flurolite traces, which is why they're the cheaper, earlier-tech option.
 - **Flurolite Chemistry:** Lithium and fluorine are geochemically linked in evolved crustal granites. Flurolite represents the trace rare-earth inclusions found within shattered planetary crusts, processed through cryogenic plant distillation. Red Asteroids carry the richest concentration, but trace inclusions also turn up in ordinary Metallic, Carbonic, and Oxide chunks; finding them requires the finer sieving of the higher-tier Flurolite-Focused Crusher variants, at the cost of some Stone throughput. Calcite recovery is left untouched on the existing Oxide processing recipe, which already yields it in ample quantity.
-- **Orbital Bio-Lab:** Rather than "stabilizing" life, the Bio-Lab provides the precise environmental parameters, including heat, light, nutrients, Bioflux enrichment, nitrogen atmosphere, calcite buffering, carbon feedstock, and high-energy water hydrolysis for oxygen supply, required to maintain planetary species in a low-gravity environment while keeping the high-stakes spoilage mechanics of Space Age intact. Yumako and Jellynut are cultivated from their corresponding seeds as a matched pair, exactly as they grow together on Gleba, while Biter and Pentapod eggs require separate incubation recipes so the platform's Bioflux, Nutrients, and egg chains stay self-sufficient.
+- **Uranium Trace Recovery:** Uranium Ore appears as a rare heavy-element inclusion in the same advanced asteroid separation step that detects Flurolite. Common asteroid chunks only expose tiny recoverable traces, while Red Asteroids justify a higher recovery chance because their heavy-metal profile is already represented by Holmium and Tungsten outputs.
+- **Growth Facility:** Rather than "stabilizing" life, the Growth Facility provides the precise environmental parameters, including heat, light, nutrients, Bioflux enrichment, nitrogen atmosphere, calcite buffering, carbon feedstock, and high-energy water hydrolysis for oxygen supply, required to maintain planetary species in a low-gravity environment while keeping the high-stakes spoilage mechanics of Space Age intact. Yumako and Jellynut are cultivated from their corresponding seeds as a matched pair, exactly as they grow together on Gleba, while Biter and Pentapod eggs require separate incubation recipes so the platform's Bioflux, Nutrients, and egg chains stay self-sufficient.
 
 ## The Endgame Challenge
 

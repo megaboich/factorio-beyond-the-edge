@@ -1,0 +1,12 @@
+{
+  "name": "spacelab",
+  "version": "0.1.0",
+  "title": "SPACELAB",
+  "author": "Oleksandr Boiko",
+  "factorio_version": "2.1",
+  "dependencies": [
+    "base >= 2.1.0",
+    "space-age >= 2.1.0"
+  ],
+  "description": "Space Platform Asteroid Complete Extraction: Laboratories with Advanced Biotech. Adds asteroid byproduct processing, Flurolite, and a Growth Facility for orbital biotechnology."
+}
