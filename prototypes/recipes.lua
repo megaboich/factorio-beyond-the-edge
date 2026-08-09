@@ -1,142 +1,12 @@
-local item_like_types = {
-  "item",
-  "capsule",
-  "tool",
-  "module",
-  "ammo",
-  "armor",
-  "gun",
-  "item-with-entity-data",
-  "rail-planner",
-  "repair-tool",
-  "spidertron-remote",
-  "space-platform-starter-pack"
-}
+local helpers = require("prototypes.helpers")
 
-local function prototype_exists(type_name, name)
-  return data.raw[type_name] and data.raw[type_name][name] ~= nil
-end
-
-local function item_like_prototype(name)
-  for _, type_name in pairs(item_like_types) do
-    if data.raw[type_name] and data.raw[type_name][name] then
-      return data.raw[type_name][name]
-    end
-  end
-  return nil
-end
-
-local function item_like_exists(name)
-  return item_like_prototype(name) ~= nil
-end
-
-local function ingredient_exists(ingredient)
-  if ingredient.type == "fluid" then
-    return prototype_exists("fluid", ingredient.name)
-  end
-  return item_like_exists(ingredient.name)
-end
-
-local function all_ingredients_exist(ingredients)
-  for _, ingredient in pairs(ingredients) do
-    if not ingredient_exists(ingredient) then
-      return false
-    end
-  end
-  return true
-end
-
-local function all_results_exist(results)
-  for _, result in pairs(results) do
-    if result.type == "fluid" then
-      if not prototype_exists("fluid", result.name) then
-        return false
-      end
-    elseif not item_like_exists(result.name) then
-      return false
-    end
-  end
-  return true
-end
-
-local function category_exists(category)
-  return category == "crafting" or category == "advanced-crafting" or data.raw["recipe-category"] and data.raw["recipe-category"][category] ~= nil
-end
-
-local function categories_exist(categories)
-  if not categories then
-    return true
-  end
-  for _, category in pairs(categories) do
-    if not category_exists(category) then
-      return false
-    end
-  end
-  return true
-end
-
-local function product_prototype(product)
-  if product.type == "fluid" then
-    return data.raw.fluid and data.raw.fluid[product.name]
-  end
-  return item_like_prototype(product.name)
-end
-
-local function product_icon_layer(product)
-  local prototype = product_prototype(product)
-  if not prototype then
-    return nil
-  end
-
-  if prototype.icons and prototype.icons[1] then
-    local layer = table.deepcopy(prototype.icons[1])
-    layer.icon_size = layer.icon_size or prototype.icon_size or 64
-    return layer
-  end
-
-  if prototype.icon then
-    return {
-      icon = prototype.icon,
-      icon_size = prototype.icon_size or 64
-    }
-  end
-
-  return nil
-end
-
-local function recipe_icon_layer(product, scale, shift)
-  local layer = product_icon_layer(product)
-  if layer then
-    layer.scale = scale
-    layer.shift = shift
-  end
-  return layer
-end
-
-local function ensure_recipe_icon(recipe)
-  if recipe.icon or recipe.icons or recipe.main_product then
-    return
-  end
-
-  if recipe.results and #recipe.results == 1 and recipe.results[1].name then
-    recipe.main_product = recipe.results[1].name
-  end
-end
-
-local function add_recipe(recipe)
-  if categories_exist(recipe.categories) and all_ingredients_exist(recipe.ingredients or {}) and all_results_exist(recipe.results or {}) then
-    ensure_recipe_icon(recipe)
-    data:extend({recipe})
-  end
-end
-
-local function item(name, amount)
-  return {type = "item", name = name, amount = amount}
-end
-
-local function fluid(name, amount)
-  return {type = "fluid", name = name, amount = amount}
-end
+local prototype_exists = helpers.prototype_exists
+local recipe_icon_layer = helpers.recipe_icon_layer
+local add_recipe = helpers.add_recipe
+local item = helpers.item
+local fluid = helpers.fluid
+local ammonia_ingredient = helpers.ammonia_ingredient
+local add_optional_ingredient = helpers.add_optional_ingredient
 
 local growth_recipe_tints = {
   yumako = {
@@ -156,22 +26,6 @@ local growth_recipe_tints = {
     secondary = {r = 0.55, g = 1, b = 0.32, a = 1}
   }
 }
-
-local function ammonia_ingredient(amount)
-  if prototype_exists("fluid", "ammonia") then
-    return fluid("ammonia", amount)
-  end
-  if prototype_exists("fluid", "ammoniacal-solution") then
-    return fluid("ammoniacal-solution", amount)
-  end
-  return nil
-end
-
-local function add_optional_ingredient(ingredients, ingredient)
-  if ingredient and ingredient_exists(ingredient) then
-    table.insert(ingredients, ingredient)
-  end
-end
 
 add_recipe({
   type = "recipe",
@@ -347,7 +201,7 @@ add_recipe({
   energy_required = 4,
   ingredients = {item("promethium-asteroid-chunk", 1)},
   results = {
-    item("holmium-ore", 1),
+    {type = "item", name = "holmium-ore", amount = 1, independent_probability = 0.2},
     item("tungsten-ore", 1),
     item("stone", 2),
     {type = "item", name = "spacelab-flurolite", amount = 1, independent_probability = 0.05},
@@ -367,7 +221,7 @@ add_recipe({
   always_show_made_in = true
 })
 
-local yumako_ingredients = {item("nutrients", 5), fluid("water", 100), item("yumako-seed", 1), item("calcite", 1), item("carbon", 2)}
+local yumako_ingredients = {item("nutrients", 5), fluid("water", 100), fluid("steam", 50), item("yumako-seed", 1), item("calcite", 1), item("carbon", 2)}
 add_optional_ingredient(yumako_ingredients, ammonia_ingredient(25))
 add_recipe({
   type = "recipe",
@@ -375,7 +229,7 @@ add_recipe({
   categories = {"spacelab-growth"},
   energy_required = 60,
   ingredients = yumako_ingredients,
-  results = {item("yumako", 10)},
+  results = {item("yumako", 50)},
   crafting_machine_tint = growth_recipe_tints.yumako,
   preserve_products_in_machine_output = true,
   enabled = false,
@@ -385,7 +239,7 @@ add_recipe({
   always_show_made_in = true
 })
 
-local jellynut_ingredients = {item("nutrients", 5), fluid("water", 100), item("jellynut-seed", 1), item("calcite", 1), item("carbon", 2)}
+local jellynut_ingredients = {item("nutrients", 5), fluid("water", 100), fluid("steam", 50), item("jellynut-seed", 1), item("calcite", 1), item("carbon", 2)}
 add_optional_ingredient(jellynut_ingredients, ammonia_ingredient(25))
 add_recipe({
   type = "recipe",
@@ -393,7 +247,7 @@ add_recipe({
   categories = {"spacelab-growth"},
   energy_required = 60,
   ingredients = jellynut_ingredients,
-  results = {item("jellynut", 10)},
+  results = {item("jellynut", 50)},
   crafting_machine_tint = growth_recipe_tints.jellynut,
   preserve_products_in_machine_output = true,
   enabled = false,
@@ -411,7 +265,7 @@ add_recipe({
   categories = {"spacelab-growth"},
   energy_required = 120,
   ingredients = biter_egg_ingredients,
-  results = {item("biter-egg", 10)},
+  results = {item("biter-egg", 20)},
   crafting_machine_tint = growth_recipe_tints.biter_egg,
   preserve_products_in_machine_output = true,
   enabled = false,
@@ -429,7 +283,7 @@ add_recipe({
   categories = {"spacelab-growth"},
   energy_required = 120,
   ingredients = pentapod_egg_ingredients,
-  results = {item("pentapod-egg", 10)},
+  results = {item("pentapod-egg", 20)},
   crafting_machine_tint = growth_recipe_tints.pentapod_egg,
   preserve_products_in_machine_output = true,
   enabled = false,

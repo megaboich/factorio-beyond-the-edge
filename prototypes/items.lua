@@ -7,18 +7,22 @@ data:extend({
     subgroup = "spacelab-buildings",
     order = "a[spacelab-growth-facility]",
     stack_size = 10,
+    weight = 1 * tons,
     place_result = "spacelab-growth-facility"
   },
   {
     type = "item",
     name = "spacelab-flurolite",
-    icon = "__spacelab__/graphics/icons/flurolite.png",
-    icon_size = 64,
+    icons = {{
+      icon = "__space-age__/graphics/icons/calcite.png",
+      icon_size = 64,
+      tint = {r = 0.3, g = 0.8, b = 1, a = 1}
+    }},
     pictures = {
-      { filename = "__spacelab__/graphics/icons/flurolite.png", size = 64, scale = 0.5 },
-      { filename = "__spacelab__/graphics/icons/flurolite-01.png", size = 64, scale = 0.5 },
-      { filename = "__spacelab__/graphics/icons/flurolite-02.png", size = 64, scale = 0.5 },
-      { filename = "__spacelab__/graphics/icons/flurolite-03.png", size = 64, scale = 0.5 }
+      { filename = "__space-age__/graphics/icons/calcite.png", size = 64, scale = 0.5, mipmap_count = 4, tint = {r = 0.3, g = 0.8, b = 1, a = 1} },
+      { filename = "__space-age__/graphics/icons/calcite-1.png", size = 64, scale = 0.5, mipmap_count = 4, tint = {r = 0.3, g = 0.8, b = 1, a = 1} },
+      { filename = "__space-age__/graphics/icons/calcite-2.png", size = 64, scale = 0.5, mipmap_count = 4, tint = {r = 0.3, g = 0.8, b = 1, a = 1} },
+      { filename = "__space-age__/graphics/icons/calcite-3.png", size = 64, scale = 0.5, mipmap_count = 4, tint = {r = 0.3, g = 0.8, b = 1, a = 1} }
     },
     subgroup = "spacelab-resources",
     order = "a[spacelab-flurolite]",

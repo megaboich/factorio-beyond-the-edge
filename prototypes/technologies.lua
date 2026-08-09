@@ -1,80 +1,23 @@
-local function recipe_exists(name)
-  return data.raw.recipe and data.raw.recipe[name] ~= nil
-end
+local helpers = require("prototypes.helpers")
 
-local function technology_exists(name)
-  return data.raw.technology and data.raw.technology[name] ~= nil
-end
-
-local function science_pack(name)
-  if data.raw.item and data.raw.item[name] then
-    return {name, 1}
-  end
-  if data.raw.tool and data.raw.tool[name] then
-    return {name, 1}
-  end
-  return nil
-end
-
-local function add_science_pack(ingredients, name)
-  local pack = science_pack(name)
-  if pack then
-    table.insert(ingredients, pack)
-  end
-end
-
-local function unlocks(recipe_names)
-  local effects = {}
-  for _, recipe_name in pairs(recipe_names) do
-    if recipe_exists(recipe_name) then
-      table.insert(effects, {type = "unlock-recipe", recipe = recipe_name})
-    end
-  end
-  return effects
-end
-
-local function prerequisites(names)
-  local result = {}
-  for _, name in pairs(names) do
-    if technology_exists(name) then
-      table.insert(result, name)
-    end
-  end
-  return result
-end
-
-local function add_technology(technology)
-  if #technology.effects > 0 then
-    data:extend({technology})
-  end
-end
-
-local asteroid_science = {}
-add_science_pack(asteroid_science, "automation-science-pack")
-add_science_pack(asteroid_science, "logistic-science-pack")
-add_science_pack(asteroid_science, "chemical-science-pack")
-add_science_pack(asteroid_science, "space-science-pack")
-
-local flurolite_science = {}
-add_science_pack(flurolite_science, "automation-science-pack")
-add_science_pack(flurolite_science, "logistic-science-pack")
-add_science_pack(flurolite_science, "chemical-science-pack")
-add_science_pack(flurolite_science, "space-science-pack")
-add_science_pack(flurolite_science, "production-science-pack")
-
-local growth_science = {}
-add_science_pack(growth_science, "automation-science-pack")
-add_science_pack(growth_science, "logistic-science-pack")
-add_science_pack(growth_science, "chemical-science-pack")
-add_science_pack(growth_science, "space-science-pack")
-add_science_pack(growth_science, "agricultural-science-pack")
+local item_icon_layer = helpers.item_icon_layer
+local fluid_icon_layer = helpers.fluid_icon_layer
+local unlocks = helpers.unlocks
+local prerequisites = helpers.prerequisites
+local add_technology = helpers.add_technology
+local final_research_productivity_science = helpers.final_research_productivity_science
 
 add_technology({
   type = "technology",
   name = "spacelab-asteroid-stone-processing",
-  icon = "__spacelab__/graphics/icons/flurolite.png",
-  icon_size = 64,
-  prerequisites = prerequisites({"space-platform"}),
+  icons = {
+    item_icon_layer("stone", 1.6, {0, 0}),
+    item_icon_layer("metallic-asteroid-chunk", 0.7, {-52, -48}),
+    item_icon_layer("carbonic-asteroid-chunk", 0.7, {52, -48}),
+    item_icon_layer("oxide-asteroid-chunk", 0.7, {-52, 48}),
+    fluid_icon_layer("ammonia", 0.7, {52, 48})
+  },
+  prerequisites = prerequisites({"promethium-science-pack"}),
   effects = unlocks({
     "spacelab-metallic-asteroid-crushing-stone-focused",
     "spacelab-carbonic-asteroid-crushing-stone-focused",
@@ -82,9 +25,9 @@ add_technology({
     "spacelab-ammonia-extraction"
   }),
   unit = {
-    count = 250,
-    time = 30,
-    ingredients = asteroid_science
+    count = 1200,
+    time = 120,
+    ingredients = final_research_productivity_science()
   },
   order = "z-spacelab-a"
 })
@@ -92,9 +35,14 @@ add_technology({
 add_technology({
   type = "technology",
   name = "spacelab-flurolite-processing",
-  icon = "__spacelab__/graphics/icons/flurolite.png",
-  icon_size = 64,
-  prerequisites = prerequisites({"spacelab-asteroid-stone-processing", "production-science-pack"}),
+  icons = {
+    item_icon_layer("spacelab-flurolite", 1.6, {0, 0}),
+    item_icon_layer("promethium-asteroid-chunk", 0.7, {-52, -48}),
+    item_icon_layer("holmium-ore", 0.65, {52, -48}),
+    fluid_icon_layer("lithium-brine", 0.7, {-52, 48}),
+    fluid_icon_layer("fluorine", 0.7, {52, 48})
+  },
+  prerequisites = prerequisites({"promethium-science-pack"}),
   effects = unlocks({
     "spacelab-metallic-asteroid-crushing-flurolite-focused",
     "spacelab-carbonic-asteroid-crushing-flurolite-focused",
@@ -104,9 +52,9 @@ add_technology({
     "spacelab-fluorine-focused-condensation"
   }),
   unit = {
-    count = 500,
-    time = 45,
-    ingredients = flurolite_science
+    count = 1200,
+    time = 120,
+    ingredients = final_research_productivity_science()
   },
   order = "z-spacelab-b"
 })
@@ -114,9 +62,14 @@ add_technology({
 add_technology({
   type = "technology",
   name = "spacelab-growth-facility",
-  icon = "__spacelab__/graphics/technology/growth-facility.png",
-  icon_size = 128,
-  prerequisites = prerequisites({"spacelab-flurolite-processing", "agricultural-science-pack"}),
+  icons = {
+    {icon = "__spacelab__/graphics/technology/growth-facility.png", icon_size = 128, scale = 1.0, shift = {0, 0}},
+    item_icon_layer("yumako", 0.7, {-52, -48}),
+    item_icon_layer("jellynut", 0.7, {52, -48}),
+    item_icon_layer("biter-egg", 0.7, {-52, 48}),
+    item_icon_layer("pentapod-egg", 0.7, {52, 48})
+  },
+  prerequisites = prerequisites({"promethium-science-pack"}),
   effects = unlocks({
     "spacelab-growth-facility",
     "spacelab-yumako-cultivation",
@@ -125,9 +78,9 @@ add_technology({
     "spacelab-pentapod-egg-incubation"
   }),
   unit = {
-    count = 750,
-    time = 60,
-    ingredients = growth_science
+    count = 1200,
+    time = 120,
+    ingredients = final_research_productivity_science()
   },
   order = "z-spacelab-c"
 })

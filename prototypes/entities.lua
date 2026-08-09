@@ -1,5 +1,3 @@
-local resource_autoplace = require("resource-autoplace")
-
 local pipe_pictures = nil
 if data.raw["assembling-machine"] and data.raw["assembling-machine"]["assembling-machine-3"] then
   local source_fluid_boxes = data.raw["assembling-machine"]["assembling-machine-3"].fluid_boxes
@@ -173,49 +171,9 @@ local growth_facility = {
     usage_priority = "secondary-input",
     emissions_per_minute = { pollution = 4 }
   },
-  energy_usage = "4000kW",
+  energy_usage = "40000kW",
   module_slots = 8,
-  allowed_effects = {"consumption", "speed", "pollution", "quality"}
+  allowed_effects = {"consumption"}
 }
 
-local flurolite_resource = {
-  type = "resource",
-  name = "spacelab-flurolite",
-  icon = "__spacelab__/graphics/icons/flurolite.png",
-  icon_size = 64,
-  flags = {"placeable-neutral"},
-  order = "a[spacelab]-b[spacelab-flurolite]",
-  tree_removal_probability = 0.8,
-  tree_removal_max_distance = 32 * 32,
-  minable = {
-    mining_particle = "stone-particle",
-    mining_time = 4,
-    result = "spacelab-flurolite"
-  },
-  collision_box = {{-0.1, -0.1}, {0.1, 0.1}},
-  selection_box = {{-0.5, -0.5}, {0.5, 0.5}},
-  autoplace = resource_autoplace.resource_autoplace_settings({
-    name = "spacelab-flurolite",
-    order = "z",
-    base_density = 4,
-    base_spots_per_km2 = 1.25,
-    has_starting_area_placement = false,
-    random_spot_size_minimum = 0.25,
-    random_spot_size_maximum = 1.25,
-    regular_rq_factor_multiplier = 1.1
-  }),
-  stage_counts = {15000, 9500, 5500, 2900, 1300, 400, 150, 80},
-  stages = {
-    sheet = {
-      filename = "__spacelab__/graphics/entity/flurolite/flurolite.png",
-      priority = "extra-high",
-      size = 128,
-      frame_count = 8,
-      variation_count = 8,
-      scale = 0.5
-    }
-  },
-  map_color = {r = 144 / 255, g = 222 / 255, b = 184 / 255}
-}
-
-data:extend({growth_facility, flurolite_resource})
+data:extend({growth_facility})

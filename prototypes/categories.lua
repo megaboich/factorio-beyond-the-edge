@@ -39,12 +39,5 @@ data:extend({
   {
     type = "recipe-category",
     name = "spacelab-growth"
-  },
-  {
-    type = "autoplace-control",
-    name = "spacelab-flurolite",
-    category = "resource",
-    richness = true,
-    order = "z-spacelab-flurolite"
   }
 })
