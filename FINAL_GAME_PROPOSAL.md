@@ -6,7 +6,7 @@
 
 Add a final expedition called **Deep-Space Convergence** whose central reward is a usable **Spacefold Drive**. The player builds a dedicated **Promethean Observatory** on a space platform, sends that platform more than **100,000 km toward the Shattered Planet**, and researches **Spacefold Propulsion** there while the ship survives the asteroid field.
 
-The observatory consumes every science pack in the complete late-game science set. Research progress belongs to that observatory and platform, pauses when the platform retreats below 100,000 km or its inputs fail, and permanently completes the force-wide technology when the project finishes. Spacefold Propulsion unlocks a large platform-only drive that consumes an extreme amount of electricity while charging, then moves its platform almost instantly to just short of the active connection's destination.
+The observatory must consume **1,000 of every science pack per minute for ten consecutive minutes**. The test runs only beyond 100,000 km and resets immediately if any pack misses a consumption checkpoint, the observatory loses power, or the platform becomes ineligible. Completing this uninterrupted throughput test permanently researches the force-wide technology. Spacefold Propulsion unlocks a large platform-only drive that consumes an extreme amount of electricity while charging, then moves its platform almost instantly to just short of the active connection's destination.
 
 This is preferable to ordinary laboratory research because Factorio technologies are force-wide and have no prototype field that restricts research to a planet, route, or platform. A runtime-controlled project can enforce the intended location without disabling unrelated research.
 
@@ -16,7 +16,7 @@ Use **100,000 km toward the Shattered Planet** as the research boundary. This is
 
 - Give SPACELAB a transformative final technology rather than another infinite science multiplier.
 - Make the final test an operating factory aboard a ship, not only a large item payment made at home.
-- Require every science pack and thereby exercise the complete late-game factory, including SPACELAB's orbital production systems.
+- Sustain 1,000 science per minute for every pack, exercising the complete late-game factory rather than rewarding a preloaded one-time payment.
 - Reward ship endurance, power management, storage, circuit control, and production balance simultaneously.
 - Keep normal research available while the expedition runs.
 - Make multiplayer ownership and completion simple: one qualifying platform can complete the objective for its force.
@@ -41,9 +41,9 @@ Its trigger description directs the player to construct and operate the observat
 
 ### 2. Prepare a Self-Sufficient Platform
 
-The observatory accepts every pack in SPACELAB's complete late-game science set: Automation, Logistic, Military, Chemical, Production, Utility, Space, Metallurgic, Electromagnetic, Agricultural, Cryogenic, and Promethium science. This preserves the mod's existing all-science identity and proves the force can supply every planetary and orbital branch.
+The observatory accepts every pack in SPACELAB's complete late-game science set: Automation, Logistic, Military, Chemical, Production, Utility, Space, Metallurgic, Electromagnetic, Agricultural, Cryogenic, and Promethium science. It must consume each pack at **1,000 science per minute** for **ten uninterrupted minutes**. A successful run therefore consumes 10,000 of each pack, or 120,000 packs across all twelve science types.
 
-Exact pack consumption, observatory power draw, and duration should be selected through playtesting rather than fixed by this proposal. The intended bottleneck is balanced continuous operation in deep space, not stockpiling one enormous payment and inserting it at the threshold.
+The observatory should expose only one filtered input stack per science type. At the standard 200-pack stack size, this buffers roughly 12 seconds of demand: enough to absorb inserter timing but far too little to preload the ten-minute run. The rate and duration are central to the challenge, not provisional balance placeholders. Observatory power draw can still be selected through playtesting. The intended bottleneck is balanced continuous operation in deep space: defenses, power, asteroid processing, agricultural production, and Promethium collection must all remain stable at once.
 
 ### 3. Enter the Convergence Zone
 
@@ -58,12 +58,14 @@ The threshold should be a startup setting only if playtesting demonstrates a cle
 
 ### 4. Sustain the Experiment
 
-While eligible, the observatory consumes all science packs and accumulates Spacefold Propulsion research progress. Losing power, running out of any pack, leaving the connection, traveling back toward the Solar System Edge, or falling below 100,000 km pauses progress. It should not erase completed progress; catastrophic failure already carries the cost of repairing or replacing the ship.
+While eligible, the observatory runs a ten-minute qualification timer and consumes each science pack at exactly 1,000 per minute. Losing power, missing even one science-pack consumption checkpoint, leaving the connection, traveling back toward the Solar System Edge, or returning to 100,000 km or less resets the timer to zero. Packs already consumed are not refunded.
+
+"Without a single drop" should be measured by the observatory's own deterministic demand rather than by sampling the production-statistics graph. Once per second, the script requests 17 of each pack for 40 checkpoints and 16 of each pack for 20 checkpoints per minute, totaling exactly 1,000 of each pack. Before consuming anything, it verifies that the observatory holds the complete required batch of all twelve packs. This avoids partial consumption on a failed checkpoint, inserter-burst false resets, and floating-point rate calculations while still enforcing uninterrupted supply.
 
 This produces a readable failure loop:
 
 - Insufficient defenses cause physical damage.
-- Insufficient production causes the experiment to pause.
+- Insufficient production resets the ten-minute qualification run.
 - Insufficient power forces a choice between propulsion, defense, and research.
 - Poor circuit control causes buffers to starve or overflow.
 
@@ -117,8 +119,8 @@ The recommended implementation keeps the technology out of the normal research q
 
 1. Poll relevant platforms with `on_nth_tick`, not every tick.
 2. Determine eligibility from the platform's connection and normalized distance. Infer outward travel from an increase since the previous distance sample rather than relying on an undocumented direction flag.
-3. Inspect each observatory on that platform and advance only supplied, powered entities.
-4. Store progress by force and unit number or platform identity.
+3. Once per second, verify that each powered observatory on an eligible platform holds the scheduled batch of all twelve science packs.
+4. If the complete batch is available, remove it atomically and advance the timer by one second; otherwise consume nothing and reset that observatory's consecutive-run timer.
 5. On completion, call `LuaForce::script_trigger_research()` for Spacefold Propulsion so Factorio handles its scripted research trigger and unlock effects normally.
 
 `LuaSpacePlatform` exposes `space_connection` and normalized `distance`, and `LuaForce` exposes its platforms and technologies.[^api-platform][^api-force] The 4,000,000 km connection means a kilometer threshold can be converted to normalized distance as `threshold_km / 4000000`. Factorio supports `type = "scripted"` research triggers, and `LuaForce::script_trigger_research()` completes such a technology.[^api-research-trigger][^api-script-research]
@@ -148,8 +150,8 @@ Release-quality work is concentrated in edge cases rather than the jump itself: 
 
 - **Permanent completion:** Once completed, Spacefold Propulsion never becomes unavailable if the platform retreats or is destroyed.
 - **Any-platform policy:** Any one platform owned by the force may qualify. Requiring every player or platform to be present would punish multiplayer forces and automated fleets.
-- **Independent attempts:** Multiple observatories may accumulate independent progress, but only the first completion matters to the force-wide technology.
-- **Pause, do not reset:** Retreat, starvation, or power loss pauses an attempt. Destruction removes only the progress attached to that observatory unless playtesting shows this is too punitive.
+- **Independent attempts:** Multiple observatories may make independent ten-minute attempts, but science throughput cannot be combined between them and only the first completion matters to the force-wide technology.
+- **Reset on interruption:** Retreat, starvation, or power loss resets that observatory's consecutive timer. Destruction removes its attempt entirely.
 - **Save migration:** On configuration change, rebuild the observatory index and preserve already completed force state. Existing platforms beyond the threshold become eligible but should not receive free project progress.
 - **Removed or changed routes:** If another mod removes the vanilla connection, keep the final project unavailable and emit one clear compatibility message rather than erroring.
 - **Performance:** Poll at a coarse interval and stop scanning a force after completion. The route takes minutes or hours, so sub-second precision has no gameplay value.
@@ -160,7 +162,7 @@ Release-quality work is concentrated in edge cases rather than the jump itself: 
 | --- | --- | --- | --- | --- |
 | Arrival unlock | Enable normal research after any platform crosses a threshold. | Small script; normal Factorio research UI. | Research itself can happen anywhere; weak final test. | Good MVP or fallback. |
 | Scripted arrival completion | Complete the technology immediately at the threshold. | Very small and unambiguous. | Rewards travel only; does not test SPACELAB production. | Reject as the primary finale. |
-| Promethean Observatory | Consume all science packs aboard a qualifying platform beyond 100,000 km. | Tests the whole mod; progress makes the voyage meaningful. | Requires runtime state, UI feedback, and migration handling. | Recommended. |
+| Promethean Observatory | Sustain 1,000 per minute of every science pack for ten uninterrupted minutes beyond 100,000 km. | Tests the whole mod; makes production stability and the voyage meaningful. | Requires runtime state, UI feedback, and strict reset handling. | Recommended. |
 | Literal Shattered Planet arrival | Require normalized distance `1` on the full route. | Maximum prestige and simple fiction. | Multi-hour default, costly iteration, contrary to official expectation. | Optional hardcore preset. |
 | Landable Shattered Planet | Add terrain, resources, enemies, and another factory campaign. | Largest content expansion. | Very large art, balancing, compatibility, and implementation scope. | Separate future mod or expansion. |
 
@@ -176,6 +178,17 @@ Community discussion is not unanimous and should not be treated as product requi
 
 The observatory and drive capture the strongest of these ideas - a demanding voyage, a final factory test, and a transformative reward - without committing SPACELAB to terrain generation and another full planet.
 
+## Related Mod Precedents
+
+Space Exploration and Krastorio 2 both establish useful precedents for a sustained endgame device, but neither uses SPACELAB's complete combination of location, science throughput, and reusable travel.
+
+| Mod | Existing endgame mechanic | Similarity to SPACELAB | Important difference |
+| --- | --- | --- | --- |
+| Space Exploration | Its spaceship victory requires a spaceship-mounted Nexus, speed above 250, at least 2,500 integrity stress, sufficient power, and 600 uninterrupted seconds of Distortion Drive operation. Losing the required conditions clears the countdown.[^se-nexus-source] | A special device must operate continuously for ten minutes on a capable moving spaceship. | It tests ship speed, size, and power rather than 1,000 SPM of every science pack, and completion is a victory condition rather than unlocking a reusable drive. |
+| Krastorio 2 | Its Intergalactic Transceiver stores 30 TJ, charges at up to 60 GW, and loses 20% of its charge every two seconds after more than two seconds without power. Full charge grants victory and changes the structure into a permanent 10 GW power source.[^k2-transceiver-source] | A huge endgame structure demands sustained electrical supply and punishes interruptions while charging. | It is a stationary energy-accumulation objective without a deep-space route gate or continuous all-science throughput requirement. |
+
+These precedents show that long, interruptible endgame operations are proven Factorio design patterns. SPACELAB's distinct contribution is to require one platform to sustain every late-game science chain beyond 100,000 km and then reward that achievement with repeatable movement along existing platform routes. The ten-minute duration intentionally matches Space Exploration's readable endurance window, while the failure condition tests factory throughput instead of velocity. The Spacefold Drive borrows the fantasy of a charged endgame machine but turns it into transport infrastructure rather than a victory-only sink.
+
 ## Suggested Delivery Plan
 
 ### Phase 1: Arrival-Gated Prototype
@@ -189,10 +202,10 @@ This phase answers the risky runtime questions with the least code. Its ordinary
 
 ### Phase 2: Observatory Objective
 
-- Add the Promethean Observatory entity and final-project inputs.
-- Replace ordinary lab research with platform-bound progress.
-- Add progress feedback, pause reasons, completion messaging, and migration logic.
-- Fix the default research boundary at 100,000 km and playtest science cost, duration, and observatory power demand.
+- Add the Promethean Observatory entity and all twelve science inputs.
+- Replace ordinary lab research with the platform-bound 1,000-SPM qualification run.
+- Add throughput feedback, reset reasons, completion messaging, and migration logic.
+- Fix the research boundary at 100,000 km and qualification target at 1,000 SPM for ten minutes; playtest observatory power demand.
 - Replace placeholder drive controls with clear charge, readiness, destination, and failure feedback.
 
 ### Phase 3: Drive Automation and Prestige
@@ -203,9 +216,8 @@ This phase answers the risky runtime questions with the least code. Its ordinary
 
 ## Open Design Decisions
 
-- Should observatory progress survive destruction, or only pauses and retreat?
 - Should multiple observatories on one platform increase speed, or should one platform support only one active project?
-- What science cost and research duration make maintaining production past 100,000 km meaningful without turning it into idle waiting?
+- Should a failed qualification run preserve a visible best-streak record for the force?
 - What drive energy capacity and charging rate make a jump a major platform operation rather than a routine shortcut?
 - Should one fully charged drive jump the platform, or should larger platforms require multiple synchronized drives based on platform mass?
 - Should the first release allow jumps on every active connection, or only the Solar System Edge to Shattered Planet connection and its return direction?
@@ -228,3 +240,5 @@ Official facts, API behavior, community opinion, and SPACELAB proposals are inte
 [^forum-expectations]: Factorio Forums, [Observations and expectations from a new player getting ready to go for shattered planet](https://forums.factorio.com/viewtopic.php?t=132547), January 26, 2026.
 [^mod-shattered]: Factorio Mod Portal, [Shattered Planet](https://mods.factorio.com/mod/skewer_shattered_planet).
 [^mod-nexus]: Factorio Mod Portal, [Nexus Extended Promethium Endgame](https://mods.factorio.com/mod/Nexus).
+[^se-nexus-source]: Space Exploration 0.7.57 distributed source, `shared.lua` and `scripts/nexus.lua`, including the speed, 600-second duration, integrity, power, countdown-reset, and victory logic; official [Space Exploration Mod Portal](https://mods.factorio.com/mod/space-exploration) and [changelog](https://mods.factorio.com/mod/space-exploration/changelog).
+[^k2-transceiver-source]: Krastorio 2 official source, [`locale/en/Krastorio2Tips.cfg`](https://codeberg.org/raiguard/Krastorio2/src/branch/trunk/locale/en/Krastorio2Tips.cfg), and official [Mod Portal](https://mods.factorio.com/mod/Krastorio2), including the Intergalactic Transceiver's 30 TJ capacity, 60 GW charge rate, interrupted-power discharge, victory, and permanent-output behavior.
