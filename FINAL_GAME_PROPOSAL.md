@@ -4,241 +4,295 @@
 
 ## Executive Recommendation
 
-Add a final expedition called **Deep-Space Convergence** whose central reward is a usable **Spacefold Drive**. The player builds a dedicated **Promethean Observatory** on a space platform, sends that platform more than **100,000 km toward the Shattered Planet**, and researches **Spacefold Propulsion** there while the ship survives the asteroid field.
+Add a two-stage **Deep Space Warp Drive** progression after the existing SPACELAB technology branches, centered on one new building: the **Warp Drive**.
 
-The observatory must consume **1,000 of every science pack per minute for ten consecutive minutes**. The test runs only beyond 100,000 km and resets immediately if any pack misses a consumption checkpoint, the observatory loses power, or the platform becomes ineligible. Completing this uninterrupted throughput test permanently researches the force-wide technology. Spacefold Propulsion unlocks a large platform-only drive that consumes an extreme amount of electricity while charging, then moves its platform almost instantly to just short of the active connection's destination.
+1. **Theoretical Warp Drive** unlocks the Warp Drive building in an experimental state.
+2. **Practical Warp Drive** is a regular technology with an enormous, deliberately impractical laboratory research cost. A placed Warp Drive detects Subspace Tachyon Particles and converts its location into a research-speed multiplier for eligible laboratories on that same space platform, making the technology practical to complete in deep space.
+3. Practical Warp Drive makes every placed Warp Drive functional. It engages at sufficient platform speed while its GUI or circuit engagement condition remains true and disengages as soon as that condition is no longer met.
 
-This is preferable to ordinary laboratory research because Factorio technologies are force-wide and have no prototype field that restricts research to a planet, route, or platform. A runtime-controlled project can enforce the intended location without disabling unrelated research.
+Warp is accelerated travel, not teleportation. The script advances the platform gradually along its active connection so a route that normally takes about three minutes takes roughly ten seconds in warp. This preserves smooth platform-icon movement on the space map, normal route direction, and Factorio's schedule and arrival flow.
 
-Use **100,000 km toward the Shattered Planet** as the research boundary. This is deliberately beyond the furthest official 60,000 km route achievement, but only 2.5% of the 4,000,000 km connection. It requires a genuinely deep-space platform without turning the unlock into a multi-hour literal-arrival test.
+While warped, the platform travels through subspace. Ordinary asteroid chunks are removed immediately upon entry and continuously suppressed because they do not exist in that plane. Blue-white streaks and lighting make the state visible on the platform surface.
 
 ## Design Goals
 
-- Give SPACELAB a transformative final technology rather than another infinite science multiplier.
-- Make the final test an operating factory aboard a ship, not only a large item payment made at home.
-- Sustain 1,000 science per minute for every pack, exercising the complete late-game factory rather than rewarding a preloaded one-time payment.
-- Reward ship endurance, power management, storage, circuit control, and production balance simultaneously.
-- Keep normal research available while the expedition runs.
-- Make multiplayer ownership and completion simple: one qualifying platform can complete the objective for its force.
-- Make the reward materially change space travel while preserving the normal platform and schedule model.
-- Avoid adding a landable planet, new terrain generation, or an entire second campaign for the first version.
+- Add only one new gameplay building and no new particle item or dedicated research facility.
+- Allow exactly one Warp Drive to be built on each space platform.
+- Let that building guide the player from theoretical discovery through practical unlock and operation.
+- Turn deep-space laboratory operation into the practical means of completing an otherwise prohibitive technology.
+- Make deep and dangerous routes the best places to complete the experiment.
+- Make warp visibly fast travel rather than an instantaneous endpoint jump.
+- Preserve normal platform schedules, surfaces, route direction, map animation, and multiplayer ownership.
+- Support automatic operation and explicit circuit control.
+- Keep Practical Warp Drive in Factorio's ordinary technology queue with normal science-pack consumption and progress.
 
-## Why the Voyage Should Be the Challenge
+## Why Deep Space Should Matter
 
-The official Factorio Wiki describes the Shattered Planet as a post-game location, gives its route a length of 4,000,000 km, and states that the player is not expected to reach it because asteroid density eventually overwhelms even a well-equipped ship. The same page lists achievements at 10,000 km, 30,000 km, and 60,000 km, which provide useful recognized milestones short of literal arrival.[^wiki-shattered]
+The Shattered Planet route is 4,000,000 km long, and official milestones at 10,000 km, 30,000 km, and 60,000 km already frame distance as a post-game achievement.[^wiki-shattered] Asteroid density eventually makes the route an open-ended platform-engineering challenge rather than an expected ordinary destination.
 
-Players have nevertheless turned reaching it into an engineering discipline. A long-running ship-sharing discussion includes varied platform sizes, travel times, ammunition strategies, storage plans, circuit controls, and power systems, reinforcing that the route is an open-ended engineering challenge rather than one solved design.[^forum-ships]
+The Warp Drive turns that challenge into progression. It detects transient Subspace Tachyon Particles without materializing them as inventory items. Their effective density rises with distance from inhabited space and peaks around the anomalous core represented by the far end of the Shattered Planet connection. The resulting point multiplier speeds eligible laboratories on that same platform, allowing an enduring deep-space research platform to complete Practical Warp Drive far faster than laboratories parked safely near a planet.
 
-Community proposals commonly start from the desire for something meaningful at the end of the route, whether a final factory, a new surface, or a transformative technology.[^forum-surface][^forum-expectations] A deep-space research project makes time spent on the route productive, while the drive it unlocks gives that effort a concrete payoff.
+## Technology Progression
 
-## Proposed Final Project
+### 1. Research Theoretical Warp Drive
 
-### 1. Unlock Deep-Space Research
+Theoretical Warp Drive becomes available after all current SPACELAB technology branches. It is an ordinary force-wide technology using the complete late-game science set, following the mod's established post-Solar System Edge research pattern.
 
-Completing all current SPACELAB technology branches unlocks the Promethean Observatory and reveals **Spacefold Propulsion**. Spacefold Propulsion uses a scripted research trigger, cannot be placed in the ordinary laboratory queue, and cannot be completed by laboratories on a planet or a platform near a normal destination.
+It unlocks the Warp Drive item, recipe, and platform-only building. At this stage the building cannot propel its platform. It instead acts as a platform-local laboratory accelerator and practical-research guide. Its interface shows:
 
-Its trigger description directs the player to construct and operate the observatory aboard a platform traveling from the Solar System Edge toward the Shattered Planet.
+- Why the drive is still experimental.
+- Current Subspace Tachyon Particle density.
+- Current point multiplier derived from the drive's location.
+- Effective research-speed bonus granted to eligible laboratories on this platform.
+- Force-wide progress toward Practical Warp Drive.
+- Estimated time to completion at the current location.
+- The higher-value regions available farther into space.
 
-### 2. Prepare a Self-Sufficient Platform
+This keeps discovery, guidance, research, and eventual operation attached to one recognizable object.
 
-The observatory accepts every pack in SPACELAB's complete late-game science set: Automation, Logistic, Military, Chemical, Production, Utility, Space, Metallurgic, Electromagnetic, Agricultural, Cryogenic, and Promethium science. It must consume each pack at **1,000 science per minute** for **ten uninterrupted minutes**. A successful run therefore consumes 10,000 of each pack, or 120,000 packs across all twelve science types.
+### 2. Research Practical Warp Drive
 
-The observatory should expose only one filtered input stack per science type. At the standard 200-pack stack size, this buffers roughly 12 seconds of demand: enough to absorb inserter timing but far too little to preload the ten-minute run. The rate and duration are central to the challenge, not provisional balance placeholders. Observatory power draw can still be selected through playtesting. The intended bottleneck is balanced continuous operation in deep space: defenses, power, asteroid processing, agricultural production, and Promethium collection must all remain stable at once.
+Practical Warp Drive is a regular technology with ordinary prerequisites, science-pack ingredients, unit time, and laboratory research progress. Its unit count is intentionally enormous: technically researchable without a Warp Drive multiplier, but prohibitively slow in practice. It must appear in and occupy the normal research queue, consume science packs normally, and complete through ordinary laboratory research rather than a scripted research trigger.
 
-### 3. Enter the Convergence Zone
+Each powered Warp Drive passively detects tachyon events and applies its current point multiplier to eligible laboratories on the same space platform while Practical Warp Drive is the active research. No intermediate particle item, recipe, harvester, research-array entity, parallel point pool, or scripted completion is required.
 
-The project becomes eligible only when all of these conditions hold:
+For this purpose, an eligible laboratory is a lab on the Warp Drive's current platform whose runtime status is `working` while Practical Warp Drive is the force's active research. The game continues applying every lab's ordinary contribution. The script calculates the eligible platform labs' additional contribution from their resolved research speeds and adds only the bonus represented by `(point multiplier - 1)` to the force's ordinary Practical Warp Drive progress, avoiding double-counting the baseline `1x` contribution.
 
-- The platform belongs to the same force as the observatory.
-- It is traveling on `solar-system-edge-shattered-planet` toward the Shattered Planet.
-- Its route distance is greater than 100,000 km, equivalent to normalized distance `> 0.025` on the 4,000,000 km connection.
-- The observatory is intact, powered, and supplied.
+Because the bonus is added through `LuaForce.research_progress`, eligible labs consume science packs at their ordinary working rate rather than at the multiplied rate. The point multiplier therefore represents tachyon-assisted research efficiency as well as faster completion: the technology retains its enormous nominal prototype cost, but deep-space labs need fewer science packs to complete it. Attempting to remove thousands of additional packs per lab cycle to emulate `5,000x` physical throughput would make the intended multiplier unusable and is not part of this design.
 
-The threshold should be a startup setting only if playtesting demonstrates a clear need. The intended default and documented balance target is 100,000 km.
+| Drive location | Point multiplier |
+| --- | ---: |
+| Planet surface | `1x` |
+| Orbit around a space location | `10x` |
+| Deep-space connection | `100x` to `1,000x` |
+| Near the Shattered Planet anomalous core | `5,000x+` |
 
-### 4. Sustain the Experiment
+The deep-space multiplier scales with route depth and distance rather than jumping directly from `100x` to `1,000x`. The anomalous-core bonus begins only in the final portion of the Solar System Edge to Shattered Planet connection and continues rising toward its far endpoint. Other long connections still receive generic deep-space scaling for compatibility, but only the canonical anomaly receives the special curve.
 
-While eligible, the observatory runs a ten-minute qualification timer and consumes each science pack at exactly 1,000 per minute. Losing power, missing even one science-pack consumption checkpoint, leaving the connection, traveling back toward the Solar System Edge, or returning to 100,000 km or less resets the timer to zero. Packs already consumed are not refunded.
+Technology progress remains force-wide, as with every regular technology, so eligible laboratories on multiple platforms may cooperate. Each drive's multiplier applies only to laboratories on its own platform; it must not accelerate planetary laboratories or laboratories on another platform.
 
-"Without a single drop" should be measured by the observatory's own deterministic demand rather than by sampling the production-statistics graph. Once per second, the script requests 17 of each pack for 40 checkpoints and 16 of each pack for 20 checkpoints per minute, totaling exactly 1,000 of each pack. Before consuming anything, it verifies that the observatory holds the complete required batch of all twelve packs. This avoids partial consumption on a failed checkpoint, inserter-burst false resets, and floating-point rate calculations while still enforcing uninterrupted supply.
+When ordinary research completes Practical Warp Drive, its technology effects make existing Warp Drives functional immediately without replacement.
 
-This produces a readable failure loop:
+### 3. Configure the Functional Drive
 
-- Insufficient defenses cause physical damage.
-- Insufficient production resets the ten-minute qualification run.
-- Insufficient power forces a choice between propulsion, defense, and research.
-- Poor circuit control causes buffers to starve or overflow.
+After Practical Warp Drive is researched, opening a Warp Drive shows operational status and controls:
 
-### 5. Unlock the Spacefold Drive
+- Practical technology state.
+- Active connection and destination.
+- Current platform speed and minimum engagement speed.
+- Automatic warp enabled or disabled.
+- The configured GUI or circuit engagement condition.
+- Current state: `IDLE`, `READY`, `WARP`, or `COOLDOWN`.
+- Estimated normal and warp travel times.
 
-When one observatory completes the project:
+The building should expose circuit signals for readiness, active warp, current speed, current point multiplier, and Practical Warp Drive research progress. Exact signal names and defaults should be selected during implementation to avoid conflicting meanings.
 
-- Permanently mark Spacefold Propulsion researched for the force.
-- Unlock the Spacefold Drive item, recipe, and platform building.
-- Present a clear breakthrough message and record the completing platform and distance.
-- Change the observatory to an idle or completed state as visible proof of the breakthrough.
-- Leave the save playable and leave all other platforms unchanged.
+### 4. Engage and Disengage Warp
 
-The technology should not award another science-productivity bonus. SPACELAB's stated purpose is to escape the loop of producing more science only to produce more science. The Spacefold Drive is a direct capability upgrade that changes what platforms can do.
+A platform is eligible to enter warp when:
 
-### 6. Charge and Engage the Drive
+- Its single Warp Drive is functional.
+- It is traveling on a valid space connection.
+- Its measured `LuaSpacePlatform.speed` is at least `50`.[^api-platform]
+- It is moving toward one endpoint rather than stopped, departing, or arriving.
+- It is not inside an activation cooldown.
 
-The Spacefold Drive is a large building restricted to space platforms. It contains a very large electric-energy buffer and charges only while fully powered. Charge is local to that drive and survives ordinary pauses, but is lost if the building is destroyed.
+The platform's Warp Drive has one sustained **warp engagement** condition:
 
-When fully charged, the drive can engage only while its platform is traveling on a valid space connection. Engagement:
+- Without a circuit condition, the GUI toggle acts as a constant true or false value.
+- With a circuit condition, warp engages when that condition and all platform eligibility conditions are true.
+- If the condition becomes false while warped, warp disengages immediately at the platform's current route position.
+- Losing eligibility, pausing the platform, or reaching the destination also disengages warp.
 
-1. Confirms the platform's active connection and direction of travel.
-2. Consumes the entire stored charge.
-3. Moves `LuaSpacePlatform.distance` to a small safety margin before the destination, such as `0.999` when traveling toward `connection.to` or `0.001` when traveling toward `connection.from`.
-4. Lets the platform cover the short remainder and arrive through Factorio's normal platform state and schedule flow.
+The drive GUI remains usable without circuits. Players can toggle the engagement condition directly for commissioning and troubleshooting. Circuit-connected drives use Factorio's normal configurable circuit-condition model rather than dedicated command signals.
 
-The drive affects only the platform carrying it. It does not create a replacement surface, copy entities, bypass locked destinations, or select an arbitrary location outside the current schedule. Manual activation should be the first implementation; circuit activation can follow after the failure states are understood.
+A primary automation pattern is resource-aware travel. Because ordinary asteroids do not exist in subspace, collectors cannot replenish asteroid chunks while warp is active. A separate decider combinator can monitor the platform's chunk reserves and hold the Warp Drive's engagement condition true only while enough feedstock remains. When reserves fall below the configured threshold, the condition becomes false, the platform returns to normal space, and collectors can gather Metallic, Carbonic, Oxide, and Promethium asteroid chunks. Once reserves recover, the circuit permits warp again.
 
-Warp travel appears both in community proposals and in an existing endgame mod as a thematic payoff.[^forum-expectations][^mod-nexus] Writing the existing platform's normalized route distance makes this narrower design substantially safer than teleporting entities or reconstructing a platform.
+The Warp Drive should not hard-code resource thresholds or inspect particular chunk types for this behavior. Standard circuit signals and combinators let each platform define which resources are critical, how much reserve it needs, and whether several conditions must be satisfied before entering warp.
 
-## Technology Gating Feasibility
+### 5. Travel Smoothly Through Warp
 
-### What Data-Stage Prototypes Can Do
+Warp gradually advances the platform's writable normalized `LuaSpacePlatform.distance` in its existing direction.[^api-platform] It must not set the platform directly near the endpoint in one update.
 
-A technology prototype can define prerequisites, science ingredients, effects, and whether it is enabled.[^api-technology-prototype] It cannot express "research only while a platform is this far along a particular space connection." Recipes can use surface properties, but route progress is not a surface property and therefore cannot provide this gate by itself.
+The intended target is approximately:
 
-### Minimal Runtime Gate
+- Normal representative route: about 180 seconds.
+- Same route in warp: about 10 seconds.
+- Approximate travel acceleration: `18x`, subject to prototype testing.
 
-The smallest fallback implementation is:
+The update loop should derive a warp delta from elapsed ticks and connection length so travel duration remains stable and the map icon moves smoothly:
 
-1. Define Spacefold Propulsion as disabled at game start with ordinary all-science research units.
-2. Periodically inspect `LuaForce.platforms`.
-3. Find a platform whose `space_connection.name` is `solar-system-edge-shattered-planet`, whose normalized `distance` is greater than `0.025`, and whose sampled distance is increasing.
-4. Permanently enable the technology for that force.
+1. Sample the current connection, distance, direction, and tick.
+2. Calculate the remaining normalized route distance.
+3. Add only the small delta appropriate for the update interval and target warp speed.
+4. Clamp just short of `0` or `1`, then let Factorio perform its normal arrival transition.
+5. Stop immediately if connection, direction, platform state, or engagement condition changes.
 
-`LuaTechnology.enabled` is writable at runtime.[^api-technology-enabled] This makes only the *unlock* location-dependent: once enabled, ordinary labs anywhere can research it. That does not satisfy the intended rule that the all-science research itself must occur beyond 100,000 km, so it is a technical prototype or compatibility fallback rather than the recommended design.
+Updates should be frequent enough for smooth global-map animation, likely every tick or every few ticks for warped platforms only. Point-multiplier and laboratory-eligibility evaluation can remain on coarse staggered updates. This limits runtime cost while preserving the visible travel effect.
 
-### Strict Platform-Bound Project
+Warp cannot select an arbitrary destination, cross a locked connection, reverse the platform, or bypass its schedule. When the engagement condition becomes false, the platform remains at its current intermediate route position and normal travel resumes from there.
 
-The recommended implementation keeps the technology out of the normal research queue and treats the observatory as a scripted final objective:
+### 6. Enter Subspace
 
-1. Poll relevant platforms with `on_nth_tick`, not every tick.
-2. Determine eligibility from the platform's connection and normalized distance. Infer outward travel from an increase since the previous distance sample rather than relying on an undocumented direction flag.
-3. Once per second, verify that each powered observatory on an eligible platform holds the scheduled batch of all twelve science packs.
-4. If the complete batch is available, remove it atomically and advance the timer by one second; otherwise consume nothing and reset that observatory's consecutive-run timer.
-5. On completion, call `LuaForce::script_trigger_research()` for Spacefold Propulsion so Factorio handles its scripted research trigger and unlock effects normally.
+Warp represents travel through another plane of space. Ordinary asteroid chunks do not exist there, so entering warp immediately removes all chunks already present around the platform with one unfiltered call to `LuaSpacePlatform::destroy_asteroid_chunks()`.[^api-destroy-asteroids]
 
-`LuaSpacePlatform` exposes `space_connection` and normalized `distance`, and `LuaForce` exposes its platforms and technologies.[^api-platform][^api-force] The 4,000,000 km connection means a kilometer threshold can be converted to normalized distance as `threshold_km / 4000000`. Factorio supports `type = "scripted"` research triggers, and `LuaForce::script_trigger_research()` completes such a technology.[^api-research-trigger][^api-script-research]
+The script repeats that call while warp remains active because the normal connection may continue spawning chunks after activation. Total removal is part of the subspace-travel fiction, not a collision-management convenience.
 
-`on_space_platform_changed_state` is useful for departures, arrivals, and interrupted travel, but it does not report every distance change. Distance eligibility therefore requires periodic polling.[^api-events]
+Asteroid chunks are not removed before warp engages. The platform must survive normal acceleration to the engagement threshold. Disengagement returns it to normal space at its current route position, where ordinary asteroid spawning and danger resume.
 
-Do not use `LuaForce::disable_research()` for this feature because it disables research for the whole force rather than only the final project. Do not repeatedly enable and disable the final technology as platforms move; that creates confusing queue behavior and multiplayer edge cases.
+### 7. Present the Effect
 
-## Spacefold Drive Feasibility
+Warp should be unmistakable to players viewing the platform:
 
-The drive itself requires runtime scripting, but it does not require teleporting individual entities or rebuilding a platform. `LuaSpacePlatform.distance` is writable, so the script can reposition the existing platform along its current connection while its surface, entities, inventories, players, and schedule remain attached to it.[^api-platform]
+- Short-lived blue-white lines stream opposite the direction of travel.
+- A cool light pulse surrounds each active Warp Drive.
+- Activation and exit use distinct sounds and messages.
+- The drive interface and circuit output report the active state.
+- The global map shows the platform icon moving continuously and rapidly along the connection.
 
-The recommended implementation is:
+`LuaRendering::draw_line()` and `draw_light()` can create the first version without additional gameplay entities.[^api-rendering] Effects should use short lifetimes and refresh while warped so save data and rendering-object counts remain bounded.
 
-1. Register built drives and associate each with its platform.
-2. Represent charging with the drive entity's electric-energy buffer and persist whether it is ready.
-3. Allow engagement only when the drive is fully charged and the platform has a current space connection.
-4. Infer direction from recent distance samples, then set distance near the corresponding endpoint rather than exactly on it.
-5. Consume the entire charge before changing distance and impose a short script cooldown to prevent duplicate activation.
-6. Let Factorio complete the remaining route and transition naturally to the destination.
+## Research Gating Feasibility
 
-The safety margin is important. Setting an exact endpoint could race the engine's own arrival transition; stopping just short gives Factorio one normal movement interval in which to finish the trip. The implementation should initially support any active, already-unlocked connection, not arbitrary destination selection. This preserves the schedule as the source of truth and prevents the drive from bypassing progression locks.
+Technology prototypes can define the enormous Practical Warp Drive unit count, science ingredients, unit time, prerequisites, and unlock effects.[^api-technology-prototype] The technology itself remains ordinary and force-wide; platform location changes the speed of eligible laboratories, not the technology's cost or accumulated progress.
 
-Release-quality work is concentrated in edge cases rather than the jump itself: activation during departure or arrival, direction changes between samples, multiple drives, a drive destroyed while charging, multiplayer activation, save migration, and compatibility with mods that alter platform travel. A manual entity button or shortcut with a confirmation dialog is preferable for the first version; circuit activation should be added only after these transitions are reliable.
+`LuaForce.laboratory_speed_modifier` is writable, but it applies to the entire force.[^api-force] Setting it from one deep-space platform would accelerate planetary laboratories and laboratories on unrelated platforms, so it is not suitable for this local point multiplier. Factorio exposes writable force research progress but no documented writable per-lab research-speed property. The implementation therefore simulates platform-local acceleration by periodically enumerating labs on each Warp Drive platform, selecting only labs with `defines.entity_status.working`, and adding their multiplier-derived bonus to `LuaForce.research_progress`.[^api-entity]
+
+For an update interval of `elapsed_ticks`, the conceptual bonus is:
+
+```text
+bonus progress = sum(eligible lab research rates)
+               * (platform point multiplier - 1)
+               * elapsed time
+               / Practical Warp Drive total research work
+```
+
+The implementation should derive each lab's base rate from its prototype and include its resolved speed bonus, then validate the result against observed vanilla progress. It adds no bonus at `1x`, rechecks that Practical Warp Drive is still the active technology immediately before writing progress, caps completion safely, and stops as soon as research changes or completes. Labs on other surfaces continue contributing normally but are excluded from the scripted bonus. This must not maintain a separate project, bypass the technology queue, or call scripted research completion.
+
+Counting completed research cycles per lab would be conceptually simpler, but Factorio exposes neither an individual-lab research-cycle completion event nor readable lab-cycle progress. `LuaEntity.crafting_progress` and `is_crafting()` apply to crafting machines rather than labs, and science-pack stored durability can change for reasons that do not identify an atomic completed cycle. The reliable implementation is therefore elapsed-time integration from labs whose runtime status is `working`. A virtual per-lab cycle accumulator could present discrete updates, but it would only reimplement the same calculation and is unnecessary unless playtesting shows that continuous progress updates are undesirable.
+
+Runtime code can classify a drive from its surface and owning platform:
+
+- A non-platform planetary surface uses `1x` if placement there is intentionally supported; otherwise the drive remains platform-only and this tier is informational.
+- A platform stopped at a space location uses `10x`.
+- A traveling platform uses its `space_connection`, connection `length`, and normalized `distance` to calculate deep-space depth.[^api-platform][^api-connection]
+- The anomalous-core curve applies only near the Shattered Planet endpoint of its canonical connection.
+
+Direction must be handled explicitly because normalized distance is `0` at `connection.from` and `1` at `connection.to`. Identify the Shattered Planet endpoint by prototype name rather than assuming it is always `to`.
+
+## Warp Runtime Feasibility
+
+The Factorio 2.1 runtime API exposes the required platform operations:
+
+- `LuaForce.platforms` enumerates force-owned platforms.[^api-force]
+- `LuaForce.current_research` and writable `research_progress` expose ordinary force research state, while `laboratory_speed_modifier` is force-wide rather than platform-local.[^api-force]
+- `LuaEntity.status`, `speed_bonus`, and `LuaEntityPrototype::get_researching_speed()` allow the script to identify working labs and estimate their resolved research contribution.[^api-entity]
+- `LuaSpacePlatform.space_connection`, `distance`, `state`, `speed`, and `surface` expose travel state; `distance` and `speed` are writable.[^api-platform]
+- `LuaSpaceConnectionPrototype.length`, `from`, and `to` describe the active route.[^api-connection]
+- `LuaSpacePlatform::destroy_asteroid_chunks()` removes existing and subsequently spawned chunks when called on entry and during warp.[^api-destroy-asteroids]
+- `LuaRendering` supports temporary lines, sprites, and lights on the platform surface.[^api-rendering]
+
+No asteroid-spawn event should be assumed. Distance advancement, asteroid suppression, visual refresh, and circuit evaluation can run for active warped platforms from `on_nth_tick` or a lightweight tick handler. `on_space_platform_changed_state` remains useful for immediate cleanup on arrival or interruption.[^api-events]
+
+The proposal specifies behavior rather than implementation-ready Lua snippets. Exact speed units, safe distance deltas, endpoint margins, circuit APIs, state transitions, and update intervals must be validated in a prototype save before balance is fixed.
 
 ## State and Multiplayer Rules
 
-- **Permanent completion:** Once completed, Spacefold Propulsion never becomes unavailable if the platform retreats or is destroyed.
-- **Any-platform policy:** Any one platform owned by the force may qualify. Requiring every player or platform to be present would punish multiplayer forces and automated fleets.
-- **Independent attempts:** Multiple observatories may make independent ten-minute attempts, but science throughput cannot be combined between them and only the first completion matters to the force-wide technology.
-- **Reset on interruption:** Retreat, starvation, or power loss resets that observatory's consecutive timer. Destruction removes its attempt entirely.
-- **Save migration:** On configuration change, rebuild the observatory index and preserve already completed force state. Existing platforms beyond the threshold become eligible but should not receive free project progress.
-- **Removed or changed routes:** If another mod removes the vanilla connection, keep the final project unavailable and emit one clear compatibility message rather than erroring.
-- **Performance:** Poll at a coarse interval and stop scanning a force after completion. The route takes minutes or hours, so sub-second precision has no gameplay value.
+- **One building type:** Every phase uses the same Warp Drive prototype; no separate harvester, research array, or particle item is added.
+- **One per platform:** A platform may contain at most one Warp Drive. Placement of a second drive is rejected and refunded with a clear player message. Build events and periodic validation enforce the rule for player, robot, and script construction.
+- **Regular technology:** Practical Warp Drive uses the normal force research queue, laboratory inputs, and technology progress despite its enormous cost.
+- **Local multipliers:** Each drive grants scripted bonus progress only for working laboratories on its own platform using its current location.
+- **Permanent unlock:** Once Practical Warp Drive completes, losing the research platform does not revoke it.
+- **Platform-local warp:** Each platform evaluates its drive, speed, and engagement condition independently.
+- **Sustained control:** Warp remains active only while the configured engagement condition remains true.
+- **Force changes:** A platform changing force immediately uses the new force's Practical Warp Drive technology state.
+- **Save migration:** Configuration changes rebuild drive indexes, preserve completed technologies and ordinary research progress, and discard invalid references.
+- **Removed routes:** Missing vanilla route prototypes disable the special anomaly curve but not generic deep-space research or warp on valid connections.
+- **Performance:** Stagger platform-lab multiplier evaluation, but update only active warped platforms frequently enough for smooth map movement.
 
-## Scope Alternatives
+## Balance Framework
 
-| Option | Description | Advantages | Problems | Recommendation |
-| --- | --- | --- | --- | --- |
-| Arrival unlock | Enable normal research after any platform crosses a threshold. | Small script; normal Factorio research UI. | Research itself can happen anywhere; weak final test. | Good MVP or fallback. |
-| Scripted arrival completion | Complete the technology immediately at the threshold. | Very small and unambiguous. | Rewards travel only; does not test SPACELAB production. | Reject as the primary finale. |
-| Promethean Observatory | Sustain 1,000 per minute of every science pack for ten uninterrupted minutes beyond 100,000 km. | Tests the whole mod; makes production stability and the voyage meaningful. | Requires runtime state, UI feedback, and strict reset handling. | Recommended. |
-| Literal Shattered Planet arrival | Require normalized distance `1` on the full route. | Maximum prestige and simple fiction. | Multi-hour default, costly iteration, contrary to official expectation. | Optional hardcore preset. |
-| Landable Shattered Planet | Add terrain, resources, enemies, and another factory campaign. | Largest content expansion. | Very large art, balancing, compatibility, and implementation scope. | Separate future mod or expansion. |
+The multipliers establish the intended order of magnitude, while the Practical Warp Drive unit count, unit time, science ingredients, minimum engagement speed, and exact warp duration remain playtest values.
 
-## Community Ideas Worth Preserving
+The target experience is:
 
-Community discussion is not unanimous and should not be treated as product requirements. It does reveal useful design pressures:
-
-- **Some players want a reason to arrive.** Detailed proposals imagine a final factory, a new ending, or technology that justifies the journey.[^forum-surface][^forum-expectations]
-- **The ship-building challenge is already compelling.** Players publish highly varied endurance, compact, and novelty ships, suggesting the voyage should remain central rather than be bypassed.[^forum-ships]
-- **A new landable surface is one recurring proposal.** Examples use fragmented islands, constrained build space, unusual logistics, and combinations of mechanics from earlier planets.[^forum-surface][^forum-landing]
-- **A final reward should change what the player can do.** Suggestions include warp travel, quality tools, unusual logistics, or a definitive new ending rather than another percentage upgrade.[^forum-expectations][^forum-surface]
-- **Existing mods demonstrate the idea's scope.** Shattered Planet and Nexus each add a planet-scale production campaign; both combine earlier planetary mechanics and end in a new technology or escape objective.[^mod-shattered][^mod-nexus]
-
-The observatory and drive capture the strongest of these ideas - a demanding voyage, a final factory test, and a transformative reward - without committing SPACELAB to terrain generation and another full planet.
-
-## Related Mod Precedents
-
-Space Exploration and Krastorio 2 both establish useful precedents for a sustained endgame device, but neither uses SPACELAB's complete combination of location, science throughput, and reusable travel.
-
-| Mod | Existing endgame mechanic | Similarity to SPACELAB | Important difference |
-| --- | --- | --- | --- |
-| Space Exploration | Its spaceship victory requires a spaceship-mounted Nexus, speed above 250, at least 2,500 integrity stress, sufficient power, and 600 uninterrupted seconds of Distortion Drive operation. Losing the required conditions clears the countdown.[^se-nexus-source] | A special device must operate continuously for ten minutes on a capable moving spaceship. | It tests ship speed, size, and power rather than 1,000 SPM of every science pack, and completion is a victory condition rather than unlocking a reusable drive. |
-| Krastorio 2 | Its Intergalactic Transceiver stores 30 TJ, charges at up to 60 GW, and loses 20% of its charge every two seconds after more than two seconds without power. Full charge grants victory and changes the structure into a permanent 10 GW power source.[^k2-transceiver-source] | A huge endgame structure demands sustained electrical supply and punishes interruptions while charging. | It is a stationary energy-accumulation objective without a deep-space route gate or continuous all-science throughput requirement. |
-
-These precedents show that long, interruptible endgame operations are proven Factorio design patterns. SPACELAB's distinct contribution is to require one platform to sustain every late-game science chain beyond 100,000 km and then reward that achievement with repeatable movement along existing platform routes. The ten-minute duration intentionally matches Space Exploration's readable endurance window, while the failure condition tests factory throughput instead of velocity. The Spacefold Drive borrows the fantasy of a charged endgame machine but turns it into transport infrastructure rather than a victory-only sink.
+- A newly placed drive clearly explains that Practical Warp Drive is a normal but prohibitively expensive technology and how distance accelerates eligible labs on that platform.
+- Orbit is useful for commissioning but too slow for an efficient unlock.
+- Deep-space operation gives a practical path to completion.
+- Approaching the anomalous core is the fastest research route and a prestige challenge, not a mandatory literal arrival.
+- Warp reduces a representative three-minute route to roughly ten seconds while retaining visibly continuous map movement.
+- The platform must reach speed `50` under normal propulsion before entering subspace.
+- Disengaging the condition restores asteroid danger immediately.
+- Continuous warp prevents asteroid collection, so platforms dependent on asteroid resources must periodically travel in normal space or carry sufficient reserves.
+- Circuit-controlled resource thresholds create a deliberate cycle between fast subspace travel and slower harvesting windows.
+- Circuits support automation without being required for basic use.
 
 ## Suggested Delivery Plan
 
-### Phase 1: Arrival-Gated Prototype
+### Phase 1: Runtime Proof
 
-- Add Spacefold Propulsion, the drive prototype, and minimal locale using placeholder graphics.
-- Poll force platforms and temporarily expose ordinary all-science research after crossing 100,000 km.
-- Prototype drive charging and a manual jump to just short of the current destination.
-- Validate route detection, writable distance, direction inference, arrival behavior, multiplayer forces, saves, and mod compatibility.
+- Add a debug-only minimal Warp Drive prototype and inspect platform speed, state, connection, and normalized distance.
+- Validate scripted bonus progress from working platform labs, ordinary-rate science-pack consumption, and no bonus from labs elsewhere.
+- Validate small, frequent distance writes in both directions and confirm smooth global-map icon movement.
+- Measure a three-minute route and tune warp travel toward ten seconds without endpoint jumps.
+- Validate immediate and continued asteroid removal, condition-based disengagement, and normal travel resumption.
+- Validate circuit reads and outputs on a platform building before finalizing the command contract.
+- Validate a decider-controlled journey that exits warp on low asteroid-chunk reserves and re-engages after collectors replenish them.
 
-This phase answers the risky runtime questions with the least code. Its ordinary research gate is not the final gameplay design.
+### Phase 2: Experimental Drive
 
-### Phase 2: Observatory Objective
+- Add Theoretical Warp Drive and the final Warp Drive item, recipe, entity, and locale.
+- Enforce the one-drive-per-platform placement rule for player, robot, and script-built entities.
+- Add Practical Warp Drive as a regular technology with its deliberately enormous research cost.
+- Implement location-scaled bonus progress from working laboratories on each drive's platform.
+- Build the drive interface with guidance, point multiplier, effective local lab speed, progress, and estimated completion.
+- Add migration and multiplayer tests.
 
-- Add the Promethean Observatory entity and all twelve science inputs.
-- Replace ordinary lab research with the platform-bound 1,000-SPM qualification run.
-- Add throughput feedback, reset reasons, completion messaging, and migration logic.
-- Fix the research boundary at 100,000 km and qualification target at 1,000 SPM for ten minutes; playtest observatory power demand.
-- Replace placeholder drive controls with clear charge, readiness, destination, and failure feedback.
+### Phase 3: Functional Drive
 
-### Phase 3: Drive Automation and Prestige
+- Activate existing drives after Practical Warp Drive completes.
+- Add GUI and circuit-controlled sustained engagement and automatic disengagement.
+- Add gradual route advancement, endpoint safety margins, cooldowns, and subspace asteroid removal.
+- Add blue-white line and light effects, sounds, status output, and global-map verification.
+- Test departures, arrivals, reversals, pauses, force changes, and duplicate placement attempts.
 
-- Add circuit-controlled engagement if manual activation proves reliable.
-- Add a full-distance arrival objective or startup setting.
-- Consider a persistent score for fastest, lightest, or lowest-energy completion without tying progression to it.
+### Phase 4: Polish and Compatibility
+
+- Replace placeholder visuals with original assets.
+- Expose remote interfaces only if another mod has a concrete integration need.
+- Add configurable balance values only where playtesting demonstrates a real need.
+
+## Implementation Footprint
+
+- `info.json`: keep the current Factorio 2.1 and Space Age requirements; no new runtime dependency is expected.
+- `data.lua`: load the Warp Drive item, recipe, entity, technologies, signals, and visual-effect prototypes from the existing `prototypes/` structure.
+- `control.lua`: own platform-local laboratory acceleration, drive UI, circuit conditions and outputs, warp state, gradual distance advancement, asteroid removal, rendering, migrations, and multiplayer events.
+- `graphics/`: contain original Warp Drive, technology, signal, and warp-effect assets as they become available.
+- `locale/en/strings.cfg`: follow the existing locale convention for names, guidance, state, controls, and failure messages.
+
+The runtime proof should precede production art and balance work. Smooth incremental travel on the global map is a core requirement, so an instant endpoint write is not an acceptable fallback for the final design.
 
 ## Open Design Decisions
 
-- Should multiple observatories on one platform increase speed, or should one platform support only one active project?
-- Should a failed qualification run preserve a visible best-streak record for the force?
-- What drive energy capacity and charging rate make a jump a major platform operation rather than a routine shortcut?
-- Should one fully charged drive jump the platform, or should larger platforms require multiple synchronized drives based on platform mass?
-- Should the first release allow jumps on every active connection, or only the Solar System Edge to Shattered Planet connection and its return direction?
+- What Practical Warp Drive unit count and unit time produce the desired completion times at each multiplier?
+- Should lab quality, module speed, and beacon speed all contribute to the resolved rate used for scripted bonus progress?
+- Where do the `100x` to `1,000x` deep-space curve and `5,000x+` anomaly curve begin?
+- Should warp target a fixed route duration, a fixed kilometer speed, or an `18x` multiplier over normal travel?
+- Which virtual signals should report ready and active states?
+- Should the engagement control use any configurable circuit condition or a dedicated warp signal?
+- Should warp consume additional electricity, or is maintaining speed `50` and owning the drive sufficient?
+- Should dropping out of warp impose a brief warning before normal asteroid danger resumes?
 
 ## Sources
 
-Official facts, API behavior, community opinion, and SPACELAB proposals are intentionally separated above. Community links are representative examples, not statistical evidence of consensus.
+Official facts and API capabilities are evidence for feasibility, not confirmation that the proposed gameplay is implemented.
 
 [^wiki-shattered]: Official Factorio Wiki, [Shattered planet](https://wiki.factorio.com/Shattered_planet), including route length, achievement distances, asteroid scaling, and the statement that reaching the destination is not expected.
-[^api-platform]: Factorio 2.1 Runtime API, [`LuaSpacePlatform`](https://lua-api.factorio.com/latest/classes/LuaSpacePlatform.html), including `space_connection` and `distance`.
-[^api-force]: Factorio 2.1 Runtime API, [`LuaForce`](https://lua-api.factorio.com/latest/classes/LuaForce.html), including force platforms and technologies.
+[^api-platform]: Factorio 2.1 Runtime API, [`LuaSpacePlatform`](https://lua-api.factorio.com/latest/classes/LuaSpacePlatform.html), including `space_connection`, `distance`, `state`, `speed`, `surface`, and force platform usage.
+[^api-connection]: Factorio 2.1 Runtime API, [`LuaSpaceConnectionPrototype`](https://lua-api.factorio.com/latest/classes/LuaSpaceConnectionPrototype.html), including `from`, `to`, and `length`.
+[^api-force]: Factorio 2.1 Runtime API, [`LuaForce`](https://lua-api.factorio.com/latest/classes/LuaForce.html), including `platforms`, `current_research`, writable `research_progress`, technologies, and `laboratory_speed_modifier`.
+[^api-entity]: Factorio 2.1 Runtime API, [`LuaEntity`](https://lua-api.factorio.com/latest/classes/LuaEntity.html), including `status` and `speed_bonus`, and [`LuaEntityPrototype::get_researching_speed()`](https://lua-api.factorio.com/latest/classes/LuaEntityPrototype.html#get_researching_speed).
 [^api-events]: Factorio 2.1 Runtime API, [`on_space_platform_changed_state`](https://lua-api.factorio.com/latest/events.html#on_space_platform_changed_state).
-[^api-research-trigger]: Factorio 2.1 Runtime API, [`ResearchTrigger`](https://lua-api.factorio.com/latest/concepts/ResearchTrigger.html), including the `scripted` trigger type and trigger description.
-[^api-script-research]: Factorio 2.1 Runtime API, [`LuaForce::script_trigger_research()`](https://lua-api.factorio.com/latest/classes/LuaForce.html#script_trigger_research).
-[^api-technology-prototype]: Factorio 2.1 Prototype API, [`TechnologyPrototype`](https://lua-api.factorio.com/latest/prototypes/TechnologyPrototype.html), including `enabled`, `prerequisites`, `unit`, `research_trigger`, and `effects`.
-[^api-technology-enabled]: Factorio 2.1 Runtime API, [`LuaTechnology.enabled`](https://lua-api.factorio.com/latest/classes/LuaTechnology.html#enabled).
-[^forum-ships]: Factorio Forums, [Ships that can get to the shattered planet](https://forums.factorio.com/viewtopic.php?t=122301), started November 20, 2024.
-[^forum-surface]: Factorio Forums, [New Surface: Shattered Planet (Long post)](https://forums.factorio.com/viewtopic.php?t=132252), January 2, 2026.
-[^forum-landing]: Factorio Forums, [If you could land on the Shattered Planet, what would it be like?](https://forums.factorio.com/viewtopic.php?t=130644), September 2025.
-[^forum-expectations]: Factorio Forums, [Observations and expectations from a new player getting ready to go for shattered planet](https://forums.factorio.com/viewtopic.php?t=132547), January 26, 2026.
-[^mod-shattered]: Factorio Mod Portal, [Shattered Planet](https://mods.factorio.com/mod/skewer_shattered_planet).
-[^mod-nexus]: Factorio Mod Portal, [Nexus Extended Promethium Endgame](https://mods.factorio.com/mod/Nexus).
-[^se-nexus-source]: Space Exploration 0.7.57 distributed source, `shared.lua` and `scripts/nexus.lua`, including the speed, 600-second duration, integrity, power, countdown-reset, and victory logic; official [Space Exploration Mod Portal](https://mods.factorio.com/mod/space-exploration) and [changelog](https://mods.factorio.com/mod/space-exploration/changelog).
-[^k2-transceiver-source]: Krastorio 2 official source, [`locale/en/Krastorio2Tips.cfg`](https://codeberg.org/raiguard/Krastorio2/src/branch/trunk/locale/en/Krastorio2Tips.cfg), and official [Mod Portal](https://mods.factorio.com/mod/Krastorio2), including the Intergalactic Transceiver's 30 TJ capacity, 60 GW charge rate, interrupted-power discharge, victory, and permanent-output behavior.
+[^api-destroy-asteroids]: Factorio 2.1 Runtime API, [`LuaSpacePlatform::destroy_asteroid_chunks()`](https://lua-api.factorio.com/latest/classes/LuaSpacePlatform.html#destroy_asteroid_chunks).
+[^api-rendering]: Factorio 2.1 Runtime API, [`LuaRendering`](https://lua-api.factorio.com/latest/classes/LuaRendering.html), including `draw_line()`, `draw_sprite()`, and `draw_light()`.
+[^api-technology-prototype]: Factorio 2.1 Prototype API, [`TechnologyPrototype`](https://lua-api.factorio.com/latest/prototypes/TechnologyPrototype.html), including prerequisites, units, research triggers, and effects.

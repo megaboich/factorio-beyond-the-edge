@@ -22,7 +22,7 @@ Instead of replacing the existing journey, SPACELAB extends it with future-facin
 
 ## Design Philosophy
 
-- **Mostly Additive & Compatible:** New content is gated behind high-tier research. The only vanilla recipe overrides remove planetary pressure conditions from Agricultural and Metallurgic Science Packs so standard Biochambers and Foundries can craft them on space platforms; their ingredients, times, categories, productivity, and unlocks are unchanged.
+- **Mostly Additive & Compatible:** New content is gated behind high-tier research. The only vanilla recipe overrides remove planetary surface conditions from Agricultural, Cryogenic, Electromagnetic, and Metallurgic Science Packs so their standard machines can craft them on space platforms; their ingredients, times, categories, productivity, and unlocks are unchanged.
 - **Logistics Mastery:** The mod replaces "planetary dependency" with "orbital complexity." Production chains are energy-intensive and require advanced circuit-logic balancing.
 - **Closed-Loop Economy:** By extracting rare chemical inputs from asteroid debris, you turn your platform into a self-sustaining ecosystem.
 
@@ -60,7 +60,8 @@ Calcite is left to existing Oxide asteroid processing, which already produces it
 ### Existing Building Integration
 
 - **Crusher:** Now processes Metallic, Carbonic, and Oxide asteroid chunks, each with a Stone-Focused and a Flurolite-Focused recipe variant, before Red Asteroid shattering ("Shattered Synthesis") unlocks as the top tier with stronger rare byproduct odds, including Uranium Ore.
-- **Cryogenic Plant:** Handles ammonia extraction, lithium-focused condensation, and fluorine-focused condensation without introducing additional dedicated processing buildings.
+- **Cryogenic Plant:** Handles ammonia extraction, lithium-focused condensation, and fluorine-focused condensation without introducing additional dedicated processing buildings. Cryogenic Science Pack no longer requires Aquilo's pressure and can therefore be crafted on a space platform.
+- **Electromagnetic Plant:** Electromagnetic Science Pack no longer requires Fulgora's magnetic field and can therefore be crafted on a space platform.
 - **Biochamber:** Retains its standard Organic recipes and behavior, but Agricultural Science Pack no longer requires Gleba's pressure and can therefore be crafted in a Biochamber on a space platform. No duplicate science recipe or additional machine is added.
 - **Foundry:** Retains its standard Metallurgy recipes and behavior, but Metallurgic Science Pack no longer requires Vulcanus's pressure and can therefore be crafted in a Foundry on a space platform. No duplicate science recipe or additional machine is added.
 
@@ -116,6 +117,8 @@ All SPACELAB technologies are post-Solar System Edge research gated behind **Pro
 | Recipe | Change | Unchanged Behavior |
 | --- | --- | --- |
 | Agricultural Science Pack | Removes the vanilla `pressure = 2000` surface condition, permitting crafting in a standard Biochamber on space platforms. | Organic category, 1 Bioflux + 1 Pentapod Egg ingredients, 4s craft time, one-pack output, productivity support, and vanilla technology unlock. |
+| Cryogenic Science Pack | Removes the vanilla `pressure = 300` surface condition, permitting crafting in a standard Cryogenic Plant on space platforms. | Cryogenics category, ingredients, 20s craft time, science-pack and hot Fluoroketone outputs, productivity support, and vanilla technology unlock. |
+| Electromagnetic Science Pack | Removes the vanilla `magnetic-field = 99` surface condition, permitting crafting in a standard Electromagnetic Plant on space platforms. | Electromagnetics category, ingredients, 10s craft time, one-pack output, productivity support, and vanilla technology unlock. |
 | Metallurgic Science Pack | Removes the vanilla `pressure = 4000` surface condition, permitting crafting in a standard Foundry on space platforms. | Metallurgy category, 3 Tungsten Carbide + 2 Tungsten Plate + 200 Molten Copper ingredients, 10s craft time, one-pack output, productivity support, and vanilla technology unlock. |
 
 ## Scientific Justification
