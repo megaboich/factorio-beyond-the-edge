@@ -12,10 +12,12 @@ local ANIMATION_NAME = "warp-drive-animation"
 local PRACTICAL_TECH = "practical-warp-drive"
 local CHARGE_JOULES_PER_KG = 500
 local SUPPORT_WATTS_PER_KG = 20
-local DETECTOR_POWER_WATTS = 200000000
-local BASE_TACHYONS_PER_SECOND = 1
+local SUPPORT_POWER_TOLERANCE = 0.999
+local DETECTOR_REFERENCE_POWER_WATTS = 200000000
+local DETECTOR_MAX_POWER_WATTS = 1000000000
+local BASE_TACHYONS_PER_SECOND = 2
 local LOCATION_MULTIPLIER_MINIMUM = 10
-local LOCATION_MULTIPLIER_MAXIMUM = 2500
+local LOCATION_MULTIPLIER_MAXIMUM = 5000
 local DETECTOR_SPEED_REFERENCE = 100
 local CRAFTING_MACHINE_TYPES = {
   ["assembling-machine"] = true,
@@ -23,7 +25,8 @@ local CRAFTING_MACHINE_TYPES = {
   ["rocket-silo"] = true
 }
 local MINIMUM_SPEED = 50
-local WARP_MULTIPLIER = 100
+local WARP_BOOST_PER_LEVEL = 10
+local WARP_LEVEL_SECONDS = 2
 local ENDPOINT_MARGIN_KM = 1000
 local COOLDOWN_TICKS = 600
 local UPDATE_TICKS = 10
@@ -55,6 +58,19 @@ local function platform_speed_km_per_second(platform)
   return (platform.speed or 0) * TICKS_PER_SECOND
 end
 
+local function engine_warp_limit(platform)
+  return math.max(0, platform_speed_km_per_second(platform)) / MINIMUM_SPEED
+end
+
+local function warp_multiplier(level)
+  return WARP_BOOST_PER_LEVEL * math.max(0, level or 0)
+end
+
+local function effective_speed_km_per_second(platform, level)
+  local speed = platform_speed_km_per_second(platform)
+  return speed * (level and warp_multiplier(level) or 1)
+end
+
 local function storage_root()
   storage.drives = storage.drives or {}
   storage.direction_samples = storage.direction_samples or {}
@@ -66,6 +82,7 @@ local function destroy_support(record)
   end
   if record then
     record.support = nil
+    record.support_sample_watts = nil
   end
 end
 
@@ -298,8 +315,8 @@ local function set_output_signals(record, platform)
   local values = {
     record.state == "warp" and 1 or 0,
     charge_percent,
-    math.floor(platform_speed_km_per_second(platform)
-      * (record.state == "warp" and WARP_MULTIPLIER or 1)),
+    math.floor(effective_speed_km_per_second(platform,
+      record.state == "warp" and (record.warp_level or 1) or nil)),
     math.floor((record.detector_power_ratio or 0) * 100)
   }
   for index, signal in ipairs(CIRCUIT_SIGNALS) do
@@ -466,6 +483,14 @@ local function platform_weight_kg(platform)
   return platform.weight / 1000
 end
 
+local function support_watts_per_level(platform)
+  return platform_weight_kg(platform) * SUPPORT_WATTS_PER_KG
+end
+
+local function support_watts(platform, level)
+  return support_watts_per_level(platform) * level
+end
+
 local function required_charge(platform)
   return platform_weight_kg(platform) * CHARGE_JOULES_PER_KG
 end
@@ -533,6 +558,11 @@ local function exit_warp(record)
     record.cooldown_until = game.tick + COOLDOWN_TICKS
   end
   destroy_support(record)
+  record.warp_level = nil
+  record.requested_warp_level = nil
+  record.warp_target = nil
+  record.support_power = 0
+  record.warp_ramp_state = nil
   if record.charge and record.charge.valid then
     record.charge.disabled_by_script = game.tick < record.cooldown_until
   end
@@ -550,18 +580,27 @@ local function can_prepare(record, platform, direction)
     and game.tick >= record.cooldown_until
 end
 
-local function support_satisfied(record, watts)
+local function sample_support(record)
+  local support = ensure_support(record)
+  if not support then
+    return 0
+  end
+  local delivered = support.energy * 60 / UPDATE_TICKS
+  record.support_power = delivered
+  support.energy = 0
+  return delivered
+end
+
+local function request_support(record, watts)
   local support = ensure_support(record)
   if not support then
     return false
   end
-  local required_energy = watts * UPDATE_TICKS / 60
   support.power_usage = 0
-  support.electric_buffer_size = required_energy
+  support.electric_buffer_size = watts * UPDATE_TICKS / 60
   support.input_flow_limit = watts
-  local satisfied = support.energy >= required_energy * 0.95
-  support.energy = 0
-  return satisfied
+  record.support_sample_watts = watts
+  return true
 end
 
 local function update_detector(record)
@@ -571,8 +610,8 @@ local function update_detector(record)
     record.detector_power = 0
     return
   end
-  record.detector_power = math.min(DETECTOR_POWER_WATTS, detector.energy * 60 / UPDATE_TICKS)
-  record.detector_power_ratio = record.detector_power / DETECTOR_POWER_WATTS
+  record.detector_power = math.min(DETECTOR_MAX_POWER_WATTS, detector.energy * 60 / UPDATE_TICKS)
+  record.detector_power_ratio = record.detector_power / DETECTOR_REFERENCE_POWER_WATTS
   detector.energy = 0
 end
 
@@ -585,13 +624,13 @@ local function enter_warp(record, platform)
   buffer.energy = 0
   buffer.disabled_by_script = true
   record.state = "warp"
-  local support = ensure_support(record)
-  if support then
-    local watts = platform_weight_kg(platform) * SUPPORT_WATTS_PER_KG
-    support.power_usage = 0
-    support.electric_buffer_size = watts * UPDATE_TICKS / 60
-    support.input_flow_limit = watts
-    support.energy = 0
+  record.warp_level = 1
+  record.requested_warp_level = 1
+  record.warp_target = engine_warp_limit(platform)
+  record.support_power = 0
+  record.warp_ramp_state = "stabilizing"
+  if request_support(record, support_watts(platform, 1)) then
+    record.support.energy = 0
     record.support_check_after = game.tick + UPDATE_TICKS * 2
   end
   platform.destroy_asteroid_chunks({})
@@ -635,16 +674,48 @@ local function update_drive(record)
     return true
   end
   if record.state == "warp" then
-    local watts = platform_weight_kg(platform) * SUPPORT_WATTS_PER_KG
-    local support_available = support_satisfied(record, watts)
-    if not can_prepare(record, platform, direction)
-        or (game.tick >= (record.support_check_after or 0) and not support_available) then
+    local delivered_watts = sample_support(record)
+    if not can_prepare(record, platform, direction) then
       exit_warp(record)
       return true
     end
+    local engine_limit = engine_warp_limit(platform)
+    local level = math.min(record.warp_level or 1, engine_limit)
+    local requested_level = record.requested_warp_level or level
+    local power_limited = false
+    local target_level = engine_limit
+    if game.tick >= (record.support_check_after or 0) then
+      local watts_per_level = support_watts_per_level(platform)
+      local power_limit = watts_per_level > 0 and delivered_watts / watts_per_level or 0
+      if power_limit < SUPPORT_POWER_TOLERANCE then
+        exit_warp(record)
+        return true
+      end
+      if delivered_watts >= support_watts(platform, requested_level) * SUPPORT_POWER_TOLERANCE then
+        level = math.min(requested_level, engine_limit)
+      else
+        power_limited = true
+        local sustainable_level = math.max(1, power_limit)
+        target_level = math.min(engine_limit, sustainable_level)
+        level = math.min(level, sustainable_level, engine_limit)
+      end
+    end
+    local level_step = UPDATE_TICKS / TICKS_PER_SECOND / WARP_LEVEL_SECONDS
+    local next_level = math.min(engine_limit, level + level_step)
+    record.warp_level = level
+    record.requested_warp_level = next_level
+    record.warp_target = target_level
+    if power_limited then
+      record.warp_ramp_state = "power-limited"
+    elseif level + 0.0001 < engine_limit then
+      record.warp_ramp_state = "accelerating"
+    else
+      record.warp_ramp_state = "engine-limited"
+    end
+    request_support(record, support_watts(platform, next_level))
     local connection = platform.space_connection
     local margin = connection_margin(platform)
-    local extra_distance = direction * (WARP_MULTIPLIER - 1) * platform.speed
+    local extra_distance = direction * (warp_multiplier(level) - 1) * platform.speed
       * UPDATE_TICKS / connection.length
     local boundary = direction > 0 and 1 - margin or margin
     local target = platform.distance + extra_distance
@@ -965,12 +1036,13 @@ local function detector_signal(record, power_ratio)
   local entity = record.entity
   local platform = entity.surface.platform
   if not platform then
-    return 0, 1
+    return 0, 0
   end
-  local signal = location_multiplier(platform)
+  local signal = BASE_TACHYONS_PER_SECOND
+    * location_multiplier(platform)
     * detector_speed_factor(platform)
     * spacelab_multiplier(entity.surface)
-  return signal, 1 + (signal - 1) * power_ratio
+  return signal, signal * power_ratio
 end
 
 -- research_unit_energy is expressed in ticks, so a technology with unit.time = 120 reports
@@ -988,16 +1060,16 @@ local function force_bonus_rate(force, research)
     local power_ratio = record.detector_power_ratio or 0
     if entity and entity.valid and entity.force == force and power_ratio > 0
       and entity.surface.platform then
-      local _, multiplier = detector_signal(record, power_ratio)
-      if multiplier > 1 then
+      local _, bonus_multiplier = detector_signal(record, power_ratio)
+      if bonus_multiplier > 0 then
         if research_branch(entity.surface) == "relay" then
           if not force_rate then
             _, force_rate = force_lab_metrics(force)
           end
-          relay_signal = relay_signal + multiplier - 1
+          relay_signal = relay_signal + bonus_multiplier
         else
           local _, platform_rate = working_lab_metrics(entity.surface, force)
-          bonus = bonus + platform_rate * (multiplier - 1)
+          bonus = bonus + platform_rate * bonus_multiplier
         end
       end
     end
@@ -1031,18 +1103,18 @@ local function update_research_bonuses()
       local force = entity.force
       local research = force.current_research
       if research and research.name == PRACTICAL_TECH then
-        local _, multiplier = detector_signal(record, power_ratio)
-        if multiplier > 1 then
+        local _, bonus_multiplier = detector_signal(record, power_ratio)
+        if bonus_multiplier > 0 then
           if research_branch(entity.surface) == "relay" then
             local bucket = relay[force.index]
             if not bucket then
               bucket = {force = force, signal = 0}
               relay[force.index] = bucket
             end
-            bucket.signal = bucket.signal + multiplier - 1
+            bucket.signal = bucket.signal + bonus_multiplier
           else
             local _, total_rate = working_lab_metrics(entity.surface, force)
-            apply_research_progress(force, research, total_rate * (multiplier - 1))
+            apply_research_progress(force, research, total_rate * bonus_multiplier)
           end
         end
       end
@@ -1178,7 +1250,10 @@ local function update_gui(player, record)
     return
   end
   if not find_gui_element(content, "warp_drive_completion_heading")
-    or not find_gui_element(content, "warp_drive_progress") then
+    or not find_gui_element(content, "warp_drive_progress")
+    or not find_gui_element(content, "warp_drive_average_lab_rate")
+    or not find_gui_element(content, "warp_drive_detector_power_multiplier")
+    or not find_gui_element(content, "warp_drive_warp_target") then
     draw_gui(player, record)
     return
   end
@@ -1197,7 +1272,7 @@ local function update_gui(player, record)
 
   local branch = research_branch(record.entity.surface)
   local power_ratio = practical and 0 or (record.detector_power_ratio or 0)
-  local signal_multiplier, effective_multiplier = detector_signal(record, power_ratio)
+  local signal_multiplier, bonus_multiplier = detector_signal(record, power_ratio)
   local lab_count, lab_rate
   if branch == "relay" then
     lab_count, lab_rate = force_lab_metrics(record.entity.force)
@@ -1207,11 +1282,20 @@ local function update_gui(player, record)
   local research = record.entity.force.current_research
   local researching_practical = research and research.name == PRACTICAL_TECH
   local bonus_rate = researching_practical
-    and lab_rate * (effective_multiplier - 1) / research_seconds(research) or 0
+    and lab_rate * bonus_multiplier / research_seconds(research) or 0
   gui("warp_drive_detector_status").caption = {"warp-drive.state-" .. (practical and "complete" or record.state)}
-  gui("warp_drive_detector_power").caption = {"warp-drive.power-value", format_power(record.detector_power or 0), format_power(DETECTOR_POWER_WATTS), math.floor(power_ratio * 100)}
-  gui("warp_drive_detector_bar").value = power_ratio
-  gui("warp_drive_detector_bar").caption = {"warp-drive.percent-value", math.floor(power_ratio * 100)}
+  gui("warp_drive_detector_power").caption = {
+    "warp-drive.power-value",
+    format_power(record.detector_power or 0),
+    format_power(DETECTOR_MAX_POWER_WATTS),
+    math.floor((record.detector_power or 0) / DETECTOR_MAX_POWER_WATTS * 100)
+  }
+  local detector_power_fraction = math.min(1,
+    (record.detector_power or 0) / DETECTOR_MAX_POWER_WATTS)
+  gui("warp_drive_detector_bar").value = detector_power_fraction
+  gui("warp_drive_detector_bar").caption = {
+    "warp-drive.percent-value", math.floor(detector_power_fraction * 100)
+  }
   gui("warp_drive_research_branch").caption = {"warp-drive.branch-" .. (branch or "unknown")}
   gui("warp_drive_research_status").caption = practical and {"warp-drive.research-status-complete"}
     or (researching_practical and {"warp-drive.research-status-active"}
@@ -1254,14 +1338,24 @@ local function update_gui(player, record)
     string.format("%.2f", math.max(0, platform_speed_km_per_second(platform))),
     string.format("%.2f", detector_speed_factor(platform))
   }
+  gui("warp_drive_detector_power_multiplier").caption = {
+    "warp-drive.multiplier-value", string.format("%.2f", power_ratio)
+  }
   gui("warp_drive_detector_help").caption = practical and {"warp-drive.detector-help-complete"} or {
       "warp-drive.detector-help-" .. (branch or "unknown"),
       emphasized_best_name,
       string.format("%.0f", BASE_TACHYONS_PER_SECOND * LOCATION_MULTIPLIER_MAXIMUM)
     }
   gui("warp_drive_tachyon_rate").caption = {"warp-drive.tachyon-value",
-    string.format("%.2f", BASE_TACHYONS_PER_SECOND * signal_multiplier * power_ratio)}
+    string.format("%.2f", signal_multiplier * power_ratio)}
   gui("warp_drive_working_labs").caption = bold_number(lab_count)
+  gui("warp_drive_average_lab_rate").parent.visible = researching_practical
+  if researching_practical then
+    local average_lab_rate = lab_count > 0 and lab_rate / lab_count / research_seconds(research) or 0
+    gui("warp_drive_average_lab_rate").caption = {
+      "warp-drive.research-rate-value", string.format("%.4f", average_lab_rate)
+    }
+  end
   gui("warp_drive_research_bonus").caption = {"warp-drive.research-rate-value", string.format("%.2f", bonus_rate)}
   gui("warp_drive_research_progress").parent.visible = researching_practical
   gui("warp_drive_completion_section").visible = researching_practical
@@ -1292,11 +1386,29 @@ local function update_gui(player, record)
   gui("warp_drive_platform_speed").caption = {
     "warp-drive.speed-value", string.format("%.2f", speed)
   }
+  gui("warp_drive_warp_level").caption = record.state == "warp"
+    and {"warp-drive.warp-level-value", string.format("%.2f", record.warp_level or 1)}
+    or {"warp-drive.inactive-value"}
+  gui("warp_drive_warp_target").caption = {
+    "warp-drive.warp-level-value",
+    string.format("%.2f", record.warp_target or engine_warp_limit(platform))
+  }
+  gui("warp_drive_warp_boost").caption = {
+    "warp-drive.multiplier-value",
+    string.format("%.2f", record.state == "warp" and warp_multiplier(record.warp_level) or 1)
+  }
   gui("warp_drive_effective_speed").caption = {
     "warp-drive.speed-value",
-    string.format("%.2f", speed * (record.state == "warp" and WARP_MULTIPLIER or 1))
+    string.format("%.2f", effective_speed_km_per_second(platform,
+      record.state == "warp" and (record.warp_level or 1) or nil))
   }
-  gui("warp_drive_support_demand").caption = format_power(platform_weight_kg(platform) * SUPPORT_WATTS_PER_KG)
+  gui("warp_drive_warp_ramp").caption = {
+    "warp-drive.ramp-" .. (record.warp_ramp_state or "inactive")
+  }
+  gui("warp_drive_support_demand").caption = format_power(
+    record.state == "warp" and (record.support_sample_watts or 0) or 0)
+  gui("warp_drive_support_delivery").caption = format_power(
+    record.state == "warp" and (record.support_power or 0) or 0)
   gui("warp_drive_route_clearance").caption = endpoint_clear(platform, record.direction) and {"warp-drive.yes"} or {"warp-drive.no"}
   gui("warp_drive_cooldown").caption = {"warp-drive.seconds-value", string.format("%.1f", math.max(0, record.cooldown_until - game.tick) / 60)}
 end
@@ -1373,12 +1485,14 @@ draw_gui = function(player, record)
     {"warp-drive.progress-toward", {"warp-drive.location-unknown"}})
   add_status_row(content, "warp_drive_signal_multiplier", {"warp-drive.signal-multiplier"})
   add_status_row(content, "warp_drive_detector_speed", {"warp-drive.detector-speed"})
+  add_status_row(content, "warp_drive_detector_power_multiplier", {"warp-drive.detector-power-signal"})
   add_status_row(content, "warp_drive_tachyon_rate", {"warp-drive.tachyon-rate"})
 
   add_section_heading(content, {"warp-drive.research-section"})
   add_status_row(content, "warp_drive_research_status", {"warp-drive.research-status"})
   add_status_row(content, "warp_drive_research_branch", {"warp-drive.research-branch"})
   add_status_row(content, "warp_drive_working_labs", {"warp-drive.working-labs"})
+  add_status_row(content, "warp_drive_average_lab_rate", {"warp-drive.average-lab-rate"})
   add_status_row(content, "warp_drive_research_bonus", {"warp-drive.research-bonus"})
   add_status_row(content, "warp_drive_research_progress", {"warp-drive.research-progress"})
   local completion = content.add({type = "flow", name = "warp_drive_completion_section", direction = "vertical"})
@@ -1408,8 +1522,13 @@ draw_gui = function(player, record)
   charge_bar.style.horizontally_stretchable = true
   charge_bar.style.bottom_margin = 8
   add_status_row(warp_section, "warp_drive_platform_speed", {"warp-drive.platform-speed"})
+  add_status_row(warp_section, "warp_drive_warp_level", {"warp-drive.warp-level"})
+  add_status_row(warp_section, "warp_drive_warp_target", {"warp-drive.warp-target"})
+  add_status_row(warp_section, "warp_drive_warp_ramp", {"warp-drive.warp-ramp"})
+  add_status_row(warp_section, "warp_drive_warp_boost", {"warp-drive.warp-boost"})
   add_status_row(warp_section, "warp_drive_effective_speed", {"warp-drive.effective-speed"})
   add_status_row(warp_section, "warp_drive_support_demand", {"warp-drive.support-demand"})
+  add_status_row(warp_section, "warp_drive_support_delivery", {"warp-drive.support-delivery"})
   add_status_row(warp_section, "warp_drive_route_clearance", {"warp-drive.route-clearance"})
   add_status_row(warp_section, "warp_drive_cooldown", {"warp-drive.cooldown-label"})
   local warp_help = warp_section.add({type = "label", caption = {"warp-drive.warp-help"}})

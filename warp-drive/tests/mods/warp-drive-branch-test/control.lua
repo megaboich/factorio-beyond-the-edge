@@ -11,21 +11,22 @@
 local EXPECT_LOCAL = script.active_mods["warp-drive-space-science-test"] ~= nil
 local TECHNOLOGY = "practical-warp-drive"
 -- Signal strength follows orbital distance from the star. Just outside the Solar system
--- edge is worth about 218 particles/s after 345,000 km of travel; almost at the Shattered
--- Planet, on the same connection, is near the 2500 particles/s density ceiling. Platform
--- speed multiplies both branches without a cap: 100 km/s is about 5000x there, while the
--- test's 200 km/s window must rise beyond 5000x.
+-- edge is worth about 640 particles/s after 345,000 km of travel; almost at the Shattered
+-- Planet, on the same connection, is near the 10000 particles/s density ceiling. Platform
+-- speed multiplies both branches without a cap. Near and far windows use the 200 MW
+-- reference power; the test's final 200 km/s window raises power to 1 GW and must gain the
+-- expected 5x power factor as well as the speed increase.
 -- The bands are wide enough to survive balance tweaks but
 -- narrow enough to fail on an order-of-magnitude formula error, which is what a wrong
 -- research_unit_energy conversion looks like.
-local NEAR_MINIMUM = 250
-local NEAR_MAXIMUM = 500
-local FAR_MINIMUM = 3500
-local FAR_MAXIMUM = 4500
+local NEAR_MINIMUM = 900
+local NEAR_MAXIMUM = 1200
+local FAR_MINIMUM = 14000
+local FAR_MAXIMUM = 18000
 local OUTWARD_GAIN_MINIMUM = 5
-local FAST_MINIMUM = 6000
-local SPEED_GAIN_MINIMUM = 1.8
-local SPEED_GAIN_MAXIMUM = 1.95
+local FAST_MINIMUM = 120000
+local SPEED_POWER_GAIN_MINIMUM = 9
+local SPEED_POWER_GAIN_MAXIMUM = 9.75
 local UNBOOSTED_MAXIMUM = 1.5
 local LAB_COUNT = 3
 local ROUTE = "solar-system-edge-shattered-planet"
@@ -254,18 +255,18 @@ script.on_nth_tick(10, function()
     check("near", near, NEAR_MINIMUM, NEAR_MAXIMUM)
     check("far", far, FAR_MINIMUM, FAR_MAXIMUM)
     if fast < FAST_MINIMUM then
-      fail(string.format("200 km/s signal did not exceed the former 5000x cap: %s", detail))
+      fail(string.format("200 km/s and 1 GW signal did not exceed 120000x: %s", detail))
     end
     if far < near * OUTWARD_GAIN_MINIMUM then
       fail(string.format(
         "travelling further out did not strengthen the signal by at least %gx: %s",
         OUTWARD_GAIN_MINIMUM, detail))
     end
-    local speed_gain = fast / far
-    if speed_gain < SPEED_GAIN_MINIMUM or speed_gain > SPEED_GAIN_MAXIMUM then
+    local speed_power_gain = fast / far
+    if speed_power_gain < SPEED_POWER_GAIN_MINIMUM or speed_power_gain > SPEED_POWER_GAIN_MAXIMUM then
       fail(string.format(
-        "raising speed from 60 to 200 km/s changed the signal by %.4gx, expected %g to %g: %s",
-        speed_gain, SPEED_GAIN_MINIMUM, SPEED_GAIN_MAXIMUM, detail))
+        "raising speed from 60 to 200 km/s and power from 200 MW to 1 GW changed the signal by %.4gx, expected %g to %g: %s",
+        speed_power_gain, SPEED_POWER_GAIN_MINIMUM, SPEED_POWER_GAIN_MAXIMUM, detail))
     end
     if EXPECT_LOCAL then
       log("WARP_TEST_PASS: local research branch accelerated platform laboratories only")

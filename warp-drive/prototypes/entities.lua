@@ -338,7 +338,8 @@ local charge_buffer = {
 
 local detector_load = table.deepcopy(charge_buffer)
 detector_load.name = "warp-drive-detector-load"
-detector_load.energy_source.buffer_capacity = "34MJ"
+detector_load.energy_source.buffer_capacity = "166.667MJ"
+detector_load.energy_source.input_flow_limit = "1GW"
 
 local circuit_output = table.deepcopy(combinator_source)
 circuit_output.name = "warp-drive-circuit-output"

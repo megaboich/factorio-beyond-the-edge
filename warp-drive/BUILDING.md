@@ -25,7 +25,7 @@ Detector and charge storage remain separate so experimental detector energy cann
 | --- | --- | --- | --- |
 | `warp-drive-controller` | `constant-combinator` | Always | Visible 6x6 entity, ownership anchor, health, collision, mining, circuit input, and GUI target |
 | `warp-drive-animation` | `electric-energy-interface` | Always | Zero-power 100-frame animation, emission, and shadow |
-| `warp-drive-detector-load` | `accumulator` | Before Practical research | Tertiary `200 MW` detector sample with a `34 MJ` buffer |
+| `warp-drive-detector-load` | `accumulator` | Before Practical research | Tertiary `1 GW` detector sample with a `167 MJ` buffer |
 | `warp-drive-charge-buffer` | `accumulator` | After Practical research | Tertiary `100 GJ` store with `200 MW` input and no output |
 | `warp-drive-support-load` | `electric-energy-interface` | During warp | Secondary-input sample of the current support demand |
 | `warp-drive-circuit-output` | `constant-combinator` | Always | Scripted `W`, `C`, `S`, and `P` outputs on both wire colors |
@@ -53,8 +53,10 @@ The symmetric footprint reuses one circuit connection definition in all directio
 | `enabled`, `circuit_enabled` | Player engagement settings |
 | `state`, `cooldown_until` | Composite state and lockout |
 | `last_distance`, `direction` | Travel samples used by movement logic |
-| `detector_power`, `detector_power_ratio` | Latest detector sample |
-| `support_check_after` | Startup grace limit for support sampling |
+| `detector_power`, `detector_power_ratio` | Latest detector sample and factor relative to `200 MW` |
+| `warp_level`, `requested_warp_level`, `warp_target` | Current, probed, and sustainable warp levels |
+| `support_power`, `support_sample_watts`, `support_check_after` | Delivered power, requested power, and startup grace |
+| `warp_ramp_state` | GUI acceleration status |
 
 Build events call `register_drive`. Invalid off-platform placement is destroyed. A duplicate controller is destroyed, refunded on the platform surface, and reported to the force.
 
@@ -78,7 +80,7 @@ Before Practical research, the charge companion is absent and the detector compa
 watts = stored joules * 60 / update ticks
 ```
 
-The result is capped at `200 MW`. A real tertiary accumulator lets Factorio's network solver determine surplus power.
+The result is capped at `1 GW`. Research scales against a `200 MW` reference, so the power factor ranges continuously from `0` to `5`. A real tertiary accumulator lets Factorio's network solver determine surplus power.
 
 ### Charge
 
@@ -86,9 +88,9 @@ After Practical research, the detector is removed and the charge accumulator is 
 
 ### Support
 
-During warp, the support interface's buffer is set to one 10-tick interval of `platform weight in kg * 20 W/kg`. The runtime accepts at least 95% delivery, drains the sample, and recreates the next interval. Two update intervals of startup grace let a new sink receive power.
+During warp, the support interface's buffer is set to one 10-tick interval of `platform weight in kg * 20 W/kg * requested warp level`. The requested level is one update step above the current level while acceleration is possible. Each update converts stored energy to delivered watts, drains the sample, and configures the next request. Two update intervals of startup grace let a new sink receive power.
 
-The interval buffer measures current delivery; electric-network connection alone does not prove that the requested load was supplied.
+The interval buffer measures current delivery; electric-network connection alone does not prove that the requested load was supplied. At least 99.9% delivery permits the requested step. Partial delivery derives a lower sustainable level and applies it immediately; less than 99.9% of Warp-1 demand exits warp.
 
 ### Companion States
 
@@ -110,7 +112,7 @@ The visible controller reads the optional `E` input. The hidden combinator owns 
 | `W` | `1` in warp, otherwise `0` |
 | `C` | Charge percentage, capped at `100` |
 | `S` | Effective integer speed |
-| `P` | Detector power percentage |
+| `P` | Detector power percentage relative to the `200 MW` reference, capped at `500` |
 
 Blueprint tags preserve the circuit-control toggle. Settings paste copies both runtime toggles. Opening the controller is intercepted for the custom GUI unless the cursor holds a wire, planner, blueprint, or other tool.
 

@@ -61,10 +61,10 @@ cp -R "$ROOT_DIR/tests/mods/warp-drive-runtime-test" "$PLATFORM_MODS/"
 "$FACTORIO_BIN" \
   --mod-directory "$PLATFORM_MODS" \
   --benchmark "$TEST_ROOT/platform-save.zip" \
-  --benchmark-ticks 700 \
+  --benchmark-ticks 1200 \
   --benchmark-runs 1 2>&1 | tee "$TEST_ROOT/platform.log"
 
-if ! grep -q 'WARP_TEST_PASS: detector, duplicate, revocation, warp, power-loss, lockout, and relocation paths completed' "$TEST_ROOT/platform.log"; then
+if ! grep -q 'WARP_TEST_PASS: detector, duplicate, revocation, warp ramp, fallback, power-loss, lockout, and relocation paths completed' "$TEST_ROOT/platform.log"; then
   printf 'Platform runtime test did not emit its pass marker\n' >&2
   exit 1
 fi

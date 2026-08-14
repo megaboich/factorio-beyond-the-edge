@@ -2,6 +2,20 @@ local function fail(message)
   error("WARP_TEST_FAIL: " .. message)
 end
 
+local function circuit_signal(name)
+  local platform = storage.platform
+  local output = platform.surface.find_entities_filtered({name = "warp-drive-circuit-output"})[1]
+  local section = output and output.get_or_create_control_behavior().get_section(1)
+  if section then
+    for index = 1, section.filters_count do
+      local filter = section.get_slot(index)
+      if filter.value and filter.value.name == name then
+        return filter.min
+      end
+    end
+  end
+end
+
 script.on_init(function()
   local force = game.forces.player
   local platform = force.create_space_platform({
@@ -41,9 +55,9 @@ script.on_init(function()
     fail("duplicate drive survived")
   end
 
-  platform.space_connection = "nauvis-vulcanus"
+  platform.space_connection = "solar-system-edge-shattered-planet"
   platform.distance = 0.5
-  platform.speed = 1
+  platform.speed = 50 / 60
   platform.paused = false
 
   storage.platform = platform
@@ -108,48 +122,76 @@ script.on_nth_tick(10, function()
     end
     charge[1].energy = charge[1].electric_buffer_size
     platform.distance = 0.51
-    platform.speed = 1
+    platform.speed = 50 / 60
     platform.paused = false
   elseif game.tick == 40 then
     local support = platform.surface.find_entities_filtered({name = "warp-drive-support-load"})
     if #support ~= 1 then
       fail("expected one support load on warp entry, got " .. #support)
     end
+    storage.warp_one_support_flow = support[1].input_flow_limit
     support[1].energy = support[1].electric_buffer_size
     local charge = platform.surface.find_entities_filtered({name = "warp-drive-charge-buffer"})
     if #charge ~= 1 or charge[1].energy ~= 0 then
       fail("warp entry did not consume drive charge")
     end
-    local output = platform.surface.find_entities_filtered({name = "warp-drive-circuit-output"})[1]
-    local section = output and output.get_or_create_control_behavior().get_section(1)
-    local warp_value
-    local speed_value
-    if section then
-      for index = 1, section.filters_count do
-        local filter = section.get_slot(index)
-        if filter.value and filter.value.name == "signal-W" then
-          warp_value = filter.min
-        elseif filter.value and filter.value.name == "signal-S" then
-          speed_value = filter.min
-        end
-      end
-    end
-    if warp_value ~= 1 then
+    if circuit_signal("signal-W") ~= 1 then
       fail("circuit output did not report active warp")
     end
-    if speed_value ~= 6000 then
-      fail("circuit speed output was " .. tostring(speed_value) .. ", expected 6000 km/s")
+    local speed = circuit_signal("signal-S")
+    if speed ~= 500 then
+      fail("circuit speed output was " .. tostring(speed) .. ", expected 500 km/s at Warp-1")
     end
-  elseif game.tick == 50 then
+  elseif game.tick >= 50 and game.tick <= 530 then
     if platform.distance <= 0.51 then
       fail("warp did not advance platform distance")
     end
-  elseif game.tick == 60 then
-    platform.paused = true
-  elseif game.tick == 70 then
+    local support = platform.surface.find_entities_filtered({name = "warp-drive-support-load"})[1]
+    if not support then
+      fail("support load disappeared during powered acceleration")
+    end
+    if game.tick == 50 then
+      local speed = circuit_signal("signal-S")
+      if speed ~= 2500 then
+        fail("warp accelerated above Warp-1 immediately after engine speed increased")
+      end
+      local expected = storage.warp_one_support_flow * (1 + 1 / 12)
+      if math.abs(support.input_flow_limit - expected) > expected * 0.001 then
+        fail("first acceleration probe did not request one 10-tick level step")
+      end
+    elseif game.tick == 170 then
+      local speed = circuit_signal("signal-S")
+      if math.abs((speed or 0) - 5000) > 1 then
+        fail("circuit speed output was " .. tostring(speed) .. ", expected 5000 km/s at Warp-2")
+      end
+    elseif game.tick == 530 then
+      local expected = storage.warp_one_support_flow * 5
+      if math.abs(support.input_flow_limit - expected) > expected * 0.001 then
+        fail("Warp-5 support demand did not equal five times Warp-1 demand")
+      end
+      local speed = circuit_signal("signal-S")
+      if math.abs((speed or 0) - 12500) > 1 then
+        fail("circuit speed output was " .. tostring(speed) .. ", expected 12500 km/s at Warp-5")
+      end
+    end
+    support.energy = support.electric_buffer_size
+  elseif game.tick == 540 then
+    local support = platform.surface.find_entities_filtered({name = "warp-drive-support-load"})[1]
+    local speed = circuit_signal("signal-S")
+    if not support or speed ~= 2000 then
+      fail("engine-speed loss did not lower Warp-5 immediately to Warp-2")
+    end
+    support.energy = support.electric_buffer_size * 0.9995 / 2
+  elseif game.tick == 550 then
+    local support = platform.surface.find_entities_filtered({name = "warp-drive-support-load"})[1]
+    local speed = circuit_signal("signal-S")
+    if not support or speed ~= 1000 then
+      fail("support shortfall did not lower Warp-2 immediately to Warp-1")
+    end
+  elseif game.tick == 560 then
     local support = platform.surface.find_entities_filtered({name = "warp-drive-support-load"})
     if #support ~= 0 then
-      fail("one full support sample masked the following power loss")
+      fail("complete support-power loss did not exit warp")
     end
     local charge = platform.surface.find_entities_filtered({name = "warp-drive-charge-buffer"})
     if #charge ~= 1 then
@@ -157,29 +199,29 @@ script.on_nth_tick(10, function()
     end
     charge[1].energy = charge[1].electric_buffer_size
     platform.distance = 0.51
-    platform.speed = 1
-  elseif game.tick == 80 then
+    platform.speed = 50 / 60
+  elseif game.tick == 570 then
     local support = platform.surface.find_entities_filtered({name = "warp-drive-support-load"})
     local charge = platform.surface.find_entities_filtered({name = "warp-drive-charge-buffer"})
     if #support ~= 0 or #charge ~= 1 or charge[1].energy == 0 then
       fail("drive re-entered warp during post-warp lockout")
     end
-  elseif game.tick == 650 then
+  elseif game.tick == 1150 then
     local charge = platform.surface.find_entities_filtered({name = "warp-drive-charge-buffer"})
     if #charge ~= 1 then
       fail("charge buffer disappeared during the post-warp lockout")
     end
     charge[1].energy = charge[1].electric_buffer_size
     platform.distance = 0.51
-    platform.speed = 1
+    platform.speed = 50 / 60
     platform.paused = false
-  elseif game.tick == 660 then
+  elseif game.tick == 1160 then
     local support = platform.surface.find_entities_filtered({name = "warp-drive-support-load"})
     if #support ~= 1 then
       fail("drive did not re-enter warp after the lockout")
     end
     game.forces.player.technologies["practical-warp-drive"].researched = false
-  elseif game.tick == 670 then
+  elseif game.tick == 1170 then
     local support = platform.surface.find_entities_filtered({name = "warp-drive-support-load"})
     if #support ~= 0 then
       fail("support load survived Practical research revocation")
@@ -202,7 +244,7 @@ script.on_nth_tick(10, function()
     if not storage.drive then
       fail("replacement drive creation returned nil")
     end
-  elseif game.tick == 680 then
+  elseif game.tick == 1180 then
     local companion_names = {
       "warp-drive-animation",
       "warp-drive-detector-load",
@@ -221,7 +263,7 @@ script.on_nth_tick(10, function()
     }) then
       fail("hidden companion blocked rebuilding at the old drive position")
     end
-  elseif game.tick == 690 then
-    log("WARP_TEST_PASS: detector, duplicate, revocation, warp, power-loss, lockout, and relocation paths completed")
+  elseif game.tick == 1190 then
+    log("WARP_TEST_PASS: detector, duplicate, revocation, warp ramp, fallback, power-loss, lockout, and relocation paths completed")
   end
 end)

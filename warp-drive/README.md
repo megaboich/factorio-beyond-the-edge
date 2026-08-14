@@ -1,8 +1,8 @@
 # Factorio Warp Drive Mod
 
-Warp Drive is a standalone Factorio: Space Age post-game mod. It adds one platform-only building and two technologies. The experimental drive detects tachyons to accelerate its own final research; the completed drive provides `100x` travel while preserving normal propulsion, schedules, and route movement.
+Warp Drive is a standalone Factorio: Space Age post-game mod. It adds one platform-only building and two technologies. The experimental drive detects tachyons to accelerate its own final research; the completed drive emulates subspace travel with a speed boost derived from active engine thrust.
 
-![Warp Drive building](graphics/icons/warp-drive-big.png)
+![Warp Drive animation](graphics/warp-drive.gif)
 
 *The Warp Drive building uses this exact illustration. See [Asset Attribution](#asset-attribution).*
 
@@ -14,15 +14,15 @@ The Shattered Planet route is `4,000,000 km` long. Its rising asteroid density t
 
 Warp Drive makes distance a production input. Deep space becomes the best place to research a technology that removes the travel plateau. The expedition is still a factory problem: a light, well-powered platform detects more tachyons, reaches warp sooner, and travels faster.
 
-Warp is accelerated travel, not teleportation. Thrusters, fuel, weight, power, schedules, and route direction continue to matter. Asteroids vanish in subspace, so speed also cuts off the platform's raw-material supply.
+Warp is accelerated travel, not teleportation. Entering subspace starts at Warp-1 and a `10x` effective speed boost. After support power stabilizes, the drive accelerates through approximately one additional warp level every 2 seconds while engine thrust and support power permit. Thrusters, fuel, weight, power, schedules, and route direction all continue to matter. Asteroids vanish in subspace, so speed also cuts off the platform's raw-material supply.
 
 ## Design
 
 Warp Drive turns deep-space distance into research output, then turns that research into faster travel. It keeps the challenge factory-driven:
 
 - Research still uses the normal queue, laboratories, and science packs.
-- Warp multiplies current engine speed instead of teleporting the platform.
-- Charge and support power scale with platform weight.
+- Engine thrust sets the maximum warp level; reaching it takes time and sufficient power.
+- Charge scales with platform weight; support power scales with both weight and warp level.
 - Asteroids disappear during warp, so sustained travel interrupts asteroid collection.
 - Circuits are optional but can automate warp around platform reserves.
 
@@ -40,8 +40,9 @@ Once Practical Warp Drive is researched, the same building becomes an engine. Wa
 
 Before Practical Warp Drive is researched, the drive acts as a detector:
 
-- It consumes up to `200 MW` of surplus platform power. Other powered facilities take priority.
-- Partial power proportionally reduces its research bonus.
+- It consumes up to `1 GW` of surplus platform power. Other powered facilities take priority.
+- `200 MW` preserves the base detector rate; each additional `200 MW` adds another full power factor, up to `5x` at `1 GW`.
+- Partial power scales its research bonus continuously.
 - The bonus applies only while you are actively researching Practical Warp Drive.
 - Labs consume the technology's normal science packs at their normal rate; tachyons add progress without increasing pack consumption.
 
@@ -73,19 +74,19 @@ r = \operatorname{clamp}\left(
 ```
 
 ```math
-D = 10 \left(\frac{2500}{10}\right)^r
+D = 20 \left(\frac{10000}{20}\right)^r
 ```
 
 Here, $d$ is the distance travelled into the route network, $d_{min}$ is its shortest connection, and $d_{max}$ is the full depth to its outermost destination. $D$ is measured in particles per second.
 
 | Position in vanilla | Kilometres flown | Route depth | Density |
 | --- | ---: | ---: | ---: |
-| Nauvis | `0` | `0%` | `10 particles/s` |
-| Vulcanus, Gleba, or Fulgora | `15,000` | `0%` | `10 particles/s` |
-| Aquilo | `45,000` | `20%` | `29 particles/s` |
-| Solar System Edge | `145,000` | `40%` | `93 particles/s` |
-| Halfway through the final route | `2,145,000` | `88%` | `1,308 particles/s` |
-| Shattered Planet | `4,145,000` | `100%` | `2,500 particles/s` |
+| Nauvis | `0` | `0%` | `20 particles/s` |
+| Vulcanus, Gleba, or Fulgora | `15,000` | `0%` | `20 particles/s` |
+| Aquilo | `45,000` | `20%` | `67 particles/s` |
+| Solar System Edge | `145,000` | `40%` | `246 particles/s` |
+| Halfway through the final route | `2,145,000` | `88%` | `4,828 particles/s` |
+| Shattered Planet | `4,145,000` | `100%` | `10,000 particles/s` |
 
 Platform speed and delivered detector power produce the final research multiplier:
 
@@ -94,10 +95,16 @@ S = 1 + \frac{v}{100}
 ```
 
 ```math
-M = 1 + \left(D S - 1\right)p
+P = \operatorname{clamp}\left(\frac{P_{delivered}}{200\ \mathrm{MW}}, 0, 5\right)
 ```
 
-Here, $v$ is platform speed in km/s, $p$ is the fraction of the requested detector power delivered from `0` to `1`, and $M$ is the multiplier applied to eligible laboratories. Thus stationary is `1x` speed scaling, `100 km/s` is `2x`, and each additional `100 km/s` adds `1x` with no cap. At maximum density, `100 km/s` and full detector power produce a `5,000 particles/s` signal and `5,000x` research multiplier.
+```math
+B = D S P
+```
+
+Here, $v$ is platform speed in km/s, $P_{delivered}$ is delivered detector power, and $B$ is the bonus multiplier added on top of each eligible laboratory's ordinary research. Thus stationary is `1x` speed scaling, `100 km/s` is `2x`, and each additional `100 km/s` adds `1x` with no cap. At maximum density and `100 km/s`, `200 MW` adds approximately `20,000x` bonus research while `1 GW` adds approximately `100,000x`.
+
+For example, without an additional SPACELAB facility bonus, `300,000 km` toward Shattered Planet gives approximately `549 particles/s` of tachyon density. At `50 km/s`, the speed multiplier is `1.5x`; at `500 MW`, the power multiplier is `2.5x`. The resulting effective signal is approximately `2,057 particles/s`, so every eligible laboratory adds about `2,057x` its ordinary rate as bonus research.
 
 ## Warp Travel
 
@@ -106,13 +113,18 @@ After Practical Warp Drive is researched:
 - Activation costs `500 J` per kilogram of current platform weight.
 - The charge buffer accepts up to `200 MW`, stores up to `100 GJ`, and uses surplus power.
 - Automatic engagement requires at least `50 km/s`, sufficient charge, active travel, and more than `1,000 km` clearance from both route endpoints.
-- Warp adds `99x` scripted movement to normal movement for `100x` effective speed.
-- Active warp consumes `20 W` per kilogram and removes asteroid chunks.
-- Warp exits immediately if support power, speed, route eligibility, or automatic engagement is lost.
+- Subspace travel always begins at Warp-1, applying a `10x` boost.
+- After a brief support-power stabilization interval, the drive gains approximately one warp level every 2 seconds. Each level requires another `50 km/s` of engine speed and `20 W/kg` of support power.
+- Warp-10 therefore requires at least `500 km/s`, provides a `100x` boost, and takes approximately 18 seconds to reach from Warp-1 after stabilization.
+- Warp level has no scripted maximum; Factorio's platform physics and the increasing power demand provide the limits.
+- The drive probes the next fractional level's support demand before accelerating into it.
+- Lost engine speed or support power lowers the warp level immediately to the maximum sustainable level. Falling below Warp-1 exits warp.
+- Warp removes asteroid chunks while active.
+- Warp exits immediately if Warp-1 support power, minimum engine speed, route eligibility, or automatic engagement is lost.
 - Every exit starts a 10-second charge and re-entry lockout.
 - The first and final `1,000 km` of each connection use conventional travel. Connections no longer than `2,000 km` cannot use warp.
 
-For a `10,000 tonne` platform, activation requires `5 GJ` and active support requires `200 MW`. Charging at the maximum `200 MW` takes 25 seconds.
+For a `10,000 tonne` platform, activation requires `5 GJ`, charging at the maximum `200 MW` takes 25 seconds, and support demand starts at `200 MW` at Warp-1. The same platform requires `2 GW` at Warp-10.
 
 The exact mass and speed scaling is:
 
@@ -121,18 +133,34 @@ E_{activation} = m \cdot 500\ \mathrm{J/kg}
 ```
 
 ```math
-P_{support} = m \cdot 20\ \mathrm{W/kg}
+L_{engine} = \frac{v_{engine}}{50\ \mathrm{km/s}}
 ```
 
 ```math
-v_{warp} = 100 \cdot v_{engine}
+L_{power} = \frac{P_{available}}{m \cdot 20\ \mathrm{W/kg}}
+```
+
+```math
+L_{target} = \min(L_{engine}, L_{power})
+```
+
+```math
+B = 10L_{current}
+```
+
+```math
+P_{support} = m \cdot 20\ \mathrm{W/kg} \cdot L_{requested}
+```
+
+```math
+v_{subspace} = B \cdot v_{engine}
 ```
 
 ```math
 t_{charge} = \frac{E_{activation}}{P_{charge}}
 ```
 
-Here, $m$ is current platform mass in kilograms, $P_{charge}$ is available charge power up to `200 MW`, and $v_{engine}$ is the platform's current engine-derived speed.
+Here, $m$ is current platform mass in kilograms, $L_{current}$ is the continuous active warp level, $L_{requested}$ is the next small acceleration step, $B$ is the effective speed boost, $P_{available}$ is measured support power, $P_{charge}$ is available charge power up to `200 MW`, and $v_{engine}$ is the platform's current engine-derived speed. Entry sets $L_{current}=1$. After support power stabilizes, it rises at `0.5 levels/s` toward $L_{target}$ and falls to a lower target immediately. Warp requires delivery of at least 99.9% of Warp-1 demand; neither the level nor boost has a scripted upper limit.
 
 ## The Endgame Challenge
 
@@ -142,7 +170,7 @@ The intended solution is an automated cycle: circuits permit warp while reserves
 
 ## Controls
 
-Open the drive to view detector power, route progress, platform speed, tachyon rate, eligible labs, research contribution, estimated completion time, charge, support demand, endpoint clearance, cooldown, and engagement settings.
+Open the drive to view detector power, route progress, platform speed, tachyon rate, eligible lab count and average rate, research contribution, estimated completion time, charge, current and target warp levels, acceleration state, boost, effective speed, requested and delivered support power, endpoint clearance, cooldown, and engagement settings.
 
 Connect red or green circuit wire near the drive's top-left edge. Circuit engagement requires a positive `E` signal when enabled.
 
@@ -150,8 +178,8 @@ Connect red or green circuit wire near the drive's top-left edge. Circuit engage
 | --- | --- |
 | `W` | `1` during warp, otherwise `0` |
 | `C` | Charge percentage |
-| `S` | Effective speed in km/s |
-| `P` | Detector power percentage |
+| `S` | Effective subspace speed in km/s |
+| `P` | Detector power as a percentage of the `200 MW` reference, up to `500` |
 
 ## Building And Technologies
 
@@ -180,5 +208,8 @@ SPACELAB is never required or detected by name. Its orbital science recipes make
 
 The bundled Quantum Stabilizer artwork is by **Hurricane046**. The source post and its Figma resource describe the artwork as free to use; explicit permission has not yet been requested. The creator will be contacted before release.
 
-- <https://mods.factorio.com/user/Hurricane046>
-- <https://www.reddit.com/r/factorio/comments/1g6cnhu/ive_been_learning_how_to_make_custom_factorio/>
+| Link | Description |
+| --- | --- |
+| [Hurricane046 on Factorio Mods](https://mods.factorio.com/user/Hurricane046) | Artist profile and published Factorio mods |
+| [Original Reddit post](https://www.reddit.com/r/factorio/comments/1g6cnhu/ive_been_learning_how_to_make_custom_factorio/) | Source post introducing the custom building artwork |
+| [Factorio Buildings on Figma](https://www.figma.com/proto/y1IQG08ZG2jIeJ5sTyF4MP/Factorio-Buildings) | Showcase of the artist's Factorio building artwork |

@@ -4,7 +4,8 @@
 -- buffer and make the unpowered baseline window meaningless.
 --
 -- The schedule is shared with warp-drive-branch-test by tick number so the two mods need
--- no communication: the detector is starved until BASELINE_END_TICK and saturated after it.
+-- no communication: the detector is starved until BASELINE_END_TICK, held at the 200 MW
+-- reference through the normal windows, then saturated to 1 GW for the final window.
 -- The boundary sits after the tick 180 measurement so the whole baseline window, including
 -- the research bonus applied on tick 180 itself, is genuinely unpowered.
 local BASELINE_END_TICK = 190
@@ -12,13 +13,15 @@ local BASELINE_END_TICK = 190
 -- edge and the next is measured almost at the Shattered Planet, on the same connection.
 local DEEP_TICK = 430
 local FAST_TICK = 550
+local DETECTOR_REFERENCE_ENERGY = 200000000 * 10 / 60
 local NEAR_DISTANCE = 0.05
 local DEEP_DISTANCE = 0.999
 
 script.on_nth_tick(10, function()
   for _, surface in pairs(game.surfaces) do
     for _, detector in pairs(surface.find_entities_filtered({name = "warp-drive-detector-load"})) do
-      detector.energy = game.tick < BASELINE_END_TICK and 0 or detector.electric_buffer_size
+      detector.energy = game.tick < BASELINE_END_TICK and 0
+        or (game.tick < FAST_TICK and DETECTOR_REFERENCE_ENERGY or detector.electric_buffer_size)
     end
   end
   -- Platform physics rewrites speed every tick and would eventually carry the platform to
