@@ -1,44 +1,138 @@
 # Factorio Warp Drive Mod
 
-Warp Drive is a standalone Factorio: Space Age post-game mod. It adds one platform-only building and two ordinary technologies: Theoretical Warp Drive unlocks the experimental building, and Practical Warp Drive converts it into a functional subspace drive.
+Warp Drive is a standalone Factorio: Space Age post-game mod. It adds one platform-only building and two technologies. The experimental drive detects tachyons to accelerate its own final research; the completed drive provides `100x` travel while preserving normal propulsion, schedules, and route movement.
 
-## Implemented Mechanics
+![Warp Drive building](graphics/icons/warp-drive-big.png)
 
-- Exactly one Warp Drive may be installed on each space platform.
-- Before Practical Warp Drive completes, the experimental drive consumes up to `200 MW` of surplus platform power as a tachyon detector. Normal powered facilities take priority, and the detector scales down when no excess generation remains. It does not create or fill its hidden warp-charge buffer in this phase.
-- A powered detector accelerates Practical Warp Drive research from working laboratories on the same platform. The dialog reports actual delivered power; partial detector power proportionally reduces the bonus without showing Factorio's binary no-power warning.
-- Location multipliers are `10x` while stopped in orbit and rise from `100x` to `1,000x` while traveling; the final portion of the Solar System Edge to Shattered Planet route rises toward `5,000x`.
-- Research remains in Factorio's ordinary queue. Labs continue consuming the technology's actual science packs at their ordinary working rate; tachyons add bonus progress only for eligible platform labs.
-- After Practical Warp Drive completes, automatic engagement charges the drive and activates warp when the platform is traveling at speed `50` or faster and is more than `1,000 km` from either endpoint.
-- Activation costs `500 J` per kilogram of current platform weight. A hidden charge buffer accepts up to `200 MW` and stores up to `100 GJ`; the visible drive is a continuously animated composite structure with no native machine or electrical UI.
-- Warp adds `99x` scripted movement to normal engine movement for `100x` effective travel speed.
-- Active warp requires `20 W` per kilogram, removes asteroid chunks, and exits immediately if support power, speed, route eligibility, or automatic engagement is lost.
-- Every exit starts a 10-second charging and re-entry lockout. The first and final `1,000 km` of each connection remain conventional travel.
-- Open the drive to inspect detector power, tachyon rate, working labs, bonus research rate, and research progress. After Practical Warp Drive completes, the dialog also shows warp readiness, charge, speed, endpoint clearance, support demand, lockout, and engagement controls.
-- Connect red or green circuit wire near the top-left edge of the drive without opening its dialog. Optional circuit control requires a positive `E` signal before automatic engagement; outputs are `W` for active warp, `C` for charge percentage, `S` for effective speed, and `P` for detector power percentage.
+*The Warp Drive building uses this exact illustration. See [Asset Attribution](#asset-attribution).*
 
-The first release is an experimental runtime proof. Platform speed-to-distance conversion and direct route-distance updates require in-game validation before the travel balance should be considered final.
+The mod requires `base >= 2.1.0` and `space-age >= 2.1.0`. SPACELAB is optional.
 
-The Warp Drive occupies a `6x6` platform footprint.
+## Why This Mod Exists
 
-## Recipe
+The Shattered Planet route is `4,000,000 km` long. Its rising asteroid density turns the post-game into an open-ended platform-engineering challenge, but eventually progress becomes waiting at a rate the factory cannot improve.
 
-The Warp Drive takes 120 seconds to craft from 200 Quantum Processors, 500 Superconductors, 1,000 Tungsten Plates, 500 Carbon Fibers, and 500 Supercapacitors.
+Warp Drive makes distance a production input. Deep space becomes the best place to research a technology that removes the travel plateau. The expedition is still a factory problem: a light, well-powered platform detects more tachyons, reaches warp sooner, and travels faster.
 
-## Technologies
+Warp is accelerated travel, not teleportation. Thrusters, fuel, weight, power, schedules, and route direction continue to matter. Asteroids vanish in subspace, so speed also cuts off the platform's raw-material supply.
 
-- Theoretical Warp Drive costs 10,000 units at 120 seconds each.
-- Practical Warp Drive costs 1,000,000,000 units at 120 seconds each.
-- Both use Automation, Logistic, Military, Chemical, Production, Utility, Space, Metallurgic, Electromagnetic, Agricultural, Cryogenic, and Promethium science packs.
+## Design
+
+Warp Drive turns deep-space distance into research output, then turns that research into faster travel. It keeps the challenge factory-driven:
+
+- Research still uses the normal queue, laboratories, and science packs.
+- Warp multiplies current engine speed instead of teleporting the platform.
+- Charge and support power scale with platform weight.
+- Asteroids disappear during warp, so sustained travel interrupts asteroid collection.
+- Circuits are optional but can automate warp around platform reserves.
+
+The mod adds no laboratories, science packs, particle items, or separate research pool. Exactly one Warp Drive may be installed per platform.
+
+## Subspace And Tachyons
+
+Subspace Tachyon Particles are transient observations, not resources. They cannot be collected, stored, shipped, or crafted into an item. Their signal strengthens with distance travelled toward the outermost destination in a connected route network.
+
+The experimental Warp Drive is first a detector. Its observations provide bonus research through eligible working laboratories. Where that bonus applies depends on whether all required science packs can be produced in space.
+
+Once Practical Warp Drive is researched, the same building becomes an engine. Warp moves the platform through subspace, where ordinary asteroid chunks do not exist. Departure and arrival still occur in normal space, which is why the first and final `1,000 km` remain conventional travel.
+
+## Research
+
+Before Practical Warp Drive is researched, the drive acts as a detector:
+
+- It consumes up to `200 MW` of surplus platform power. Other powered facilities take priority.
+- Partial power proportionally reduces its research bonus.
+- The bonus applies only while you are actively researching Practical Warp Drive.
+- Labs consume the technology's normal science packs at their normal rate; tachyons add progress without increasing pack consumption.
+
+### Where Research Happens
+
+Warp Drive automatically checks whether every required science pack can be produced on a space platform. It checks available recipes, not installed mod names.
+
+| Available science production | Labs receiving the bonus |
+| --- | --- |
+| Every required pack can be produced in space | Working labs on the drive's platform only |
+| One or more required packs cannot be produced in space | All of your working labs, wherever they are located |
+
+In an unmodded Space Age game, several required science packs cannot be produced in space. The drive therefore relays its observations to all working laboratories, allowing the detector platform to travel while the laboratory base remains at home. If another mod makes every required pack producible in space, only working laboratories on the drive's own platform receive the bonus.
+
+This avoids a dead end: Agricultural Science Packs spoil long before a platform can carry an imported stockpile deep into the final route. When every pack can be produced in orbit, the expedition instead becomes a self-contained research-platform challenge.
+
+### Tachyon Signal
+
+Signal density rises geometrically with kilometres travelled toward the deepest location in the platform's connected route network. Separate route networks are measured independently.
+
+| Position in vanilla | Kilometres flown | Route depth | Density |
+| --- | ---: | ---: | ---: |
+| Nauvis | `0` | `0%` | `10 particles/s` |
+| Vulcanus, Gleba, or Fulgora | `15,000` | `0%` | `10 particles/s` |
+| Aquilo | `45,000` | `20%` | `29 particles/s` |
+| Solar System Edge | `145,000` | `40%` | `93 particles/s` |
+| Halfway through the final route | `2,145,000` | `88%` | `1,308 particles/s` |
+| Shattered Planet | `4,145,000` | `100%` | `2,500 particles/s` |
+
+Platform speed multiplies the signal: stationary is `1x`, `100 km/s` is `2x`, and each additional `100 km/s` adds `1x` with no cap. At maximum density, `100 km/s` and full detector power produce a `5,000 particles/s` signal and reference `5,000x` bonus rate.
+
+## Warp Travel
+
+After Practical Warp Drive is researched:
+
+- Activation costs `500 J` per kilogram of current platform weight.
+- The charge buffer accepts up to `200 MW`, stores up to `100 GJ`, and uses surplus power.
+- Automatic engagement requires at least `50 km/s`, sufficient charge, active travel, and more than `1,000 km` clearance from both route endpoints.
+- Warp adds `99x` scripted movement to normal movement for `100x` effective speed.
+- Active warp consumes `20 W` per kilogram and removes asteroid chunks.
+- Warp exits immediately if support power, speed, route eligibility, or automatic engagement is lost.
+- Every exit starts a 10-second charge and re-entry lockout.
+- The first and final `1,000 km` of each connection use conventional travel. Connections no longer than `2,000 km` cannot use warp.
+
+For a `10,000 tonne` platform, activation requires `5 GJ` and active support requires `200 MW`. Charging at the maximum `200 MW` takes 25 seconds.
+
+## The Endgame Challenge
+
+Warp relocates the post-game problem rather than removing it. A platform in subspace collects no asteroid chunks and eventually starves if it remains there continuously.
+
+The intended solution is an automated cycle: circuits permit warp while reserves are healthy, disengage when they fall, allow collection in normal space, and re-engage after recovery. The drive imposes no resource thresholds, so each platform defines which reserves matter and how low they may fall.
+
+## Controls
+
+Open the drive to view detector power, route progress, platform speed, tachyon rate, eligible labs, research contribution, estimated completion time, charge, support demand, endpoint clearance, cooldown, and engagement settings.
+
+Connect red or green circuit wire near the drive's top-left edge. Circuit engagement requires a positive `E` signal when enabled.
+
+| Output | Value |
+| --- | --- |
+| `W` | `1` during warp, otherwise `0` |
+| `C` | Charge percentage |
+| `S` | Effective speed in km/s |
+| `P` | Detector power percentage |
+
+## Building And Technologies
+
+The Warp Drive occupies a `6x6` platform footprint and takes 120 seconds to craft from:
+
+- 200 Quantum Processors
+- 500 Superconductors
+- 1,000 Tungsten Plates
+- 500 Carbon Fibers
+- 500 Supercapacitors
+
+| Technology | Cost | Unlock |
+| --- | --- | --- |
+| Theoretical Warp Drive | `10,000` units at 120 seconds each | Experimental detector |
+| Practical Warp Drive | `1,000,000,000` units at 120 seconds each | Functional warp travel |
+
+Both technologies use Automation, Logistic, Military, Chemical, Production, Utility, Space, Metallurgic, Electromagnetic, Agricultural, Cryogenic, and Promethium science packs. Practical Warp Drive is intentionally prohibitive without the detector bonus.
 
 ## Optional SPACELAB Integration
 
-SPACELAB is optional and does not currently alter Warp Drive behavior. Growth Facility amplification remains disabled pending standalone research-bonus validation.
+Warp Drive began as the final chapter of SPACELAB and was split into a standalone mod so subspace research and travel would not require an orbital-industry overhaul. SPACELAB makes platforms self-sufficient; Warp Drive gives them a reason to travel deep into space.
+
+SPACELAB is never required or detected by name. Its orbital science recipes make every required pack producible in space, so the research bonus applies only to working laboratories on the drive's platform. Any mod providing the same capability has the same effect.
 
 ## Asset Attribution
 
-The bundled Quantum Stabilizer artwork is attributed to **Hurricane046**: <https://mods.factorio.com/user/Hurricane046>.
+The bundled Quantum Stabilizer artwork is by **Hurricane046**. The source post and its Figma resource describe the artwork as free to use; explicit permission has not yet been requested. The creator will be contacted before release.
 
-Source/reference post supplied for the artwork: <https://www.reddit.com/r/factorio/comments/1g6cnhu/ive_been_learning_how_to_make_custom_factorio/>.
-
-The artwork is redistributed with permission from its creator.
+- <https://mods.factorio.com/user/Hurricane046>
+- <https://www.reddit.com/r/factorio/comments/1g6cnhu/ive_been_learning_how_to_make_custom_factorio/>

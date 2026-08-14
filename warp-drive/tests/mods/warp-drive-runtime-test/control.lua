@@ -43,7 +43,7 @@ script.on_init(function()
 
   platform.space_connection = "nauvis-vulcanus"
   platform.distance = 0.5
-  platform.speed = 60
+  platform.speed = 1
   platform.paused = false
 
   storage.platform = platform
@@ -63,6 +63,26 @@ script.on_nth_tick(10, function()
       fail("expected one experimental detector")
     end
     detector[1].energy = detector[1].electric_buffer_size
+    local player = game.players[1]
+    if player then
+      local frame = player.gui.screen.add({type = "frame", name = "warp_drive_scroll_test"})
+      local scroll = frame.add({type = "scroll-pane", style = "scroll_pane_in_shallow_frame"})
+      scroll.style.maximal_height = math.max(300,
+        player.display_resolution.height / player.display_scale - 100)
+      local content = scroll.add({type = "flow", direction = "vertical"})
+      content.style.width = 512
+      local row = content.add({type = "flow", direction = "horizontal"})
+      local label = row.add({type = "label", caption = "Progress toward Shattered Planet"})
+      label.style.width = 160
+      local value = row.add({type = "label", caption = "345,000 km (8%)"})
+      value.style.width = 320
+      if scroll.type ~= "scroll-pane" or scroll.style.maximal_height < 300
+        or content.style.width ~= 512 or label.style.width ~= 160
+        or value.style.width ~= 320 then
+        fail("bounded content and 33/67 status columns could not be created")
+      end
+      frame.destroy()
+    end
   elseif game.tick == 20 then
     local detector = platform.surface.find_entities_filtered({name = "warp-drive-detector-load"})
     if #detector ~= 1 or detector[1].energy ~= 0 then
@@ -88,7 +108,7 @@ script.on_nth_tick(10, function()
     end
     charge[1].energy = charge[1].electric_buffer_size
     platform.distance = 0.51
-    platform.speed = 60
+    platform.speed = 1
     platform.paused = false
   elseif game.tick == 40 then
     local support = platform.surface.find_entities_filtered({name = "warp-drive-support-load"})
@@ -103,17 +123,22 @@ script.on_nth_tick(10, function()
     local output = platform.surface.find_entities_filtered({name = "warp-drive-circuit-output"})[1]
     local section = output and output.get_or_create_control_behavior().get_section(1)
     local warp_value
+    local speed_value
     if section then
       for index = 1, section.filters_count do
         local filter = section.get_slot(index)
         if filter.value and filter.value.name == "signal-W" then
           warp_value = filter.min
-          break
+        elseif filter.value and filter.value.name == "signal-S" then
+          speed_value = filter.min
         end
       end
     end
     if warp_value ~= 1 then
       fail("circuit output did not report active warp")
+    end
+    if speed_value ~= 6000 then
+      fail("circuit speed output was " .. tostring(speed_value) .. ", expected 6000 km/s")
     end
   elseif game.tick == 50 then
     if platform.distance <= 0.51 then
@@ -132,7 +157,7 @@ script.on_nth_tick(10, function()
     end
     charge[1].energy = charge[1].electric_buffer_size
     platform.distance = 0.51
-    platform.speed = 60
+    platform.speed = 1
   elseif game.tick == 80 then
     local support = platform.surface.find_entities_filtered({name = "warp-drive-support-load"})
     local charge = platform.surface.find_entities_filtered({name = "warp-drive-charge-buffer"})
@@ -146,7 +171,7 @@ script.on_nth_tick(10, function()
     end
     charge[1].energy = charge[1].electric_buffer_size
     platform.distance = 0.51
-    platform.speed = 60
+    platform.speed = 1
     platform.paused = false
   elseif game.tick == 660 then
     local support = platform.surface.find_entities_filtered({name = "warp-drive-support-load"})
