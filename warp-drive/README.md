@@ -62,6 +62,22 @@ This avoids a dead end: Agricultural Science Packs spoil long before a platform 
 
 Signal density rises geometrically with kilometres travelled toward the deepest location in the platform's connected route network. Separate route networks are measured independently.
 
+The route-depth ratio $r$ and tachyon density $D$ are:
+
+```math
+r = \operatorname{clamp}\left(
+  \frac{\ln\left(\max(d, d_{min}) / d_{min}\right)}
+       {\ln\left(d_{max} / d_{min}\right)},
+  0, 1
+\right)
+```
+
+```math
+D = 10 \left(\frac{2500}{10}\right)^r
+```
+
+Here, $d$ is the distance travelled into the route network, $d_{min}$ is its shortest connection, and $d_{max}$ is the full depth to its outermost destination. $D$ is measured in particles per second.
+
 | Position in vanilla | Kilometres flown | Route depth | Density |
 | --- | ---: | ---: | ---: |
 | Nauvis | `0` | `0%` | `10 particles/s` |
@@ -71,7 +87,17 @@ Signal density rises geometrically with kilometres travelled toward the deepest 
 | Halfway through the final route | `2,145,000` | `88%` | `1,308 particles/s` |
 | Shattered Planet | `4,145,000` | `100%` | `2,500 particles/s` |
 
-Platform speed multiplies the signal: stationary is `1x`, `100 km/s` is `2x`, and each additional `100 km/s` adds `1x` with no cap. At maximum density, `100 km/s` and full detector power produce a `5,000 particles/s` signal and reference `5,000x` bonus rate.
+Platform speed and delivered detector power produce the final research multiplier:
+
+```math
+S = 1 + \frac{v}{100}
+```
+
+```math
+M = 1 + \left(D S - 1\right)p
+```
+
+Here, $v$ is platform speed in km/s, $p$ is the fraction of the requested detector power delivered from `0` to `1`, and $M$ is the multiplier applied to eligible laboratories. Thus stationary is `1x` speed scaling, `100 km/s` is `2x`, and each additional `100 km/s` adds `1x` with no cap. At maximum density, `100 km/s` and full detector power produce a `5,000 particles/s` signal and `5,000x` research multiplier.
 
 ## Warp Travel
 
@@ -87,6 +113,26 @@ After Practical Warp Drive is researched:
 - The first and final `1,000 km` of each connection use conventional travel. Connections no longer than `2,000 km` cannot use warp.
 
 For a `10,000 tonne` platform, activation requires `5 GJ` and active support requires `200 MW`. Charging at the maximum `200 MW` takes 25 seconds.
+
+The exact mass and speed scaling is:
+
+```math
+E_{activation} = m \cdot 500\ \mathrm{J/kg}
+```
+
+```math
+P_{support} = m \cdot 20\ \mathrm{W/kg}
+```
+
+```math
+v_{warp} = 100 \cdot v_{engine}
+```
+
+```math
+t_{charge} = \frac{E_{activation}}{P_{charge}}
+```
+
+Here, $m$ is current platform mass in kilograms, $P_{charge}$ is available charge power up to `200 MW`, and $v_{engine}$ is the platform's current engine-derived speed.
 
 ## The Endgame Challenge
 
