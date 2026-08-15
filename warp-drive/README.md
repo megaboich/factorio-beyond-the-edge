@@ -18,7 +18,11 @@ Warp is accelerated travel, not teleportation. Entering subspace starts at Warp-
 
 ## Design
 
-Warp Drive turns deep-space distance into research output, then turns that research into faster travel. It keeps the challenge factory-driven:
+### Standard-Grid Electricity
+
+Warp Drive is an ordinary secondary-priority consumer, like most platform machines. It requests its current detector, charging, or support demand directly from the platform grid. During a generation shortfall, Factorio shares available power proportionally with other secondary consumers; the drive measures what it actually receives. In research mode, it lowers detector demand to delivered power after a shortfall and probes for another `10 MW` when fully supplied, converging on spare generation instead of continuously starving other machines. Its script-owned support reserve covers a warp shortfall until depleted, then exits warp safely.
+
+Warp Drive otherwise turns deep-space distance into research output, then turns that research into faster travel. It keeps the challenge factory-driven:
 
 - Research still uses the normal queue, laboratories, and science packs.
 - Engine thrust sets the maximum warp level; reaching it takes time and sufficient power.
@@ -40,11 +44,13 @@ Once Practical Warp Drive is researched, the same building becomes an engine. Wa
 
 Before Practical Warp Drive is researched, the drive acts as a detector:
 
-- It consumes up to `1 GW` of surplus platform power. Other powered facilities take priority.
+- Detection can run continuously or only while a configured circuit condition is true. Disabling both controls stops its power draw and research contribution.
+- It adaptively requests up to `1 GW` from the platform grid as an ordinary secondary-priority consumer. A shortfall lowers its next request to delivered power; full delivery makes it probe `10 MW` higher.
 - `200 MW` preserves the base detector rate; each additional `200 MW` adds another full power factor, up to `5x` at `1 GW`.
 - Partial power scales its research bonus continuously.
 - The bonus applies only while you are actively researching Practical Warp Drive.
 - Labs consume the technology's normal science packs at their normal rate; tachyons add progress without increasing pack consumption.
+- The runtime Map setting **Severely impatient mode** multiplies the tachyon research bonus by `1,000`. It is for severely impatient people and takes effect immediately without restarting the game.
 
 ### Where Research Happens
 
@@ -99,10 +105,10 @@ P = \operatorname{clamp}\left(\frac{P_{delivered}}{200\ \mathrm{MW}}, 0, 5\right
 ```
 
 ```math
-B = D S P
+B = D S P I
 ```
 
-Here, $v$ is platform speed in km/s, $P_{delivered}$ is delivered detector power, and $B$ is the bonus multiplier added on top of each eligible laboratory's ordinary research. Thus stationary is `1x` speed scaling, `100 km/s` is `2x`, and each additional `100 km/s` adds `1x` with no cap. At maximum density and `100 km/s`, `200 MW` adds approximately `20,000x` bonus research while `1 GW` adds approximately `100,000x`.
+Here, $v$ is platform speed in km/s, $P_{delivered}$ is delivered detector power, $I$ is `1` normally or `1,000` in Severely impatient mode, and $B$ is the bonus multiplier added on top of each eligible laboratory's ordinary research. Thus stationary is `1x` speed scaling, `100 km/s` is `2x`, and each additional `100 km/s` adds `1x` with no cap. At maximum density and `100 km/s`, `200 MW` adds approximately `20,000x` bonus research while `1 GW` adds approximately `100,000x` before the optional impatient multiplier.
 
 For example, without an additional SPACELAB facility bonus, `300,000 km` toward Shattered Planet gives approximately `549 particles/s` of tachyon density. At `50 km/s`, the speed multiplier is `1.5x`; at `500 MW`, the power multiplier is `2.5x`. The resulting effective signal is approximately `2,057 particles/s`, so every eligible laboratory adds about `2,057x` its ordinary rate as bonus research.
 
@@ -110,26 +116,31 @@ For example, without an additional SPACELAB facility bonus, `300,000 km` toward 
 
 After Practical Warp Drive is researched:
 
-- Activation costs `500 J` per kilogram of current platform weight.
-- The charge buffer accepts up to `200 MW`, stores up to `100 GJ`, and uses surplus power.
+- The warp support reserve stores `100 J` per kilogram of current platform weight.
+- Charging and active warp are ordinary secondary-priority loads. During a brownout they share available power proportionally with most platform machines. Reserve replenishment is capped at the same `10 W/kg` charging rate.
+- The reserve charges only after control, minimum speed, active travel, endpoint clearance, and cooldown requirements are all satisfied. Losing any prerequisite before entry resets it to zero, so charging must complete in one uninterrupted cycle.
+- Delivered charging power is transferred into an exact, script-owned mass-scaled reserve. The hidden consumer cannot output that private reserve back to the ship network and is not classified as accumulator storage.
 - Automatic engagement requires at least `50 km/s`, sufficient charge, active travel, and more than `1,000 km` clearance from both route endpoints.
 - Subspace travel always begins at Warp-1, applying a `10x` boost.
-- After a brief support-power stabilization interval, the drive gains approximately one warp level every 2 seconds. Each level requires another `50 km/s` of engine speed and `20 W/kg` of support power.
+- Warp entry spends 90% of the activation charge and retains the remaining 10% as the initial support reserve. Delivered power beyond active support demand replenishes it toward 100% during warp.
+- After a brief support-power stabilization interval, the drive gains approximately one warp level every 2 seconds. Each level requires another `50 km/s` of engine speed and `10 W/kg` of support power.
 - Warp-10 therefore requires at least `500 km/s`, provides a `100x` boost, and takes approximately 18 seconds to reach from Warp-1 after stabilization.
 - Warp level has no scripted maximum; Factorio's platform physics and the increasing power demand provide the limits.
-- The drive probes the next fractional level's support demand before accelerating into it.
-- Lost engine speed or support power lowers the warp level immediately to the maximum sustainable level. Falling below Warp-1 exits warp.
-- Warp removes asteroid chunks while active.
-- Warp exits immediately if Warp-1 support power, minimum engine speed, route eligibility, or automatic engagement is lost.
+- The drive compares delivered power with the next fractional level's support demand before accelerating into it.
+- Lost engine speed lowers sustainable warp levels immediately. Falling below the minimum `50 km/s` starts a prominent 5-second exit warning; restoring speed during that grace period keeps Warp-1 engaged. If power falls below the current level's support demand, the drive holds that level and drains its warp support reserve in proportion to the shortfall. A complete outage lasts 1 second immediately after entry or 10 seconds after the reserve replenishes to full.
+- Warp removes asteroid chunks and large asteroids while active, plays distinct entry and exit sounds, and renders cyan subspace streaks with blue haze across and beyond the platform.
+- Warp exits immediately if its selected control mode is disabled, its circuit condition becomes false, or route eligibility is lost. Minimum engine speed has the 5-second grace period above; support failure exits when the warp support reserve is depleted.
 - Every exit starts a 10-second charge and re-entry lockout.
 - The first and final `1,000 km` of each connection use conventional travel. Connections no longer than `2,000 km` cannot use warp.
 
-For a `10,000 tonne` platform, activation requires `5 GJ`, charging at the maximum `200 MW` takes 25 seconds, and support demand starts at `200 MW` at Warp-1. The same platform requires `2 GW` at Warp-10.
+For a `10,000 tonne` platform, the warp support reserve holds `1 GJ`, charging requests up to `100 MW` and takes 10 seconds at full power, entry retains `100 MJ`, and active replenishment restores the missing 90% in 9 seconds at that rate. Support is capped at `100 MW` at Warp-1 and `200 MW` at Warp-2, before the separate replenishment allowance.
+
+Factorio reports runtime platform weight directly in kilograms. The drive uses that value without the data-stage gram conversion, so reserve and support requirements scale against the full displayed platform mass.
 
 The exact mass and speed scaling is:
 
 ```math
-E_{activation} = m \cdot 500\ \mathrm{J/kg}
+E_{activation} = m \cdot 100\ \mathrm{J/kg}
 ```
 
 ```math
@@ -137,7 +148,7 @@ L_{engine} = \frac{v_{engine}}{50\ \mathrm{km/s}}
 ```
 
 ```math
-L_{power} = \frac{P_{available}}{m \cdot 20\ \mathrm{W/kg}}
+L_{power} = \frac{P_{available}}{m \cdot 10\ \mathrm{W/kg}}
 ```
 
 ```math
@@ -149,7 +160,7 @@ B = 10L_{current}
 ```
 
 ```math
-P_{support} = m \cdot 20\ \mathrm{W/kg} \cdot L_{requested}
+P_{support} = m \cdot 10\ \mathrm{W/kg} \cdot L_{requested}
 ```
 
 ```math
@@ -160,7 +171,7 @@ v_{subspace} = B \cdot v_{engine}
 t_{charge} = \frac{E_{activation}}{P_{charge}}
 ```
 
-Here, $m$ is current platform mass in kilograms, $L_{current}$ is the continuous active warp level, $L_{requested}$ is the next small acceleration step, $B$ is the effective speed boost, $P_{available}$ is measured support power, $P_{charge}$ is available charge power up to `200 MW`, and $v_{engine}$ is the platform's current engine-derived speed. Entry sets $L_{current}=1$. After support power stabilizes, it rises at `0.5 levels/s` toward $L_{target}$ and falls to a lower target immediately. Warp requires delivery of at least 99.9% of Warp-1 demand; neither the level nor boost has a scripted upper limit.
+Here, $m$ is current platform mass in kilograms, $L_{current}$ is the continuous active warp level, $L_{requested}$ is the next small acceleration step, $B$ is the effective speed boost, $P_{available}$ is delivered support power, $P_{charge}$ is delivered charging power, and $v_{engine}$ is the platform's current engine-derived speed. Entry sets $L_{current}=1$ and spends 90% of the activation charge. After support demand is met, up to `10 W/kg` of additional delivered power replenishes the reserve toward 100%. The level rises at `0.5 levels/s` while engine speed and power permit. If delivery falls below 99.9% of current-level demand, the reserve holds that level and bridges a complete outage for up to 10 seconds when full; neither the level nor boost has a scripted upper limit.
 
 ## The Endgame Challenge
 
@@ -170,16 +181,19 @@ The intended solution is an automated cycle: circuits permit warp while reserves
 
 ## Controls
 
-Open the drive to view detector power, route progress, platform speed, tachyon rate, eligible lab count and average rate, research contribution, estimated completion time, charge, current and target warp levels, acceleration state, boost, effective speed, requested and delivered support power, endpoint clearance, cooldown, and engagement settings.
+Open the drive to see its current mode prominently at the top: warp, charging, idle, or locked. A live checklist uses green for satisfied conditions, orange for transitional states, red for threats or blockers, and grey when control is disabled. It reports control, destination, endpoint clearance, re-entry lockout, reserve charge, total Warp Drive power consumption, engine-derived platform speed, and acceleration. Current position includes distance remaining to the destination; blocked endpoint clearance identifies the nearest endpoint. While preparing to jump, Warp status becomes a charging progress bar. The main panel also shows detector power, route progress, tachyon rate, research contribution, warp level, boost, and effective platform speed; circuit controls and outputs occupy a narrow right panel.
 
-Connect red or green circuit wire near the drive's top-left edge. Circuit engagement requires a positive `E` signal when enabled.
+Choose either continuous/manual control or circuit control in the drive window. Before Practical research, those controls enable tachyon detection continuously or only while the circuit condition is true. After Practical research, the reserve begins charging only after control, speed, active travel, endpoint clearance, and cooldown requirements permit, making charge the final requirement before warp entry. Losing any prerequisite before entry resets partial charge to zero. Circuit control disables continuous/automatic control; an incomplete or false condition stops detection in research mode, or resets preparation and exits active warp in practical mode. Clearing both controls likewise disables the current mode. Connect red or green circuit wire near the drive's top-left edge, then choose a signal, comparator, and either an integer threshold or second signal. No engagement signal is selected by default, and right-clicking the signal clears it. Signals from the red and green networks are summed, matching ordinary circuit-controlled entities.
 
-| Output | Value |
+All circuit outputs are independently enabled and can use any signal. `W` and `S` are hidden and suppressed until Practical research; `T` is available only during research mode. Existing practical outputs remain enabled by default; remaining distance and tachyon density are opt-in.
+
+| Default | Value |
 | --- | --- |
-| `W` | `1` during warp, otherwise `0` |
-| `C` | Charge percentage |
-| `S` | Effective subspace speed in km/s |
-| `P` | Detector power as a percentage of the `200 MW` reference, up to `500` |
+| `W` | Completed integer warp level while engaged, otherwise `0` |
+| `D` | Whole kilometres remaining to the current connection destination |
+| `C` | Warp support reserve percentage from `0` to `100` |
+| `S` | Effective subspace speed in whole km/s |
+| `T` | Whole tachyon particles per second at the current route depth; available only before Practical Warp Drive is researched |
 
 ## Building And Technologies
 

@@ -1,33 +1,51 @@
--- This mod loads before Warp Drive so its handler runs first, which is the only way to
--- control the detector sample Warp Drive reads later in the same tick. Real platform
--- generation would otherwise leave an unpredictable surplus in the tertiary detector
--- buffer and make the unpowered baseline window meaningless.
+-- This mod loads before Warp Drive and supplies controlled continuous generation to its
+-- detector. Removing starter-pack storage and generation keeps the baseline genuinely
+-- unpowered and makes each later research window use an exact power ceiling.
 --
 -- The schedule is shared with warp-drive-branch-test by tick number so the two mods need
 -- no communication: the detector is starved until BASELINE_END_TICK, held at the 200 MW
--- reference through the normal windows, then saturated to 1 GW for the final window.
+-- reference through the normal windows, then saturated to 1 GW before the final window.
+-- Measurement gaps allow the adaptive detector's 10 MW probes to reach each new ceiling.
 -- The boundary sits after the tick 180 measurement so the whole baseline window, including
 -- the research bonus applied on tick 180 itself, is genuinely unpowered.
 local BASELINE_END_TICK = 190
--- Moved after the tick 420 sample, so one window is measured just outside the Solar system
+-- Moved after the tick 640 sample, so one window is measured just outside the Solar system
 -- edge and the next is measured almost at the Shattered Planet, on the same connection.
-local DEEP_TICK = 430
-local FAST_TICK = 550
-local DETECTOR_REFERENCE_ENERGY = 200000000 * 10 / 60
+local DEEP_TICK = 650
+local FAST_TICK = 770
+local DETECTOR_REFERENCE_WATTS = 200000000
+local DETECTOR_MAX_WATTS = 1000000000
 local NEAR_DISTANCE = 0.05
 local DEEP_DISTANCE = 0.999
 
-script.on_nth_tick(10, function()
-  for _, surface in pairs(game.surfaces) do
-    for _, detector in pairs(surface.find_entities_filtered({name = "warp-drive-detector-load"})) do
-      detector.energy = game.tick < BASELINE_END_TICK and 0
-        or (game.tick < FAST_TICK and DETECTOR_REFERENCE_ENERGY or detector.electric_buffer_size)
-    end
+local function ensure_power_source(platform)
+  local surface = platform.surface
+  local source = surface.find_entities_filtered({name = "warp-drive-branch-power-source"})[1]
+  if not source then
+    source = surface.create_entity({
+      name = "warp-drive-branch-power-source",
+      position = {0, 10},
+      force = platform.force
+    })
+    surface.create_entity({name = "substation", position = {4, 10}, force = platform.force})
   end
-  -- Platform physics rewrites speed every tick and would eventually carry the platform to
-  -- its destination, where distance becomes nil and the location multiplier collapses to 1.
-  -- Pinning both keeps the signal constant so the test measures routing, not travel.
+  return source
+end
+
+script.on_nth_tick(10, function()
   for _, platform in pairs(game.forces.player.platforms) do
+    local surface = platform.surface
+    for _, entity in pairs(surface.find_entities_filtered({type = {"solar-panel", "accumulator"}})) do
+      entity.destroy()
+    end
+    local source = ensure_power_source(platform)
+    local watts = game.tick < BASELINE_END_TICK and 0
+      or (game.tick < FAST_TICK and DETECTOR_REFERENCE_WATTS or DETECTOR_MAX_WATTS)
+    source.power_production = watts / 60
+    source.output_flow_limit = watts / 60
+    -- Platform physics rewrites speed every tick and would eventually carry the platform to
+    -- its destination, where distance becomes nil and the location multiplier collapses to 1.
+    -- Pinning both keeps the signal constant so the test measures routing, not travel.
     platform.paused = false
     platform.speed = game.tick < FAST_TICK and 1 or (10 / 3)
     if platform.space_connection then

@@ -1,10 +1,10 @@
 # Warp Drive Composite Building
 
-**Document role:** this is the maintainer reference for the Warp Drive's composite entity: its prototypes, companion ownership, electrical roles, lifecycle, wiring, rendering, and migration. It does not specify gameplay balance, research routing, or location calculations. `README.md` is authoritative for player-facing behavior and values; `PLAN.md` tracks unfinished work.
+**Document role:** this is the maintainer reference for the Warp Drive's composite entity: its prototypes, companion ownership, electrical roles, lifecycle, wiring, and rendering. It does not specify gameplay balance, research routing, or location calculations. `README.md` is authoritative for player-facing behavior and values; `PLAN.md` tracks unfinished work.
 
 ## Why It Is Composite
 
-No single Factorio entity provides a large selectable building, continuous animation, circuit input and output, surplus-priority sampling, persistent charge, and a dynamic electrical load. The placed drive therefore consists of one visible controller and hidden companions at the same position.
+No single Factorio entity provides a large selectable building, continuous animation, circuit input and output, persistent charge, and a runtime-sized electrical load. The placed drive therefore consists of one visible controller and hidden companions at the same position.
 
 The controller owns the composite. Companions are never independently placeable, selectable, minable, blueprintable, deconstructable, or colliding.
 
@@ -12,12 +12,11 @@ The controller owns the composite. Companions are never independently placeable,
 | --- | --- |
 | Player interaction and circuit input | Visible `constant-combinator` controller |
 | Continuous layered graphics | Zero-power animation companion |
-| Surplus detector sampling | Tertiary accumulator drained after each sample |
-| Persistent activation charge | Separate tertiary accumulator |
-| Weight-dependent support load | Runtime-configured electric energy interface |
+| Detector, charging, and support sampling | Runtime-configured secondary-input electric energy interface |
+| Persistent warp support reserve | Serialized joule value in the drive record |
 | Scripted circuit output | Hidden output combinator |
 
-Detector and charge storage remain separate so experimental detector energy cannot become activation charge. Support uses a separate interface because it needs secondary-input priority and a runtime-sized interval buffer.
+The shared power interface uses consumer-only secondary-input mode, the same priority as ordinary machines, and requests its exact current logical demand. Factorio classifies every tertiary interface buffer as accumulator storage even when it cannot output power; secondary mode keeps this interface out of the accumulator-charge display. Runtime code transfers measured charging delivery into the serialized reserve, and switching from experimental to practical mode discards detector energy so it cannot become activation charge.
 
 ## Prototype Composition
 
@@ -25,16 +24,14 @@ Detector and charge storage remain separate so experimental detector energy cann
 | --- | --- | --- | --- |
 | `warp-drive-controller` | `constant-combinator` | Always | Visible 6x6 entity, ownership anchor, health, collision, mining, circuit input, and GUI target |
 | `warp-drive-animation` | `electric-energy-interface` | Always | Zero-power 100-frame animation, emission, and shadow |
-| `warp-drive-detector-load` | `accumulator` | Before Practical research | Tertiary `1 GW` detector sample with a `167 MJ` buffer |
-| `warp-drive-charge-buffer` | `accumulator` | After Practical research | Tertiary `100 GJ` store with `200 MW` input and no output |
-| `warp-drive-support-load` | `electric-energy-interface` | During warp | Secondary-input sample of the current support demand |
-| `warp-drive-circuit-output` | `constant-combinator` | Always | Scripted `W`, `C`, `S`, and `P` outputs on both wire colors |
+| `warp-drive-power-interface` | `electric-energy-interface` | Always | Runtime-sized secondary-priority detector, charging, and support sink; prototype permits requests up to `60 GW` and forbids output |
+| `warp-drive-circuit-output` | `constant-combinator` | Always | Scripted practical `W`, `C`, and `S` outputs, `D`, and pre-Practical `T`, on both wire colors |
 
-Legacy prototypes `warp-drive`, `warp-drive-visual`, `warp-drive-machine`, and `warp-drive-structure` remain hidden only for save migration. New items place `warp-drive-controller`.
+Legacy detector, support, and tiered charge-buffer prototypes remain defined only so supported saves can load and migrate their companions and stored energy.
 
 ## Rendering And Wires
 
-The controller renders the first structure frame for placement previews. The animation companion renders the full animation, additive emission, and repeated shadow on `higher-object-under`. Both use the same scale and `util.by_pixel(0, -16)` shift.
+The controller renders the first structure frame for placement previews. The animation companion renders the full animation, additive emission, and repeated shadow on `higher-object-under`. Both use the same scale and `util.by_pixel(0, -16)` shift. During warp, 48 short-lived cyan lines are regenerated across and beyond the platform every 10 ticks and blue trivial smoke is emitted near its hub. Their bounded lifetimes remove the effect automatically after exit without persistent rendering state. Entry and exit call separate pitched Space Age thruster sound prototypes globally on the platform surface, with no controller-position attenuation.
 
 The symmetric footprint reuses one circuit connection definition in all directions. When adjusting it:
 
@@ -49,13 +46,15 @@ The symmetric footprint reuses one circuit connection definition in all directio
 | Field | Role |
 | --- | --- |
 | `entity`, `platform_index` | Controller reference and platform identity |
-| `animation`, `detector`, `charge`, `support`, `circuit_output` | Companion references |
-| `enabled`, `circuit_enabled` | Player engagement settings |
+| `animation`, `power`, `circuit_output` | Active companion references |
+| `enabled`, `circuit_enabled`, `circuit_first_signal`, `circuit_comparator`, `circuit_second_signal`, `circuit_constant` | Mutually exclusive automatic/circuit engagement settings and configurable circuit condition; an absent first signal is unsatisfied |
+| `output_*_enabled`, `output_*_signal` | Independent circuit output toggles and signal assignments; legacy outputs default enabled and distance defaults disabled |
 | `state`, `cooldown_until` | Composite state and lockout |
 | `last_distance`, `direction` | Travel samples used by movement logic |
-| `detector_power`, `detector_power_ratio` | Latest detector sample and factor relative to `200 MW` |
+| `detector_power`, `detector_power_ratio`, `detector_request_watts` | Latest detector sample, factor relative to `200 MW`, and adaptive next demand |
 | `warp_level`, `requested_warp_level`, `warp_target` | Current, probed, and sustainable warp levels |
-| `support_power`, `support_sample_watts`, `support_check_after` | Delivered power, requested power, and startup grace |
+| `reserve_energy`, `migrated_reserve_energy` | Authoritative private reserve and one-time legacy energy capture |
+| `support_power`, `power_sample_watts`, `power_sample_support_watts`, `support_demand_watts`, `support_check_after` | Delivered power, interface request, logical warp demand, and startup grace |
 | `warp_ramp_state` | GUI acceleration status |
 
 Build events call `register_drive`. Invalid off-platform placement is destroyed. A duplicate controller is destroyed, refunded on the platform surface, and reported to the force.
@@ -68,64 +67,55 @@ Companion invariants:
 - Broad orphan scans run only during registration or rebuild, never during the 10-tick update.
 - Mining, death, scripted destruction, and invalid-record cleanup remove companions through stored references.
 
-`rebuild_drives` reconstructs records from controllers during initialization and configuration changes. It removes orphans and duplicates, adopts valid companions, and recreates permanent companions.
+`rebuild_drives` reconstructs records from controllers during initialization and configuration changes. It removes orphans and duplicates, adopts valid companions, recreates permanent companions, and discards the removed detector-power output fields.
 
 ## Electrical Lifecycle
 
 ### Detector
 
-Before Practical research, the charge companion is absent and the detector companion is present. Every 10 ticks, stored detector energy is converted to delivered watts and then drained:
+Before Practical research, manual or circuit control gates the shared power interface. While enabled, it adaptively requests up to `1 GW`. Every 10 ticks, runtime takes the delta of the interface prototype's cumulative electric-network input and converts those consumed joules to average delivered watts:
 
 ```text
-watts = stored joules * 60 / update ticks
+delivered watts = consumed joules * 60 / elapsed ticks
 ```
 
-The result is capped at `1 GW`. Research scales against a `200 MW` reference, so the power factor ranges continuously from `0` to `5`. A real tertiary accumulator lets Factorio's network solver determine surplus power.
+The result is capped at `1 GW`. After a shortfall greater than `0.1 MW`, the next request drops to measured delivery. When the request is fully supplied within that absolute tolerance, it increases by `10 MW`. This feedback converges near generation left over after ordinary ship demand while continuing to probe changing capacity. Research scales against a `200 MW` reference, so the power factor ranges continuously from `0` to `5`. The interface's zero output limit prevents sampled energy from powering the ship.
 
 ### Charge
 
-After Practical research, the detector is removed and the charge accumulator is created. Required energy is `platform weight in kg * 500 J/kg`. Charging is disabled during warp and cooldown. Entry drains the buffer completely.
+After Practical research, detector energy and sampling state are discarded and the same interface enters practical mode. `LuaSpacePlatform.weight` is already kilograms at runtime, so required reserve is exactly `platform.weight * 100 J/kg` with no data-stage gram conversion. `record.reserve_energy` is authoritative; the interface buffer is only a short-lived electrical sample and never stores or outputs the reserve. Once control, minimum speed, active travel, endpoint clearance, and cooldown all permit entry, an incomplete reserve makes the interface request `platform.weight * 10 W/kg`; runtime code converts measured delivered watts into joules every 10 ticks and caps the private reserve to the mass-scaled requirement. Losing any prerequisite disables the request and resets the reserve to zero. Full delivery therefore charges an empty reserve in 10 uninterrupted seconds. Warp entry spends 90% of that charge and retains 10% as support reserve. During warp, up to the same `10 W/kg` rate replenishes the reserve after support demand is satisfied. A current-level support deficit drains it in proportion to the shortfall; a complete outage lasts 1 second immediately after entry or 10 seconds once fully replenished.
 
 ### Support
 
-During warp, the support interface's buffer is set to one 10-tick interval of `platform weight in kg * 20 W/kg * requested warp level`. The requested level is one update step above the current level while acceleration is possible. Each update converts stored energy to delivered watts, drains the sample, and configures the next request. Two update intervals of startup grace let a new sink receive power.
+Once every non-reserve entry requirement is satisfied, the interface requests `platform weight in kg * 10 W/kg`. Losing any prerequisite disables that request immediately and clears the private reserve, preserving the uninterrupted charging challenge and transition. During warp it requests the next level's support demand plus up to `platform weight in kg * 10 W/kg` to replenish missing reserve energy. Runtime electric-flow fields use joules per tick, so watt values are divided by `60` when setting `power_usage` and `input_flow_limit`. The GUI reports the drive's measured total electrical consumption, including support and reserve replenishment, in one checklist row.
 
-The interval buffer measures current delivery; electric-network connection alone does not prove that the requested load was supplied. At least 99.9% delivery permits the requested step. Partial delivery derives a lower sustainable level and applies it immediately; less than 99.9% of Warp-1 demand exits warp.
+The interface has a one-tick buffer and consumes continuously. Electric statistics report the interface prototype's actual cumulative consumption; one drive per platform makes each interval delta unambiguous even when Factorio relates multiple electrical subnetworks. Runtime resets the baseline when the interface changes subnetworks. Secondary-input mode also keeps the buffer out of Factorio's accumulator-charge totals. The interface cannot output to the ship. Runtime allocation satisfies sampled support demand first and transfers only additional delivered power into the reserve. Two update intervals of startup grace let Factorio attach and service a newly configured sink before the first shortfall check. During a brownout, Factorio proportions available power across the drive and other secondary consumers normally. At least 99.9% delivery of next-level demand permits acceleration. Delivery below current-level demand holds the current level and drains reserve. Depleting the reserve exits warp.
 
 ### Companion States
 
 | State | Companion effect |
 | --- | --- |
-| `detector-offline`, `detecting` | Detector exists; charge and support do not |
-| `charging`, `ready` | Charge exists and may accept power; detector and support do not |
-| `warp` | Charge input is disabled; support exists and is sampled |
-| `cooldown` | Support is removed and charge input remains disabled |
+| `detector-offline`, `detecting` | Power interface samples experimental detector demand |
+| `charging` | Power interface samples delivered charging power into the private reserve |
+| `idle` | Power interface is disabled because a non-reserve entry requirement is blocked |
+| `warp` | Power interface samples support plus reserve-replenishment demand |
+| `cooldown` | Power interface is disabled and the private reserve remains empty |
 
-Research revocation while active exits warp, removes support, removes charge, and restores detector mode. Any warp exit removes support and starts the 600-tick lockout.
+Research revocation while active exits warp, clears the private reserve, and reconfigures the interface for detector mode. Any warp exit disables the interface request and starts the 600-tick lockout. Disabling the selected control mode, a false circuit condition, route loss, and endpoint clearance exit immediately. Engine speed below `50 km/s` instead starts a 300-tick warning while retaining Warp-1; recovery cancels the warning, otherwise expiry exits with an insufficient-speed reason. Runtime warning and last-exit reason fields drive the prominent GUI alert.
 
 ## Circuit Composition
 
-The visible controller reads the optional `E` input. The hidden combinator owns output slots and is script-connected to both controller wire colors.
+The visible controller reads the configurable engagement condition. The hidden combinator owns configurable output slots and is script-connected to both controller wire colors. The GUI presents these settings in a narrow right-side Circuit Network panel.
 
-| Signal | Output |
+| Default signal | Output |
 | --- | --- |
-| `W` | `1` in warp, otherwise `0` |
-| `C` | Charge percentage, capped at `100` |
+| `W` | Completed integer warp level while engaged, otherwise `0` |
+| `D` | Whole kilometres remaining to the active connection destination |
+| `C` | Warp support reserve percentage, capped at `100` |
 | `S` | Effective integer speed |
-| `P` | Detector power percentage relative to the `200 MW` reference, capped at `500` |
+| `T` | Whole tachyon particles per second at the current route depth; omitted after Practical research |
 
-Blueprint tags preserve the circuit-control toggle. Settings paste copies both runtime toggles. Opening the controller is intercepted for the custom GUI unless the cursor holds a wire, planner, blueprint, or other tool.
-
-## Migration
-
-On configuration change, `migrate_legacy_drives` replaces legacy entities with `warp-drive-controller` while preserving:
-
-- Surface, position, direction, and force
-- Health ratio
-- Red and green circuit connections, connector IDs, and wire origin
-- Stored energy as charge only when Practical Warp Drive is researched
-
-`rebuild_drives` then restores records and companions. Legacy prototypes must remain until supported saves can no longer contain them, because Factorio must deserialize an entity before migration can replace it.
+Every output is independently enabled and signal-selectable. `W`, `C`, and `S` remain enabled on existing records; `D` and `T` are opt-in. Research mode hides and suppresses `W` and `S`, while practical mode hides and suppresses `T`. The removed detector-power output is not serialized or emitted. The main GUI derives a live engagement checklist from the same runtime predicates used by entry and exit, including destination identity and remaining connection kilometres for endpoint clearance. Blueprint tags and settings paste preserve control and output settings. Opening the controller is intercepted for the custom GUI unless the cursor holds a wire, planner, blueprint, or other tool.
 
 ## Validation
 
@@ -136,4 +126,4 @@ After changing composition prototypes or lifecycle code:
 3. Run `./tests/run-runtime-tests.sh`.
 4. Run `git diff --check`.
 
-The scripted suite covers placement, duplicate rejection, companion recovery and cleanup, electrical transitions, circuit output, research revocation, relocation, and legacy migration. Interactive checks remain necessary for electrical behavior, graphics, GUI interception, robots and ghosts, and wire geometry.
+The scripted suite covers placement, duplicate rejection, companion recovery and cleanup, electrical transitions, circuit output, research revocation, and relocation. Interactive checks remain necessary for electrical behavior, graphics, GUI interception, robots and ghosts, and wire geometry.

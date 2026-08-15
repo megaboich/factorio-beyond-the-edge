@@ -3,6 +3,26 @@
 -- edge case in both research-branch runs.
 data:extend({
   {
+    type = "electric-energy-interface",
+    name = "warp-drive-branch-power-source",
+    icon = "__base__/graphics/icons/accumulator.png",
+    hidden = true,
+    collision_mask = {layers = {}},
+    collision_box = {{0, 0}, {0, 0}},
+    selection_box = {{0, 0}, {0, 0}},
+    energy_source = {
+      type = "electric",
+      buffer_capacity = "1GJ",
+      usage_priority = "primary-output",
+      input_flow_limit = "0W",
+      output_flow_limit = "1GW"
+    },
+    energy_production = "0W",
+    energy_usage = "0W",
+    gui_mode = "none",
+    picture = {filename = "__core__/graphics/empty.png", width = 1, height = 1}
+  },
+  {
     type = "space-location",
     name = "warp-test-remote-inner",
     hidden = true,

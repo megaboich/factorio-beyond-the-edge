@@ -2,15 +2,18 @@
 
 This file tracks unresolved decisions and validation only. Implemented behavior belongs in `README.md`; composite-entity details belong in `BUILDING.md`.
 
+## Performance Validation
+
+- Profile `force_lab_metrics` across a large multi-surface save before deciding whether `scripts/research.lua` needs a lab index.
+- Benchmark the 10-tick drive loop with many forces/platforms before and after module extraction; reject a split that introduces broad per-tick scans.
+
 ## Balance Decisions
 
 - Recalibrate the `1,000,000,000`-unit Practical research cost after measuring completion times.
 - Confirm the `20` to `10,000 particles/s` density curve makes deep travel rewarding without making the final route mandatory.
 - Decide whether `20 particles/s` near the inner planets is useful enough.
-- Validate the `1 GW` detector ceiling and the `100 GJ` charge buffer on very heavy platforms.
-- Decide whether circuit engagement should support a configurable condition instead of positive `E`.
+- Validate the `1 GW` detector ceiling and exact script-owned reserve scaling on very heavy platforms.
 - Decide whether relay research needs a transmission penalty.
-- Profile relay-branch lab enumeration on a large multi-surface save.
 
 ## Release Validation
 
@@ -26,7 +29,5 @@ This file tracks unresolved decisions and validation only. Implemented behavior 
 
 ## Deferred Features
 
-- Activation and exit sounds
-- Bounded subspace-streak rendering
 - Validated SPACELAB Growth Facility amplification
 - Remote interfaces for third-party integrations

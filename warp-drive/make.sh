@@ -17,7 +17,7 @@ mods_dir = Path(sys.argv[2]).expanduser()
 info = json.loads((root / "info.json").read_text())
 mod_dir_name = f"{info['name']}_{info['version']}"
 zip_path = mods_dir / f"{mod_dir_name}.zip"
-excluded_names = {".git", ".claude", "tests"}
+excluded_names = {".git", ".claude", ".DS_Store", "tests"}
 
 with tempfile.TemporaryDirectory() as temp_dir:
     temp_root = Path(temp_dir)

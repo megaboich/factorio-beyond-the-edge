@@ -7,7 +7,6 @@ TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/warp-drive-tests.XXXXXX")"
 BUILD_MODS="$TEST_ROOT/build-mods"
 BASIC_MODS="$TEST_ROOT/basic-mods"
 PLATFORM_MODS="$TEST_ROOT/platform-mods"
-MIGRATION_MODS="$TEST_ROOT/migration-mods"
 RELAY_MODS="$TEST_ROOT/relay-mods"
 LOCAL_MODS="$TEST_ROOT/local-mods"
 API_MODS="$TEST_ROOT/api-mods"
@@ -26,7 +25,7 @@ if [[ ! -x "$FACTORIO_BIN" ]]; then
   exit 1
 fi
 
-mkdir "$BUILD_MODS" "$BASIC_MODS" "$PLATFORM_MODS" "$MIGRATION_MODS" "$RELAY_MODS" "$LOCAL_MODS" "$API_MODS"
+mkdir "$BUILD_MODS" "$BASIC_MODS" "$PLATFORM_MODS" "$RELAY_MODS" "$LOCAL_MODS" "$API_MODS"
 FACTORIO_MODS_DIR="$BUILD_MODS" "$ROOT_DIR/make.sh"
 
 PACKAGE="$(printf '%s\n' "$BUILD_MODS"/warp-drive_*.zip)"
@@ -61,29 +60,11 @@ cp -R "$ROOT_DIR/tests/mods/warp-drive-runtime-test" "$PLATFORM_MODS/"
 "$FACTORIO_BIN" \
   --mod-directory "$PLATFORM_MODS" \
   --benchmark "$TEST_ROOT/platform-save.zip" \
-  --benchmark-ticks 1200 \
+  --benchmark-ticks 3100 \
   --benchmark-runs 1 2>&1 | tee "$TEST_ROOT/platform.log"
 
-if ! grep -q 'WARP_TEST_PASS: detector, duplicate, revocation, warp ramp, fallback, power-loss, lockout, and relocation paths completed' "$TEST_ROOT/platform.log"; then
+if ! grep -q 'WARP_TEST_PASS: detector, duplicate, warp visuals, asteroid suppression, ramp, speed grace, reserve, warnings, lockout, circuit condition, revocation, and relocation paths completed' "$TEST_ROOT/platform.log"; then
   printf 'Platform runtime test did not emit its pass marker\n' >&2
-  exit 1
-fi
-
-cp "$PACKAGE" "$MIGRATION_MODS/"
-cp -R "$ROOT_DIR/tests/mods/warp-drive-migration-fixture" "$MIGRATION_MODS/"
-"$FACTORIO_BIN" \
-  --mod-directory "$MIGRATION_MODS" \
-  --create "$TEST_ROOT/migration-save.zip" \
-  --map-gen-seed 12345
-cp -R "$ROOT_DIR/tests/mods/warp-drive-migration-test" "$MIGRATION_MODS/"
-"$FACTORIO_BIN" \
-  --mod-directory "$MIGRATION_MODS" \
-  --benchmark "$TEST_ROOT/migration-save.zip" \
-  --benchmark-ticks 10 \
-  --benchmark-runs 1 2>&1 | tee "$TEST_ROOT/migration.log"
-
-if ! grep -q 'WARP_TEST_PASS: legacy drive, health, direction, circuit wire, and companions migrated' "$TEST_ROOT/migration.log"; then
-  printf 'Migration runtime test did not emit its pass marker\n' >&2
   exit 1
 fi
 
@@ -128,7 +109,7 @@ run_branch_test() {
   "$FACTORIO_BIN" \
     --mod-directory "$mods_dir" \
     --benchmark "$TEST_ROOT/$label-save.zip" \
-    --benchmark-ticks 670 \
+    --benchmark-ticks 1830 \
     --benchmark-runs 1 2>&1 | tee "$TEST_ROOT/$label.log"
   if ! grep -q "$marker" "$TEST_ROOT/$label.log"; then
     printf '%s research branch test did not emit its pass marker\n' "$label" >&2

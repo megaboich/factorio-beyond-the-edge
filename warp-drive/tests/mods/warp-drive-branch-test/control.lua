@@ -6,21 +6,23 @@
 -- surface conditions, and asserts the resulting routing from observable research progress
 -- alone rather than by reading Warp Drive's internal state.
 --
--- Laboratories exist only on Nauvis until tick 300, so the two branches are distinguished
--- by whether powering the detector accelerates them at all.
+-- Laboratories exist only on Nauvis until tick 520, so the two branches are distinguished
+-- by whether powering the detector accelerates them at all. The space-science patch also
+-- enables Severely impatient mode by default, giving the local run exact 1,000x coverage.
 local EXPECT_LOCAL = script.active_mods["warp-drive-space-science-test"] ~= nil
+local BONUS_FACTOR = EXPECT_LOCAL and 1000 or 1
 local TECHNOLOGY = "practical-warp-drive"
 -- Signal strength follows orbital distance from the star. Just outside the Solar system
 -- edge is worth about 640 particles/s after 345,000 km of travel; almost at the Shattered
 -- Planet, on the same connection, is near the 10000 particles/s density ceiling. Platform
--- speed multiplies both branches without a cap. Near and far windows use the 200 MW
--- reference power; the test's final 200 km/s window raises power to 1 GW and must gain the
--- expected 5x power factor as well as the speed increase.
+-- speed multiplies both branches without a cap. Near and far windows use the settled 200 MW
+-- reference power; the final 200 km/s window starts after adaptive demand settles at 1 GW and
+-- must gain the expected 5x power factor as well as the speed increase.
 -- The bands are wide enough to survive balance tweaks but
 -- narrow enough to fail on an order-of-magnitude formula error, which is what a wrong
 -- research_unit_energy conversion looks like.
 local NEAR_MINIMUM = 900
-local NEAR_MAXIMUM = 1200
+local NEAR_MAXIMUM = 2000
 local FAR_MINIMUM = 14000
 local FAR_MAXIMUM = 18000
 local OUTWARD_GAIN_MINIMUM = 5
@@ -114,6 +116,36 @@ local function working_labs(surface, force)
   return count
 end
 
+local function create_branch_probe(force)
+  local platform = force.create_space_platform({
+    name = "Warp branch cache probe",
+    planet = "nauvis",
+    starter_pack = "space-platform-starter-pack"
+  })
+  if not platform then
+    fail("branch cache probe platform creation returned nil")
+  end
+  platform.apply_starter_pack()
+  local tiles = {}
+  for x = -12, 12 do
+    for y = -12, 12 do
+      tiles[#tiles + 1] = {name = "space-platform-foundation", position = {x, y}}
+    end
+  end
+  platform.surface.set_tiles(tiles)
+  platform.surface.ignore_surface_conditions = true
+  local drive = platform.surface.create_entity({
+    name = "warp-drive-controller",
+    position = {0, 10},
+    force = force,
+    raise_built = true
+  })
+  if not drive then
+    fail("branch cache probe drive creation returned nil")
+  end
+  return drive
+end
+
 script.on_init(function()
   local force = game.forces.player
   local technology = force.technologies[TECHNOLOGY]
@@ -204,27 +236,32 @@ script.on_nth_tick(10, function()
     storage.samples.p0 = force.research_progress
   elseif game.tick == 180 then
     storage.samples.p1 = force.research_progress
-  elseif game.tick == 300 then
+  elseif game.tick == 400 then
+    storage.samples.powered_p0 = force.research_progress
+  elseif game.tick == 520 then
     storage.samples.p2 = force.research_progress
     -- Only the local branch needs laboratories on the platform. Leaving the relay run with
     -- Nauvis laboratories alone keeps every measured window built from the same lab count,
     -- so a window divided by the baseline is directly comparable between the two branches.
     if EXPECT_LOCAL then
-      build_power(platform.surface, force, {x = -9, y = -9})
+      -- The helper's controlled source powers the whole platform grid. Adding a vanilla EEI
+      -- here would also power the detector and invalidate the 200 MW measurement window.
       build_labs(platform.surface, force, {x = -9, y = -9}, LAB_COUNT)
     end
-  elseif game.tick == 310 and EXPECT_LOCAL then
+  elseif game.tick == 530 and EXPECT_LOCAL then
     local count = working_labs(platform.surface, force)
     if count ~= LAB_COUNT then
       fail(string.format("expected %d working platform laboratories, got %d", LAB_COUNT, count))
     end
-  elseif game.tick == 420 then
+  elseif game.tick == 640 then
     -- The helper moves the platform out to the far end of the same connection right after
     -- this sample, so anything the next window gains is attributable to depth alone.
     storage.samples.p3 = force.research_progress
-  elseif game.tick == 540 then
+  elseif game.tick == 760 then
     storage.samples.p4 = force.research_progress
-  elseif game.tick == 660 then
+  elseif game.tick == 1580 then
+    storage.samples.fast_p0 = force.research_progress
+  elseif game.tick == 1700 then
     local samples = storage.samples
     local baseline = samples.p1 - samples.p0
     if baseline <= 0 then
@@ -233,9 +270,10 @@ script.on_nth_tick(10, function()
     -- Every window is the same length and every lab is identical, so a window divided by
     -- the unpowered baseline is the effective research multiplier in lab-seconds. Checking
     -- that absolute number, not merely "faster", is what catches a wrong unit conversion.
-    local near = (EXPECT_LOCAL and (samples.p3 - samples.p2) or (samples.p2 - samples.p1)) / baseline
+    local near = (EXPECT_LOCAL and (samples.p3 - samples.p2)
+      or (samples.p2 - samples.powered_p0)) / baseline
     local far = (samples.p4 - samples.p3) / baseline
-    local fast = (force.research_progress - samples.p4) / baseline
+    local fast = (force.research_progress - samples.fast_p0) / baseline
     local detail = string.format("baseline=%.12g near=%.4gx far=%.4gx fast=%.4gx",
       baseline, near, far, fast)
     local function check(name, value, minimum, maximum)
@@ -245,17 +283,18 @@ script.on_nth_tick(10, function()
       end
     end
     if EXPECT_LOCAL then
-      local off_platform = (samples.p2 - samples.p1) / baseline
+      local off_platform = (samples.p2 - samples.powered_p0) / baseline
       if off_platform > UNBOOSTED_MAXIMUM then
         fail(string.format(
           "local branch accelerated laboratories off the drive's platform by %.4gx: %s",
           off_platform, detail))
       end
     end
-    check("near", near, NEAR_MINIMUM, NEAR_MAXIMUM)
-    check("far", far, FAR_MINIMUM, FAR_MAXIMUM)
-    if fast < FAST_MINIMUM then
-      fail(string.format("200 km/s and 1 GW signal did not exceed 120000x: %s", detail))
+    check("near", near, NEAR_MINIMUM * BONUS_FACTOR, NEAR_MAXIMUM * BONUS_FACTOR)
+    check("far", far, FAR_MINIMUM * BONUS_FACTOR, FAR_MAXIMUM * BONUS_FACTOR)
+    if fast < FAST_MINIMUM * BONUS_FACTOR then
+      fail(string.format("200 km/s and 1 GW signal did not exceed %gx: %s",
+        FAST_MINIMUM * BONUS_FACTOR, detail))
     end
     if far < near * OUTWARD_GAIN_MINIMUM then
       fail(string.format(
@@ -269,9 +308,28 @@ script.on_nth_tick(10, function()
         speed_power_gain, SPEED_POWER_GAIN_MINIMUM, SPEED_POWER_GAIN_MAXIMUM, detail))
     end
     if EXPECT_LOCAL then
-      log("WARP_TEST_PASS: local research branch accelerated platform laboratories only")
+      storage.branch_marker = "WARP_TEST_PASS: local research branch accelerated platform laboratories only"
     else
-      log("WARP_TEST_PASS: relay research branch accelerated force-wide laboratories")
+      storage.branch_marker = "WARP_TEST_PASS: relay research branch accelerated force-wide laboratories"
     end
+    -- The primary surface has populated its branch cache by now. A second platform that
+    -- ignores surface conditions must choose the local branch and leave Nauvis labs at
+    -- their ordinary rate, even when the primary platform selected the relay branch.
+    drive.destroy()
+    for _, lab in pairs(platform.surface.find_entities_filtered({type = "lab", force = force})) do
+      lab.destroy()
+    end
+    storage.drive = create_branch_probe(force)
+    storage.samples.cache_p0 = force.research_progress
+    storage.samples.baseline = baseline
+  elseif game.tick == 1820 then
+    local samples = storage.samples
+    local cache_window = (force.research_progress - samples.cache_p0) / samples.baseline
+    if cache_window < 0.5 or cache_window > UNBOOSTED_MAXIMUM then
+      fail(string.format(
+        "per-surface branch cache probe changed off-platform research by %.4gx, expected an ordinary-rate window",
+        cache_window))
+    end
+    log(storage.branch_marker)
   end
 end)

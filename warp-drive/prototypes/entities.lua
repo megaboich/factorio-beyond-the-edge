@@ -1,5 +1,6 @@
 local circuit_source = data.raw["assembling-machine"]["cryogenic-plant"]
 local combinator_source = data.raw["constant-combinator"]["constant-combinator"]
+local smoke_animations = require("__base__.prototypes.entity.smoke-animations")
 local animation_speed = 0.35
 local empty_sprite = {filename = "__core__/graphics/empty.png", width = 1, height = 1}
 
@@ -51,22 +52,6 @@ local function drive_wire_connection_points()
   return points
 end
 
-local function animation_layer(filename, width, height, frame_count, line_length, blend_mode)
-  return {
-    filename = filename,
-    priority = "high",
-    width = width,
-    height = height,
-    frame_count = frame_count,
-    line_length = line_length,
-    animation_speed = animation_speed,
-    scale = 0.5,
-    shift = util.by_pixel(0, -16),
-    blend_mode = blend_mode,
-    draw_as_glow = blend_mode ~= nil
-  }
-end
-
 local function striped_animation(prefix, blend_mode)
   return {
     width = 410,
@@ -103,121 +88,6 @@ local function animation_layers()
   }
 end
 
-local legacy_drive = {
-  type = "accumulator",
-  name = "warp-drive",
-  icon = "__warp-drive__/graphics/icons/warp-drive.png",
-  icon_size = 64,
-  flags = {"placeable-neutral", "placeable-player", "player-creation"},
-  minable = {mining_time = 1, result = "warp-drive"},
-  max_health = 3000,
-  corpse = "nuclear-reactor-remnants",
-  dying_explosion = "nuclear-reactor-explosion",
-  collision_box = {{-2.8, -2.8}, {2.8, 2.8}},
-  selection_box = {{-3, -3}, {3, 3}},
-  drawing_box_vertical_extension = 0.5,
-  surface_conditions = {{property = "pressure", min = 0, max = 0}},
-  circuit_connector = table.deepcopy(circuit_source.circuit_connector),
-  circuit_wire_max_distance = circuit_source.circuit_wire_max_distance,
-  energy_source = {
-    type = "electric",
-    buffer_capacity = "100GJ",
-    usage_priority = "tertiary",
-    input_flow_limit = "200MW",
-    output_flow_limit = "0W"
-  },
-  chargable_graphics = {
-    picture = animation_layer("__warp-drive__/graphics/entity/warp-drive/quantum-stabilizer-hr-animation-1.png", 410, 410, 1, 1),
-    charge_animation = {layers = animation_layers()},
-    charge_animation_is_looped = true,
-    charge_cooldown = 1,
-    discharge_animation = {layers = animation_layers()},
-    discharge_cooldown = 1
-  },
-  open_sound = {filename = "__base__/sound/machine-open.ogg", volume = 0.5},
-  close_sound = {filename = "__base__/sound/machine-close.ogg", volume = 0.5},
-  impact_category = "metal-large",
-  working_sound = {
-    main_sounds = {{sound = {filename = "__base__/sound/accumulator-working.ogg", volume = 0.8}}},
-    idle_sound = {filename = "__base__/sound/accumulator-idle.ogg", volume = 0.35},
-    max_sounds_per_prototype = 2
-  },
-  default_output_signal = {type = "virtual", name = "signal-W"}
-}
-
-legacy_drive.hidden = true
-
-local legacy_visual = {
-  type = "electric-energy-interface",
-  name = "warp-drive-visual",
-  localised_name = {"entity-name.warp-drive"},
-  icon = "__warp-drive__/graphics/icons/warp-drive.png",
-  icon_size = 64,
-  flags = {"placeable-neutral", "placeable-player", "player-creation"},
-  minable = {mining_time = 1, result = "warp-drive"},
-  max_health = 3000,
-  corpse = "nuclear-reactor-remnants",
-  dying_explosion = "nuclear-reactor-explosion",
-  collision_box = {{-2.8, -2.8}, {2.8, 2.8}},
-  selection_box = {{-3, -3}, {3, 3}},
-  drawing_box_vertical_extension = 0.5,
-  surface_conditions = {{property = "pressure", min = 0, max = 0}},
-  energy_source = {
-    type = "electric",
-    buffer_capacity = "1J",
-    usage_priority = "tertiary",
-    input_flow_limit = "0W",
-    output_flow_limit = "0W"
-  },
-  energy_production = "0W",
-  energy_usage = "0W",
-  gui_mode = "all",
-  allow_copy_paste = false,
-  animation = {layers = animation_layers()},
-  open_sound = {filename = "__base__/sound/machine-open.ogg", volume = 0.5},
-  close_sound = {filename = "__base__/sound/machine-close.ogg", volume = 0.5},
-  impact_category = "metal-large",
-  working_sound = {
-    sound = {filename = "__base__/sound/accumulator-working.ogg", volume = 0.8},
-    idle_sound = {filename = "__base__/sound/accumulator-idle.ogg", volume = 0.35},
-    max_sounds_per_prototype = 2
-  }
-}
-legacy_visual.hidden = true
-
-local legacy_machine = {
-  type = "assembling-machine",
-  name = "warp-drive-machine",
-  localised_name = {"entity-name.warp-drive"},
-  icon = "__warp-drive__/graphics/icons/warp-drive.png",
-  icon_size = 64,
-  flags = {"placeable-neutral", "placeable-player", "player-creation"},
-  minable = {mining_time = 1, result = "warp-drive"},
-  max_health = 3000,
-  corpse = "nuclear-reactor-remnants",
-  dying_explosion = "nuclear-reactor-explosion",
-  collision_box = {{-2.8, -2.8}, {2.8, 2.8}},
-  selection_box = {{-3, -3}, {3, 3}},
-  drawing_box_vertical_extension = 0.5,
-  surface_conditions = {{property = "pressure", min = 0, max = 0}},
-  crafting_categories = {"warp-drive-internal"},
-  crafting_speed = 1,
-  energy_source = {type = "void"},
-  energy_usage = "1W",
-  module_slots = 0,
-  allowed_effects = {},
-  show_recipe_icon = false,
-  show_recipe_icon_on_map = false,
-  graphics_set = {
-    always_draw_idle_animation = true,
-    idle_animation = {layers = animation_layers()}
-  },
-  open_sound = {filename = "__base__/sound/machine-open.ogg", volume = 0.5},
-  close_sound = {filename = "__base__/sound/machine-close.ogg", volume = 0.5},
-  impact_category = "metal-large"
-}
-legacy_machine.hidden = true
-
 local drive = {
   type = "constant-combinator",
   name = "warp-drive-controller",
@@ -242,9 +112,6 @@ local drive = {
   draw_copper_wires = false,
   impact_category = "metal-large"
 }
-
-local legacy_structure = table.deepcopy(legacy_machine)
-legacy_structure.name = "warp-drive-structure"
 
 local drive_animation = {
   type = "electric-energy-interface",
@@ -275,36 +142,7 @@ local drive_animation = {
   animation = {layers = animation_layers()}
 }
 
-local support_load = {
-  type = "electric-energy-interface",
-  name = "warp-drive-support-load",
-  localised_name = {"entity-name.warp-drive"},
-  icon = "__warp-drive__/graphics/icons/warp-drive.png",
-  icon_size = 64,
-  flags = {"not-on-map", "not-blueprintable", "not-deconstructable", "not-flammable", "not-repairable"},
-  hidden = true,
-  selectable_in_game = false,
-  collision_mask = {layers = {}},
-  collision_box = {{0, 0}, {0, 0}},
-  selection_box = {{0, 0}, {0, 0}},
-  energy_source = {
-    type = "electric",
-    buffer_capacity = "1J",
-    usage_priority = "secondary-input",
-    input_flow_limit = "0W",
-    output_flow_limit = "0W",
-    render_no_power_icon = false
-  },
-  energy_production = "0W",
-  energy_usage = "0W",
-  gui_mode = "none",
-  picture = {
-    filename = "__core__/graphics/empty.png",
-    width = 1,
-    height = 1
-  }
-}
-
+-- Legacy accumulators remain defined so existing saves can migrate their stored energy.
 local charge_buffer = {
   type = "accumulator",
   name = "warp-drive-charge-buffer",
@@ -322,7 +160,7 @@ local charge_buffer = {
     type = "electric",
     buffer_capacity = "100GJ",
     usage_priority = "tertiary",
-    input_flow_limit = "200MW",
+    input_flow_limit = "0W",
     output_flow_limit = "0W",
     render_no_power_icon = false
   },
@@ -334,6 +172,70 @@ local charge_buffer = {
     discharge_animation = {filename = "__core__/graphics/empty.png", width = 1, height = 1},
     discharge_cooldown = 1
   }
+}
+
+local charge_buffer_100mj = table.deepcopy(charge_buffer)
+charge_buffer_100mj.name = "warp-drive-charge-buffer-100mj"
+charge_buffer_100mj.energy_source.buffer_capacity = "100MJ"
+
+local charge_buffer_1gj = table.deepcopy(charge_buffer)
+charge_buffer_1gj.name = "warp-drive-charge-buffer-1gj"
+charge_buffer_1gj.energy_source.buffer_capacity = "1GJ"
+
+local charge_buffer_10gj = table.deepcopy(charge_buffer)
+charge_buffer_10gj.name = "warp-drive-charge-buffer-10gj"
+charge_buffer_10gj.energy_source.buffer_capacity = "10GJ"
+
+local support_load = {
+  type = "electric-energy-interface",
+  name = "warp-drive-support-load",
+  localised_name = {"entity-name.warp-drive"},
+  icon = "__warp-drive__/graphics/icons/warp-drive.png",
+  icon_size = 64,
+  flags = {"not-on-map", "not-blueprintable", "not-deconstructable", "not-flammable", "not-repairable"},
+  hidden = true,
+  selectable_in_game = false,
+  collision_mask = {layers = {}},
+  collision_box = {{0, 0}, {0, 0}},
+  selection_box = {{0, 0}, {0, 0}},
+  energy_source = {
+    type = "electric",
+    buffer_capacity = "1J",
+    usage_priority = "tertiary",
+    input_flow_limit = "60GW",
+    output_flow_limit = "0W",
+    render_no_power_icon = false
+  },
+  energy_production = "0W",
+  energy_usage = "1W",
+  gui_mode = "none",
+  picture = {
+    filename = "__core__/graphics/empty.png",
+    width = 1,
+    height = 1
+  }
+}
+
+local power_interface = table.deepcopy(support_load)
+power_interface.name = "warp-drive-power-interface"
+power_interface.energy_source.usage_priority = "secondary-input"
+
+local subspace_smoke = {
+  type = "trivial-smoke",
+  name = "warp-drive-subspace-smoke",
+  animation = smoke_animations.trivial_smoke_fast({
+    animation_speed = 0.35,
+    scale = 1.4,
+    tint = {r = 0.1, g = 0.55, b = 1, a = 0.65}
+  }),
+  render_layer = "smoke",
+  affected_by_wind = false,
+  movement_slow_down_factor = 1,
+  duration = 40,
+  fade_away_duration = 30,
+  show_when_smoke_off = true,
+  start_scale = 0.45,
+  end_scale = 1.4
 }
 
 local detector_load = table.deepcopy(charge_buffer)
@@ -362,15 +264,16 @@ circuit_output.draw_copper_wires = false
 circuit_output.draw_circuit_wires = false
 
 data:extend({
-  {type = "recipe-category", name = "warp-drive-internal"},
-  legacy_drive,
-  legacy_visual,
-  legacy_machine,
-  legacy_structure,
   drive,
   drive_animation,
+  power_interface,
+  -- Legacy companions can be removed after supported saves no longer contain them.
   support_load,
   detector_load,
+  charge_buffer_100mj,
+  charge_buffer_1gj,
+  charge_buffer_10gj,
   charge_buffer,
-  circuit_output
+  circuit_output,
+  subspace_smoke
 })

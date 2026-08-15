@@ -22,3 +22,7 @@ for _, name in pairs(RECIPES) do
   end
   recipe.surface_conditions = nil
 end
+
+-- Keep the local-branch fixture's tiny laboratory load ahead of the 1 GW detector request.
+-- This changes only the test run and avoids adding generation that would alter detector power.
+data.raw.lab.lab.energy_source.usage_priority = "primary-input"
