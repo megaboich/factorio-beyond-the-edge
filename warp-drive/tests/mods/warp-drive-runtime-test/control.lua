@@ -763,8 +763,23 @@ script.on_nth_tick(10, function()
       or #platform.find_asteroid_chunks_filtered({}) ~= 0 then
       fail("warp entry did not remove asteroid entities and chunks")
     end
-    if #rendering.get_all_objects("warp-drive") < 48 then
-      fail("warp entry did not create the expanded subspace streak field")
+    local streaks = 0
+    for _, object in pairs(rendering.get_all_objects("warp-drive")) do
+      if object.type == "line" then
+        streaks = streaks + 1
+        local position = object.from.position
+        if position.x < -76 or position.x > 77 or position.y < -76 or position.y > 77 then
+          fail(string.format(
+            "subspace streak escaped 64-tile platform field: x=%s y=%s",
+            position.x, position.y))
+        end
+      end
+    end
+    if streaks < 48 then
+      fail("warp entry did not create the subspace streak field")
+    end
+    if #platform.surface.find_entities_filtered({name = "warp-drive-lightning"}) < 1 then
+      fail("warp entry did not create full procedural Fulgora lightning")
     end
     if circuit_signal("signal-W") ~= 1 then
       fail("circuit output did not report active warp")

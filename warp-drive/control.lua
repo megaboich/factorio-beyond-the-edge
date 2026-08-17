@@ -74,6 +74,18 @@ for _, event in pairs({
   end, {{filter = "name", name = DRIVE_NAME}})
 end
 
+for _, event in pairs({
+  defines.events.on_player_built_tile,
+  defines.events.on_player_mined_tile,
+  defines.events.on_robot_built_tile,
+  defines.events.on_robot_mined_tile,
+  defines.events.on_space_platform_built_tile,
+  defines.events.on_space_platform_mined_tile,
+  defines.events.script_raised_set_tiles
+}) do
+  script.on_event(event, Warp.platform_tiles_changed)
+end
+
 script.on_nth_tick(UPDATE_TICKS, function()
   for platform_index, record in pairs(Drive.records()) do
     if not Warp.update(record) then

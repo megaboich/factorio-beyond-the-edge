@@ -31,7 +31,7 @@ Legacy detector, support, and tiered charge-buffer prototypes remain defined onl
 
 ## Rendering And Wires
 
-The controller renders the first structure frame for placement previews. The animation companion renders the full animation, additive emission, and repeated shadow on `higher-object-under`. Both use the same scale and `util.by_pixel(0, -16)` shift. During warp, 48 short-lived cyan lines are regenerated across and beyond the platform every 10 ticks and blue trivial smoke is emitted near its hub. Their bounded lifetimes remove the effect automatically after exit without persistent rendering state. Entry and exit call separate pitched Space Age thruster sound prototypes globally on the platform surface, with no controller-position attenuation.
+The controller renders the first structure frame for placement previews. The animation companion renders the full animation, additive emission, and repeated shadow on `higher-object-under`. Both use the same scale and `util.by_pixel(0, -16)` shift. During warp, 48 short-lived cyan streaks are regenerated every 10 ticks. A harmless clone of Space Age's Fulgora lightning prototype provides its full procedurally forked bolt, eight ground-streamer variants, shader layers, and native 36-tick lifecycle while removing the endpoint explosion, damage, attractor energy, sound, camera flash, debris, and smoke. Cached platform foundation bounds, expanded by 64 tiles on each side, define the shared streak and lightning field, averaging one active strike per `32 x 32` tiles and working in freely panned remote view. Tile events refresh the bounds without scanning in the 10-tick update. Whole strikes start at randomized moments rather than being seeded partway through an animation. Entry and exit call separate pitched Space Age thruster sound prototypes globally on the platform surface, with no controller-position attenuation.
 
 The symmetric footprint reuses one circuit connection definition in all directions. When adjusting it:
 
@@ -56,6 +56,7 @@ The symmetric footprint reuses one circuit connection definition in all directio
 | `reserve_energy`, `migrated_reserve_energy` | Authoritative private reserve and one-time legacy energy capture |
 | `support_power`, `power_sample_watts`, `power_sample_support_watts`, `support_demand_watts`, `support_check_after` | Delivered power, interface request, logical warp demand, and startup grace |
 | `warp_ramp_state` | GUI acceleration status |
+| `lightning_bounds` | Active warp effect footprint |
 
 Build events call `register_drive`. Invalid off-platform placement is destroyed. A duplicate controller is destroyed, refunded on the platform surface, and reported to the force.
 

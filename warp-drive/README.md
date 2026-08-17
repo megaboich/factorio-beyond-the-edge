@@ -128,7 +128,7 @@ After Practical Warp Drive is researched:
 - Warp level has no scripted maximum; Factorio's platform physics and the increasing power demand provide the limits.
 - The drive compares delivered power with the next fractional level's support demand before accelerating into it.
 - Lost engine speed lowers sustainable warp levels immediately. Falling below the minimum `50 km/s` starts a prominent 5-second exit warning; restoring speed during that grace period keeps Warp-1 engaged. If power falls below the current level's support demand, the drive holds that level and drains its warp support reserve in proportion to the shortfall. A complete outage lasts 1 second immediately after entry or 10 seconds after the reserve replenishes to full.
-- Warp removes asteroid chunks and large asteroids while active, plays distinct entry and exit sounds, and renders cyan subspace streaks with blue haze across and beyond the platform.
+- Warp removes asteroid chunks and large asteroids while active, plays distinct entry and exit sounds, and renders cyan subspace streaks plus harmless Fulgora-style lightning at randomized positions and times across the platform and 64 tiles into nearby space.
 - Warp exits immediately if its selected control mode is disabled, its circuit condition becomes false, or route eligibility is lost. Minimum engine speed has the 5-second grace period above; support failure exits when the warp support reserve is depleted.
 - Every exit starts a 10-second charge and re-entry lockout.
 - The first and final `1,000 km` of each connection use conventional travel. Connections no longer than `2,000 km` cannot use warp.

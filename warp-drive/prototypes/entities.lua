@@ -238,6 +238,21 @@ local subspace_smoke = {
   end_scale = 1.4
 }
 
+-- Reuse Fulgora's procedurally forked bolt and all of its visual variations without damage,
+-- attractor energy, thunder, camera flash, debris, or smoke.
+local warp_lightning = table.deepcopy(data.raw.lightning.lightning)
+warp_lightning.name = "warp-drive-lightning"
+warp_lightning.hidden = true
+warp_lightning.factoriopedia_simulation = nil
+warp_lightning.damage = nil
+warp_lightning.energy = "0J"
+warp_lightning.sound = nil
+warp_lightning.attracted_volume_modifier = 0
+warp_lightning.created_effect = nil
+warp_lightning.strike_effect = nil
+warp_lightning.attractor_hit_effect = nil
+warp_lightning.graphics_set.explosion = nil
+
 local detector_load = table.deepcopy(charge_buffer)
 detector_load.name = "warp-drive-detector-load"
 detector_load.energy_source.buffer_capacity = "166.667MJ"
@@ -275,5 +290,6 @@ data:extend({
   charge_buffer_10gj,
   charge_buffer,
   circuit_output,
-  subspace_smoke
+  subspace_smoke,
+  warp_lightning
 })

@@ -10,7 +10,10 @@ local WARP_RESERVE_SECONDS = 10
 local ENTRY_RESERVE_RATIO = 0.1
 local SPEED_EXIT_GRACE_TICKS = 5 * 60
 local WARP_STREAK_COUNT = 48
-local WARP_SMOKE_NAME = "warp-drive-subspace-smoke"
+local LIGHTNING_NAME = "warp-drive-lightning"
+local LIGHTNING_DURATION_TICKS = 36
+local LIGHTNING_DENSITY_TILES = 32 * 32
+local WARP_EFFECT_FIELD_MARGIN = 64
 local WARP_ENTER_SOUND = "warp-drive-enter"
 local WARP_EXIT_SOUND = "warp-drive-exit"
 local POWER_NAME = "warp-drive-power-interface"
@@ -177,6 +180,7 @@ local function exit_warp(record, reason)
   record.warp_ramp_state = nil
   record.speed_exit_at = nil
   record.warp_warning = nil
+  record.lightning_bounds = nil
   record.reserve_energy = was_warp and 0 or (record.reserve_energy or 0)
   if record.power and record.power.valid then
     -- Keep the mandatory 1 J working buffer stable. Emptying a larger previous buffer here
@@ -306,17 +310,52 @@ local function clear_warp_asteroids(platform)
   end
 end
 
--- Short-lived render objects avoid persistent per-platform IDs and disappear one tick after
--- warp stops. The broad field deliberately extends far beyond ordinary platform footprints,
--- while drawing above the ground keeps streaks visible against both structures and empty space.
-local function render_warp_effect(record, platform)
-  local hub = platform.hub
-  local center = hub and hub.valid and hub.position or record.entity.position
+-- Cache occupied extents outside the 10-tick update so large platforms get a proportional field.
+local function update_warp_effect_bounds(record, platform)
+  local left
+  local right
+  local top
+  local bottom
+  for _, tile in pairs(platform.surface.find_tiles_filtered({
+    name = "empty-space",
+    invert = true
+  })) do
+    if tile.prototype.is_foundation then
+      local x = tile.position.x
+      local y = tile.position.y
+      left = left and math.min(left, x) or x
+      right = right and math.max(right, x + 1) or x + 1
+      top = top and math.min(top, y) or y
+      bottom = bottom and math.max(bottom, y + 1) or y + 1
+    end
+  end
+  if not left then
+    local hub = platform.hub
+    local center = hub and hub.valid and hub.position or record.entity.position
+    left, right = center.x - 16, center.x + 16
+    top, bottom = center.y - 16, center.y + 16
+  end
+  record.lightning_bounds = {
+    left = left - WARP_EFFECT_FIELD_MARGIN,
+    right = right + WARP_EFFECT_FIELD_MARGIN,
+    top = top - WARP_EFFECT_FIELD_MARGIN,
+    bottom = bottom + WARP_EFFECT_FIELD_MARGIN
+  }
+end
+
+local function render_warp_streaks(record, platform)
+  local bounds = record.lightning_bounds
+  if not bounds then
+    update_warp_effect_bounds(record, platform)
+    bounds = record.lightning_bounds
+  end
   local phase = math.floor(game.tick / UPDATE_TICKS)
   local sign = record.direction < 0 and 1 or -1
+  local width = bounds.right - bounds.left
+  local height = bounds.bottom - bounds.top
   for index = 1, WARP_STREAK_COUNT do
-    local x = center.x + ((index * 73 + platform.index * 29) % 280) - 140
-    local y = center.y + ((index * 97 + phase * 23) % 240) - 120
+    local x = bounds.left + ((index * 73 + platform.index * 29) % 997) / 996 * width
+    local y = bounds.top + ((index * 97 + phase * 23) % 991) / 990 * height
     local length = 8 + index % 8 * 3
     rendering.draw_line({
       color = {r = 0.15, g = 0.65 + index % 3 * 0.08, b = 1, a = 0.35 + index % 4 * 0.1},
@@ -328,15 +367,44 @@ local function render_warp_effect(record, platform)
       draw_on_ground = false
     })
   end
-  for index = 1, 3 do
-    platform.surface.create_trivial_smoke({
-      name = WARP_SMOKE_NAME,
+end
+
+local function spawn_lightning(platform, bounds, count)
+  for _ = 1, count do
+    -- execute_lightning rejects space-platform surfaces because their planet has no lightning
+    -- generator. Direct creation is the engine-supported path also used by menu simulations.
+    platform.surface.create_entity({
+      name = LIGHTNING_NAME,
       position = {
-        center.x + ((phase * 7 + index * 11) % 13) - 6,
-        center.y + ((phase * 5 + index * 17) % 13) - 6
-      }
+        x = bounds.left + math.random() * (bounds.right - bounds.left),
+        y = bounds.top + math.random() * (bounds.bottom - bounds.top)
+      },
+      force = "neutral"
     })
   end
+end
+
+-- Starts are derived from the 36-tick lifetime to average one playing animation per 32x32 tiles.
+-- Platform bounds work in freely panned remote view, whose camera position is not exposed.
+local function render_warp_lightning(record, platform)
+  local bounds = record.lightning_bounds
+  if not bounds then
+    update_warp_effect_bounds(record, platform)
+    bounds = record.lightning_bounds
+  end
+  local target_count = (bounds.right - bounds.left) * (bounds.bottom - bounds.top)
+    / LIGHTNING_DENSITY_TILES
+  local expected_starts = target_count * UPDATE_TICKS / LIGHTNING_DURATION_TICKS
+  local count = math.floor(expected_starts)
+  if math.random() < expected_starts - count then
+    count = count + 1
+  end
+  spawn_lightning(platform, bounds, count)
+end
+
+local function render_warp_effect(record, platform)
+  render_warp_streaks(record, platform)
+  render_warp_lightning(record, platform)
 end
 
 -- Entry retains ten percent of the activation charge as support reserve. A new electric sink needs
@@ -365,6 +433,7 @@ local function enter_warp(record, platform)
   record.support_check_after = game.tick + UPDATE_TICKS * 2
   record.entity.surface.play_sound({path = WARP_ENTER_SOUND})
   clear_warp_asteroids(platform)
+  update_warp_effect_bounds(record, platform)
   render_warp_effect(record, platform)
   return true
 end
@@ -661,6 +730,15 @@ function Warp.engagement_changed(record, condition_only)
   elseif not engagement_satisfied(record) then
     local reason = record.circuit_enabled and "circuit-condition" or "control-disabled"
     exit_warp(record, reason)
+  end
+end
+
+function Warp.platform_tiles_changed(event)
+  local surface = game.get_surface(event.surface_index)
+  local platform = surface and surface.platform
+  local record = platform and Drive.get(platform.index)
+  if record and record.state == "warp" then
+    update_warp_effect_bounds(record, platform)
   end
 end
 
