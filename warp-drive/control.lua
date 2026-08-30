@@ -34,6 +34,23 @@ if script.active_mods["warp-drive-runtime-test"] then
       Drive.normalize_engagement(record)
       Warp.engagement_changed(record, false)
       return true
+    end,
+    sound_state = function(platform_index)
+      local record = Drive.get(platform_index)
+      if not record then
+        return nil
+      end
+      return {
+        state = record.state,
+        cooldown_until = record.cooldown_until,
+        last_exit_reason = record.last_exit_reason,
+        readiness_announced = record.readiness_announced == true,
+        readiness_sound_tick = record.readiness_sound_tick,
+        charge_next_tick = record.charge_sound_next_tick,
+        charge_step = record.charge_sound_step,
+        warp_next_tick = record.warp_sound_next_tick,
+        background_index = record.warp_background_sound_index
+      }
     end
   })
 end

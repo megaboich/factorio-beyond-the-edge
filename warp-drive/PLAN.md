@@ -1,6 +1,6 @@
 # Warp Drive Plan
 
-This file tracks unresolved decisions and validation only. Implemented behavior belongs in `README.md`; composite-entity details belong in `BUILDING.md`.
+This file tracks unresolved decisions and validation only. Implemented behavior belongs in `README.md`; composite-entity details belong in `BUILDING.md`; audio implementation details belong in `AUDIO.md`.
 
 ## Performance Validation
 
@@ -24,6 +24,7 @@ This file tracks unresolved decisions and validation only. Implemented behavior 
 - Test player, robot, platform, and ghost placement plus duplicate refunds.
 - Verify GUI layout, values, controls, scrolling, and close behavior.
 - Verify asteroid removal during warp.
+- Listen for click-free charge-step boundaries, activation handoff, background alternation, and exit overlap at normal and accelerated game speeds.
 - Inspect animation, emission, shadow, footprint, and selection box.
 - Inspect both circuit-wire colors for attachment, sag, shadows, and crossing.
 

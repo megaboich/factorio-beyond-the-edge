@@ -14,8 +14,14 @@ local LIGHTNING_NAME = "warp-drive-lightning"
 local LIGHTNING_DURATION_TICKS = 36
 local LIGHTNING_DENSITY_TILES = 32 * 32
 local WARP_EFFECT_FIELD_MARGIN = 64
-local WARP_ENTER_SOUND = "warp-drive-enter"
-local WARP_EXIT_SOUND = "warp-drive-exit"
+local CHARGE_SOUND_COUNT = 20
+local CHARGE_SOUND_TICKS = 30
+local WARP_COMMAND_SOUND = "warp-drive-command"
+local WARP_ACTIVATION_SOUND = "warp-drive-activation"
+local WARP_DEACTIVATION_SOUND = "warp-drive-deactivation"
+local FAILED_ACTIVATION_COOLDOWN_TICKS = 5 * 60
+local WARP_ACTIVATION_TICKS = 90
+local WARP_BACKGROUND_TICKS = 6 * 60
 local POWER_NAME = "warp-drive-power-interface"
 local DETECTOR_REFERENCE_POWER_WATTS = 200000000
 local DETECTOR_MAX_POWER_WATTS = 1000000000
@@ -150,6 +156,91 @@ local function engagement_satisfied(record)
   return record.enabled or (record.circuit_enabled and circuit_engagement_satisfied(record))
 end
 
+local function play_global_sound(record, path)
+  local entity = record.entity
+  if entity and entity.valid then
+    -- Omitting position makes drive audio global on the platform surface instead of
+    -- attenuating it around the controller.
+    entity.surface.play_sound({path = path})
+  end
+end
+
+local function reset_charge_sound(record)
+  record.charge_sound_next_tick = nil
+  record.charge_sound_step = nil
+end
+
+local function reset_readiness_sound(record)
+  record.readiness_announced = false
+  record.readiness_sound_tick = nil
+end
+
+local function announce_readiness(record)
+  if record.readiness_announced then
+    return
+  end
+  -- Saves already charging before this sound existed must not announce midway through buildup.
+  if record.readiness_announced == nil and record.state == "charging" then
+    record.readiness_announced = true
+    return
+  end
+  play_global_sound(record, WARP_COMMAND_SOUND)
+  record.readiness_announced = true
+  record.readiness_sound_tick = game.tick
+end
+
+-- Factorio cannot stop or retain runtime sounds. Half-second one-shots therefore emulate a
+-- loop and only select a new charge step at a file boundary, avoiding mid-waveform clicks.
+local function update_charge_sound(record, platform)
+  if record.state ~= "charging" then
+    reset_charge_sound(record)
+    return
+  end
+  if record.charge_sound_next_tick and game.tick < record.charge_sound_next_tick then
+    return
+  end
+  local charge = required_charge(platform)
+  local ratio = charge > 0 and math.min(1, (record.reserve_energy or 0) / charge) or 0
+  local step = math.min(CHARGE_SOUND_COUNT, math.floor(ratio * CHARGE_SOUND_COUNT) + 1)
+  play_global_sound(record, string.format("warp-drive-buzz-%02d", step))
+  record.charge_sound_step = step
+  record.charge_sound_next_tick = game.tick + CHARGE_SOUND_TICKS
+end
+
+local function reset_warp_background_sound(record)
+  record.warp_sound_next_tick = nil
+  record.warp_background_sound_index = nil
+end
+
+-- The activation tail contains the final quarter of the synthesized background loop. Segment
+-- 01 begins exactly 1.5 seconds later, then the two six-second phase-contiguous files alternate.
+local function start_warp_sound(record)
+  reset_charge_sound(record)
+  play_global_sound(record, WARP_ACTIVATION_SOUND)
+  record.warp_background_sound_index = 1
+  record.warp_sound_next_tick = game.tick + WARP_ACTIVATION_TICKS
+end
+
+local function update_warp_background_sound(record)
+  if record.state ~= "warp" then
+    reset_warp_background_sound(record)
+    return
+  end
+  if not record.warp_sound_next_tick then
+    -- An active save from before custom audio has no recoverable playback phase. Start its
+    -- background at a segment boundary rather than guessing partway through a sound.
+    record.warp_background_sound_index = 1
+    record.warp_sound_next_tick = game.tick
+  end
+  if game.tick < record.warp_sound_next_tick then
+    return
+  end
+  local index = record.warp_background_sound_index or 1
+  play_global_sound(record, string.format("warp-drive-background-%02d", index))
+  record.warp_background_sound_index = index == 1 and 2 or 1
+  record.warp_sound_next_tick = game.tick + WARP_BACKGROUND_TICKS
+end
+
 local function disable_power(record, power, disabled)
   power.power_usage = 0
   power.input_flow_limit = 0
@@ -158,19 +249,37 @@ local function disable_power(record, power, disabled)
   record.power_sample_watts = nil
 end
 
+local function start_cooldown(record, ticks, reason)
+  record.cooldown_until = math.max(record.cooldown_until or 0, game.tick + ticks)
+  record.last_exit_reason = reason
+end
+
+local function start_failed_activation(record, reason)
+  local step = record.state == "charging" and record.charge_sound_step
+  if not step then
+    return false
+  end
+  play_global_sound(record, string.format("warp-drive-failed-activation-%02d", step))
+  start_cooldown(record, FAILED_ACTIVATION_COOLDOWN_TICKS,
+    reason or "activation-interrupted")
+  reset_charge_sound(record)
+  record.reserve_energy = 0
+  record.state = "cooldown"
+  return true
+end
+
 local function exit_warp(record, reason)
   local was_warp = record.state == "warp"
   if was_warp then
     record.state = "idle"
-    record.cooldown_until = game.tick + COOLDOWN_TICKS
-    record.last_exit_reason = reason or "unknown"
-    local entity = record.entity
-    if entity and entity.valid then
-      -- Omitting position makes the transition audible to every player on this platform
-      -- surface instead of attenuating it around the controller.
-      entity.surface.play_sound({path = WARP_EXIT_SOUND})
-    end
+    start_cooldown(record, COOLDOWN_TICKS, reason or "unknown")
+    play_global_sound(record, WARP_DEACTIVATION_SOUND)
+  else
+    start_failed_activation(record, reason)
   end
+  reset_charge_sound(record)
+  reset_readiness_sound(record)
+  reset_warp_background_sound(record)
   Drive.destroy_support(record)
   record.warp_level = nil
   record.requested_warp_level = nil
@@ -431,7 +540,7 @@ local function enter_warp(record, platform)
     + recharge_watts(platform, record.reserve_energy, charge)
   request_power(record, buffer, record.support_demand_watts, support_demand)
   record.support_check_after = game.tick + UPDATE_TICKS * 2
-  record.entity.surface.play_sound({path = WARP_ENTER_SOUND})
+  start_warp_sound(record)
   clear_warp_asteroids(platform)
   update_warp_effect_bounds(record, platform)
   render_warp_effect(record, platform)
@@ -439,6 +548,8 @@ local function enter_warp(record, platform)
 end
 
 local function update_experimental(record)
+  reset_readiness_sound(record)
+  start_failed_activation(record, "research-revoked")
   if record.state == "warp" then
     exit_warp(record, "research-revoked")
   end
@@ -559,6 +670,7 @@ local function update_active_warp(record, platform, direction, charge_buffer)
 end
 
 local function update_cooldown(record, charge_buffer)
+  reset_readiness_sound(record)
   Drive.destroy_support(record)
   disable_power(record, charge_buffer, true)
   record.reserve_energy = 0
@@ -566,13 +678,16 @@ local function update_cooldown(record, charge_buffer)
 end
 
 local function reset_preparation(record, charge_buffer, reason)
+  local failed_activation = start_failed_activation(record, reason)
+  reset_charge_sound(record)
+  reset_readiness_sound(record)
   Drive.destroy_support(record)
   disable_power(record, charge_buffer, true)
   record.reserve_energy = 0
   record.support_power = 0
   record.support_demand_watts = nil
-  record.state = "idle"
-  if reason then
+  record.state = failed_activation and "cooldown" or "idle"
+  if reason and not failed_activation then
     record.last_exit_reason = reason
   end
 end
@@ -594,6 +709,7 @@ local function update_idle_or_charging(record, platform, direction, charge_buffe
     reset_preparation(record, charge_buffer, reason)
     return
   end
+  announce_readiness(record)
   -- Charging requests Warp-1 support power. Since reserve capacity is ten seconds of that
   -- mass-scaled demand, adequate generation fills an empty reserve in exactly ten seconds.
   charge_buffer.disabled_by_script = false
@@ -626,6 +742,8 @@ function Warp.update(record)
   local direction = update_direction(record, platform)
   if not practical_researched(platform.force) then
     update_experimental(record)
+    update_charge_sound(record, platform)
+    update_warp_background_sound(record)
     return true
   end
   Drive.destroy_detector(record)
@@ -649,6 +767,8 @@ function Warp.update(record)
   else
     update_idle_or_charging(record, platform, direction, charge_buffer)
   end
+  update_charge_sound(record, platform)
+  update_warp_background_sound(record)
   return true
 end
 

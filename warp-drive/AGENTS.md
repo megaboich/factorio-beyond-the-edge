@@ -4,6 +4,7 @@
 
 - `README.md`: authoritative player-facing mechanics, recipes, costs, balance, dependencies, and attribution.
 - `BUILDING.md`: technical reference only for composite-entity composition, ownership, electrical lifecycle, wiring, and rendering.
+- `AUDIO.md`: technical reference for sound assets, synthesis, runtime playback, scheduling state, and regeneration.
 - `PLAN.md`: unresolved decisions, validation, and deferred work only.
 
 ## Dependencies

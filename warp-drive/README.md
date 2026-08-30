@@ -118,7 +118,7 @@ After Practical Warp Drive is researched:
 
 - The warp support reserve stores `100 J` per kilogram of current platform weight.
 - Charging and active warp are ordinary secondary-priority loads. During a brownout they share available power proportionally with most platform machines. Reserve replenishment is capped at the same `10 W/kg` charging rate.
-- The reserve charges only after control, minimum speed, active travel, endpoint clearance, and cooldown requirements are all satisfied. Losing any prerequisite before entry resets it to zero, so charging must complete in one uninterrupted cycle.
+- The reserve charges only after control, minimum speed, active travel, endpoint clearance, and cooldown requirements are all satisfied. Losing any prerequisite after the audible buildup begins resets it to zero, plays a matching power-down sound, and starts a 5-second re-entry lockout, so charging must complete in one uninterrupted cycle.
 - Delivered charging power is transferred into an exact, script-owned mass-scaled reserve. The hidden consumer cannot output that private reserve back to the ship network and is not classified as accumulator storage.
 - Automatic engagement requires at least `50 km/s`, sufficient charge, active travel, and more than `1,000 km` clearance from both route endpoints.
 - Subspace travel always begins at Warp-1, applying a `10x` boost.
@@ -128,9 +128,10 @@ After Practical Warp Drive is researched:
 - Warp level has no scripted maximum; Factorio's platform physics and the increasing power demand provide the limits.
 - The drive compares delivered power with the next fractional level's support demand before accelerating into it.
 - Lost engine speed lowers sustainable warp levels immediately. Falling below the minimum `50 km/s` starts a prominent 5-second exit warning; restoring speed during that grace period keeps Warp-1 engaged. If power falls below the current level's support demand, the drive holds that level and drains its warp support reserve in proportion to the shortfall. A complete outage lasts 1 second immediately after entry or 10 seconds after the reserve replenishes to full.
-- Warp removes asteroid chunks and large asteroids while active, plays distinct entry and exit sounds, and renders cyan subspace streaks plus harmless Fulgora-style lightning at randomized positions and times across the platform and 64 tiles into nearby space.
+- When entry conditions become ready, a synthesized "Engage warp drive!" command plays once before charging rises through a 20-step machinery hum. Warp activation hands off to a continuous two-part subspace ambience, and exit plays a distinct deactivation implosion.
+- Warp removes asteroid chunks and large asteroids while active and renders cyan subspace streaks plus harmless Fulgora-style lightning at randomized positions and times across the platform and 64 tiles into nearby space.
 - Warp exits immediately if its selected control mode is disabled, its circuit condition becomes false, or route eligibility is lost. Minimum engine speed has the 5-second grace period above; support failure exits when the warp support reserve is depleted.
-- Every exit starts a 10-second charge and re-entry lockout.
+- Every active-warp exit starts a 10-second charge and re-entry lockout; interrupted activation uses the same lockout mechanism for 5 seconds.
 - The first and final `1,000 km` of each connection use conventional travel. Connections no longer than `2,000 km` cannot use warp.
 
 For a `10,000 tonne` platform, the warp support reserve holds `1 GJ`, charging requests up to `100 MW` and takes 10 seconds at full power, entry retains `100 MJ`, and active replenishment restores the missing 90% in 9 seconds at that rate. Support is capped at `100 MW` at Warp-1 and `200 MW` at Warp-2, before the separate replenishment allowance.

@@ -18,7 +18,7 @@ local PHASE_DEADLINES = {
   speed_grace = 620,
   exit_lockout = 610,
   reserve_brownout = 70,
-  post_warp_lockout = 640,
+  post_warp_lockout = 950,
   circuit_and_revocation = 30,
   relocation = 30
 }
@@ -61,6 +61,10 @@ end
 
 local function set_reserve_energy(platform, energy)
   remote.call("warp-drive-runtime-test", "reserve_energy", platform.index, energy)
+end
+
+local function sound_state(platform)
+  return remote.call("warp-drive-runtime-test", "sound_state", platform.index)
 end
 
 local function find_gui_element(parent, name)
@@ -789,6 +793,19 @@ script.on_nth_tick(10, function()
       fail("circuit speed output was " .. tostring(speed) .. ", expected 500 km/s at Warp-1")
     end
   elseif phase == "warp_ramp" and elapsed >= 20 and elapsed <= 560 then
+    if elapsed == 200 then
+      local sound = sound_state(platform)
+      if sound.background_index ~= 2
+          or sound.warp_next_tick ~= storage.runtime_test.started_at + 460 then
+        fail("activation did not hand off to warp background segment 01 after 1.5 seconds")
+      end
+    elseif elapsed == 560 then
+      local sound = sound_state(platform)
+      if sound.background_index ~= 1
+          or sound.warp_next_tick ~= storage.runtime_test.started_at + 820 then
+        fail("warp background did not alternate to segment 02 after six seconds")
+      end
+    end
     if elapsed == 30 then
       local player = game.players[1]
       if player then
@@ -1262,13 +1279,43 @@ script.on_nth_tick(10, function()
     if #charge ~= 1 or reserve_energy(platform) < platform.weight * 50 or not support then
       fail("charging did not begin before the speed interruption")
     end
+    local sound = sound_state(platform)
+    if not sound.charge_step or not sound.readiness_announced
+        or sound.readiness_sound_tick ~= game.tick then
+      fail("ready preparation did not announce once before beginning its audible hum")
+    end
   elseif phase == "post_warp_lockout" and elapsed == 610 then
     local charge = charge_buffers(platform)
     local support = charge_buffers(platform)
     if #charge ~= 1 or reserve_energy(platform) ~= 0 or #support ~= 1 then
       fail("failed minimum speed did not reset the partial charging reserve")
     end
+    local sound = sound_state(platform)
+    if sound.state ~= "cooldown"
+        or sound.cooldown_until ~= game.tick + 300
+        or sound.last_exit_reason ~= "charging-speed-interrupted"
+        or sound.readiness_announced or sound.readiness_sound_tick ~= nil
+        or sound.charge_step ~= nil or sound.charge_next_tick ~= nil then
+      fail(string.format(
+        "failed activation lockout mismatch: state=%s deadline=%s expected=%s reason=%s step=%s next=%s",
+        tostring(sound.state), tostring(sound.cooldown_until), tostring(game.tick + 300),
+        tostring(sound.last_exit_reason), tostring(sound.charge_step),
+        tostring(sound.charge_next_tick)))
+    end
   elseif phase == "post_warp_lockout" and elapsed == 620 then
+    local charge = charge_buffers(platform)
+    local power = charge_buffer(platform)
+    if #charge ~= 1 or reserve_energy(platform) ~= 0 or not power
+        or power.power_usage ~= 0 or power.input_flow_limit ~= 0
+        or power.electric_buffer_size ~= 1 or not power.disabled_by_script then
+      fail("failed-activation lockout did not keep the reserve and power interface disabled")
+    end
+  elseif phase == "post_warp_lockout" and elapsed == 900 then
+    local sound = sound_state(platform)
+    if sound.state ~= "cooldown" or sound.cooldown_until ~= game.tick + 10 then
+      fail("failed-activation lockout ended before its existing cooldown deadline")
+    end
+  elseif phase == "post_warp_lockout" and elapsed == 910 then
     local charge = charge_buffers(platform)
     local support = charge_buffer(platform)
     local expected_watts = platform.weight * 10
@@ -1276,7 +1323,20 @@ script.on_nth_tick(10, function()
       or math.abs(support.power_usage * 60 - expected_watts) > expected_watts * 0.001 then
       fail("charging did not begin after the final non-reserve requirement was met")
     end
-  elseif phase == "post_warp_lockout" and elapsed == 630 then
+    local sound = sound_state(platform)
+    if not sound.readiness_announced or sound.readiness_sound_tick ~= game.tick
+        or sound.charge_step ~= 1
+        or not sound.charge_next_tick
+        or sound.charge_next_tick <= game.tick
+        or sound.charge_next_tick > game.tick + 30 then
+      fail("charging did not start its half-second progress hum scheduler")
+    end
+  elseif phase == "post_warp_lockout" and elapsed == 920 then
+    local sound = sound_state(platform)
+    if not sound.readiness_announced
+        or sound.readiness_sound_tick ~= storage.runtime_test.started_at + 910 then
+      fail("continuous readiness replayed or cleared the one-shot warp command")
+    end
     local player = game.players[1]
     if player and player.gui.screen.warp_drive_window then
       local content = find_gui_element(player.gui.screen.warp_drive_window,
@@ -1330,10 +1390,18 @@ script.on_nth_tick(10, function()
     set_reserve_energy(platform, required_charge)
     storage.power_source.power_production = 60e9 / 60
     storage.power_source.output_flow_limit = 60e9 / 60
-  elseif phase == "post_warp_lockout" and elapsed == 640 then
+  elseif phase == "post_warp_lockout" and elapsed == 930 then
     local support = charge_buffers(platform)
     if #support ~= 1 then
       fail("drive did not re-enter warp after the lockout")
+    end
+    local sound = sound_state(platform)
+    if sound.charge_next_tick ~= nil or sound.charge_step ~= nil
+        or sound.background_index ~= 1
+        or not sound.warp_next_tick
+        or sound.warp_next_tick <= game.tick
+        or sound.warp_next_tick > game.tick + 90 then
+      fail("warp activation did not replace charging audio and schedule its background handoff")
     end
     game.forces.player.technologies["practical-warp-drive"].researched = false
     set_phase("circuit_and_revocation")

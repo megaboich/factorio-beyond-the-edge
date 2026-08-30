@@ -25,11 +25,18 @@ BUZZ_HIGH_HZ = 62.0
 # libvorbis consumes 128 leading PCM samples when these files are decoded.
 BUZZ_ENCODER_PREROLL_SAMPLES = 128
 BUZZ_CODEC_FADE = 0.006
+BUZZ_OUTPUT_GAIN = 1.40
+BUZZ_EARLY_PRESENCE_GAIN = 1.40
+FAILED_ACTIVATION_DURATION = 1.6
 
-ACTIVATION_DURATION = 3.0
-DEACTIVATION_DURATION = 3.0
+ACTIVATION_DURATION = 1.5
+DEACTIVATION_DURATION = ACTIVATION_DURATION
+TRANSITION_OUTPUT_GAIN = 1.20
 BACKGROUND_DURATION = 12.0
 BACKGROUND_SEGMENT_DURATION = BACKGROUND_DURATION / 2.0
+BACKGROUND_OUTPUT_GAIN = 2.0
+OUTPUT_PEAK_LIMIT = 0.88
+ENCODER_SAFE_PEAK = 0.82
 
 OUTPUT_DIRECTORY = Path(__file__).resolve().parent
 
@@ -61,6 +68,39 @@ def normalize(samples: Sequence[float], peak: float) -> list[float]:
         return list(samples)
     gain = peak / measured_peak
     return [sample * gain for sample in samples]
+
+
+def gain_with_peak_limit(
+    samples: Sequence[float], gain: float, peak: float = OUTPUT_PEAK_LIMIT
+) -> list[float]:
+    """Raise perceived level while containing only the strongest transient peaks."""
+    knee = peak * 0.75
+    limited: list[float] = []
+    for sample in samples:
+        driven = sample * gain
+        magnitude = abs(driven)
+        if magnitude > knee:
+            magnitude = knee + (peak - knee) * (
+                1.0 - math.exp(-(magnitude - knee) / (peak - knee))
+            )
+        limited.append(math.copysign(magnitude, driven))
+    return limited
+
+
+def add_encoder_headroom(samples: Sequence[float]) -> list[float]:
+    """Leave room for Vorbis reconstruction overshoot on dense transition mixes."""
+    measured_peak = max(abs(sample) for sample in samples)
+    if measured_peak > ENCODER_SAFE_PEAK:
+        return normalize(samples, ENCODER_SAFE_PEAK)
+    return list(samples)
+
+
+def periodic_sample(samples: Sequence[float], position: float) -> float:
+    """Read a looping waveform with interpolation so accelerating it remains smooth."""
+    before = math.floor(position) % len(samples)
+    after = (before + 1) % len(samples)
+    fraction = position - math.floor(position)
+    return samples[before] + (samples[after] - samples[before]) * fraction
 
 
 def generate_buzz(frequency_hz: float, charge: float, seed: int) -> list[float]:
@@ -114,114 +154,222 @@ def generate_buzz(frequency_hz: float, charge: float, seed: int) -> list[float]:
         codec_envelope = smoothstep(loop_time / BUZZ_CODEC_FADE) * smoothstep(
             (loop_duration - loop_time) / BUZZ_CODEC_FADE
         )
-        samples.append(codec_envelope * sample)
+        early_presence = 1.0 + (
+            BUZZ_EARLY_PRESENCE_GAIN - 1.0
+        ) * (1.0 - charge) ** 1.4
+        samples.append(codec_envelope * sample * BUZZ_OUTPUT_GAIN * early_presence)
 
     measured_peak = max(abs(sample) for sample in samples)
-    if measured_peak > 0.90:
-        return normalize(samples, peak=0.90)
+    if measured_peak > OUTPUT_PEAK_LIMIT:
+        return normalize(samples, peak=OUTPUT_PEAK_LIMIT)
     return samples
 
 
 def generate_activation() -> list[float]:
-    """Synthesize a dramatic warp release and align its tail with the ambience."""
+    """Build a rising dimensional tear, portal impact, and phase-aligned tail."""
     sample_count = round(ACTIVATION_DURATION * SAMPLE_RATE)
+    final_buzz = generate_buzz(BUZZ_HIGH_HZ, 1.0, 0xB022 + BUZZ_COUNT - 1)[
+        BUZZ_ENCODER_PREROLL_SAMPLES:
+    ]
     rng = random.Random(0xA71C)
-    noise_low = 0.0
-    noise_high = 0.0
-    transient_samples: list[float] = []
+    air_low = 0.0
+    air_high = 0.0
+    rumble = 0.0
+    blast_body = 0.0
+    collapse_low = 0.0
+    collapse_high = 0.0
+    buzz_position = 0.0
+    detuned_position_low = 0.0
+    detuned_position_high = 0.0
+    morph_samples: list[float] = []
+    impact_samples: list[float] = []
+    portal_time = 0.54
 
     for index in range(sample_count):
         time = index / SAMPLE_RATE
         noise = rng.uniform(-1.0, 1.0)
-        noise_low += one_pole_alpha(210.0) * (noise - noise_low)
-        noise_high += one_pole_alpha(4_800.0) * (noise - noise_high)
-        shock_air = noise_high - noise_low
+        approach = smoothstep(time / portal_time)
+        low_cutoff = 75.0 + 925.0 * approach
+        high_cutoff = 700.0 + 9_300.0 * approach
+        air_low += one_pole_alpha(low_cutoff) * (noise - air_low)
+        air_high += one_pole_alpha(high_cutoff) * (noise - air_high)
+        rumble += one_pole_alpha(105.0) * (noise - rumble)
+        blast_body += one_pole_alpha(1_350.0) * (noise - blast_body)
+        air_band = air_high - air_low
+        blast_mid = blast_body - rumble
 
-        bass_phase = math.tau * (96.0 * time - 24.0 * time * time)
-        sample = 0.78 * math.exp(-3.6 * time) * math.sin(bass_phase)
-        sample += 0.34 * math.exp(-8.5 * time) * math.sin(
-            math.tau * (238.0 * time - 52.0 * time * time)
+        morph = smoothstep((time - 0.02) / 0.48)
+        playback_rate = 1.0 + 2.4 * morph**1.5
+        carrier = periodic_sample(final_buzz, buzz_position)
+        detuned_low = periodic_sample(final_buzz, detuned_position_low)
+        detuned_high = periodic_sample(final_buzz, detuned_position_high)
+        buzz_position += playback_rate
+        detuned_position_low += playback_rate * (1.0 - 0.014 * morph)
+        detuned_position_high += playback_rate * (1.0 + 0.021 * morph)
+
+        saturated = math.tanh(carrier * (1.4 + 1.7 * morph))
+        source_pulse = 0.28 + 0.72 * min(1.0, abs(carrier) * 1.8)
+        excited_air = air_band * source_pulse
+        accelerated_buzz = (
+            0.47 * carrier
+            + 0.17 * detuned_low
+            + 0.17 * detuned_high
+            + 0.19 * saturated
+        )
+        air_emergence = smoothstep((time - 0.12) / 0.36)
+        final_flare = smoothstep((time - (portal_time - 0.12)) / 0.10)
+        source_texture = (1.0 - 0.28 * morph) * carrier + morph * (
+            0.72 * accelerated_buzz
+            + air_emergence * (0.42 + 0.48 * final_flare) * excited_air
+            + 0.12 * air_emergence * rumble
         )
 
-        impact_time = time - 0.09
-        if impact_time >= 0.0:
-            impact_phase = math.tau * (
-                68.0 * impact_time - 13.0 * impact_time * impact_time
+        pre_rupture_dip = 1.0 - 0.94 * smoothstep(
+            (time - (portal_time - 0.055)) / 0.042
+        )
+        release = 1.0 - smoothstep((time - portal_time) / 0.065)
+        swell_phase = math.tau * (
+            31.0 * time + 19.0 * time * time / (2.0 * portal_time)
+        )
+        shear_phase = math.tau * (
+            128.0 * time + 590.0 * time * time / (2.0 * portal_time)
+        )
+        spectral_shear = math.sin(
+            shear_phase + 2.8 * math.sin(math.tau * 5.3 * time)
+        ) * source_pulse
+        morph_sound = pre_rupture_dip * release * (
+            source_texture
+            + air_emergence * (
+                0.20 * math.sin(swell_phase)
+                + (0.07 + 0.13 * final_flare) * spectral_shear
             )
-            sample += 0.92 * math.exp(-4.1 * impact_time) * math.sin(impact_phase)
-            sample += 0.24 * math.exp(-15.0 * impact_time) * math.sin(
-                math.tau * 330.0 * impact_time
+        )
+
+        elapsed = time - portal_time
+        impact = 0.0
+        if elapsed >= 0.0:
+            collapse = smoothstep(elapsed / 0.62)
+            collapse_low_cutoff = 1_700.0 * (65.0 / 1_700.0) ** collapse
+            collapse_high_cutoff = 5_200.0 * (420.0 / 5_200.0) ** collapse
+            collapse_low += one_pole_alpha(collapse_low_cutoff) * (
+                noise - collapse_low
             )
+            collapse_high += one_pole_alpha(collapse_high_cutoff) * (
+                noise - collapse_high
+            )
+            collapse_air = collapse_high - collapse_low
+            pressure_phase = math.tau * (
+                72.0 * elapsed - 18.0 * elapsed * elapsed
+            )
+            sub_phase = math.tau * (
+                41.0 * elapsed - 8.0 * elapsed * elapsed
+            )
+            fold_phase = math.tau * (
+                980.0 * elapsed - 610.0 * elapsed * elapsed
+            )
+            fracture_phase = math.tau * (
+                3_200.0 * elapsed - 2_350.0 * elapsed * elapsed
+            )
+            rupture = math.exp(-82.0 * elapsed)
+            fold_envelope = (1.0 - math.exp(-90.0 * elapsed)) * math.exp(
+                -4.8 * elapsed
+            )
+            vacuum_gate = 1.0 - smoothstep((elapsed - 0.58) / 0.34)
 
-        sample += 0.50 * math.exp(-26.0 * time) * noise
-        sample += 0.30 * math.exp(-5.8 * time) * shock_air
-        sample += 0.19 * math.exp(-2.8 * time) * math.sin(
-            math.tau * (1_760.0 * time - 410.0 * time * time)
-            + 4.2 * math.sin(math.tau * 8.0 * time)
-        )
-        sample += 0.08 * math.exp(-1.8 * time) * math.sin(
-            math.tau * (620.0 * time + 95.0 * time * time)
-        )
+            # The wide rupture folds rapidly toward the sub pulse: descending
+            # inharmonic bands and a closing noise band imply space collapsing inward.
+            impact = -1.95 * math.exp(-5.8 * elapsed) * math.cos(pressure_phase)
+            impact -= 1.42 * math.exp(-3.9 * elapsed) * math.sin(sub_phase)
+            impact += rupture * (
+                1.05 * noise + 0.62 * math.sin(fracture_phase)
+            )
+            impact += fold_envelope * (
+                1.42 * collapse_air
+                + 0.74 * math.sin(fold_phase)
+                + 0.58 * blast_mid
+                + 0.78 * rumble
+            )
+            impact = vacuum_gate * math.tanh(2.15 * impact)
 
-        sample *= smoothstep(time / 0.003)
-        transient_samples.append(sample)
+        fade = edge_fade(index, sample_count, 0.008, 0.12)
+        morph_samples.append(morph_sound * fade)
+        impact_samples.append(impact * fade)
 
-    transient_samples = normalize(transient_samples, peak=0.90)
+    morph_peak = max(abs(sample) for sample in morph_samples)
+    if morph_peak > 0.64:
+        morph_samples = normalize(morph_samples, peak=0.64)
+    impact_samples = normalize(impact_samples, peak=0.90)
     samples: list[float] = []
-    for index, transient in enumerate(transient_samples):
+    for index, (morph_sound, impact) in enumerate(
+        zip(morph_samples, impact_samples)
+    ):
         time = index / SAMPLE_RATE
-        ambience_gain = smoothstep((time - 0.35) / 1.10)
+        # Leave a conspicuous vacuum after the implosion, then meet the background
+        # waveform only at the clip boundary so the following segment stays clean.
+        ambience_gain = smoothstep((time - (ACTIVATION_DURATION - 0.08)) / 0.08)
         ambience_time = BACKGROUND_DURATION - ACTIVATION_DURATION + time
-        samples.append(transient + ambience_gain * background_sample(ambience_time))
+        samples.append(
+            morph_sound
+            + impact
+            + ambience_gain * background_sample(ambience_time)
+        )
 
     next_sample_delta = abs(background_sample(0.0) - samples[-1])
     if next_sample_delta > 0.01:
         raise RuntimeError("activation tail no longer joins the background cleanly")
-    return samples
+    return add_encoder_headroom(gain_with_peak_limit(samples, 1.12, peak=0.90))
 
 
-def generate_deactivation() -> list[float]:
-    """Synthesize an immediate implosion followed by descending, fading hum."""
-    sample_count = round(DEACTIVATION_DURATION * SAMPLE_RATE)
-    rng = random.Random(0xDEA7)
-    phase = 0.0
-    noise_high = 0.0
-    noise_low = 0.0
+def generate_failed_activation(
+    frequency_hz: float, charge: float, seed: int
+) -> list[float]:
+    """Wind a matching charge hum down into an uneven, disappointed power-off."""
+    sample_count = round(FAILED_ACTIVATION_DURATION * SAMPLE_RATE)
+    buzz = generate_buzz(frequency_hz, charge, seed)[BUZZ_ENCODER_PREROLL_SAMPLES:]
+    rng = random.Random(seed ^ 0xFA17)
+    position = 0.0
+    sag_phase = 0.0
+    hum = 0.0
     samples: list[float] = []
 
     for index in range(sample_count):
         time = index / SAMPLE_RATE
-        decay = clamp(time / DEACTIVATION_DURATION)
-        frequency = 820.0 * (58.0 / 820.0) ** (decay**0.82)
-        phase += math.tau * frequency / SAMPLE_RATE
+        progress = smoothstep(time / FAILED_ACTIVATION_DURATION)
+        playback_rate = 1.0 - 0.63 * progress**1.25
+        carrier = periodic_sample(buzz, position)
+        position += playback_rate
 
+        sag_frequency = frequency_hz * (0.92 - 0.56 * progress)
+        sag_phase += math.tau * sag_frequency / SAMPLE_RATE
         noise = rng.uniform(-1.0, 1.0)
-        high_cutoff = 7_900.0 - 6_800.0 * decay**0.72
-        low_cutoff = 2_280.0 - 2_100.0 * decay**0.72
-        noise_high += one_pole_alpha(high_cutoff) * (noise - noise_high)
-        noise_low += one_pole_alpha(low_cutoff) * (noise - noise_low)
-        fading_air = noise_high - noise_low
-
-        tone = (
-            0.29 * math.sin(phase + 0.20 * math.sin(math.tau * 6.2 * time))
-            + 0.10 * math.sin(2.0 * phase + 0.5)
-            + 0.06 * math.sin(0.5 * phase + 1.3)
+        hum += one_pole_alpha(310.0 - 220.0 * progress) * (noise - hum)
+        uneven_power = 1.0 - 0.32 * progress * (
+            0.5 + 0.5 * math.sin(math.tau * (2.1 * time + 0.35 * time * time))
         )
-        hum_envelope = smoothstep(time / 0.05) * (1.0 - smoothstep(decay))
-        sample = hum_envelope * (0.45 * tone + 0.18 * (1.0 - decay) * fading_air)
-
-        bass_phase = math.tau * (72.0 * time - 15.0 * time * time)
-        sample += 0.88 * math.exp(-3.8 * time) * math.sin(bass_phase)
-        sample += 0.24 * math.exp(-9.0 * time) * math.sin(
-            math.tau * (168.0 * time - 31.0 * time * time)
+        envelope = (1.0 - smoothstep((time - 0.08) / 1.38)) * uneven_power
+        sample = envelope * (
+            (0.94 - 0.30 * progress) * carrier
+            + 0.18 * progress * math.sin(sag_phase)
+            + 0.08 * progress * hum
         )
-        sample += 0.38 * math.exp(-29.0 * time) * noise
-        sample -= 0.16 * math.exp(-7.5 * time) * math.cos(math.tau * 38.0 * time)
 
-        sample *= edge_fade(index, sample_count, 0.003, 0.20)
-        samples.append(sample)
+        thud_time = time - 1.22
+        if thud_time >= 0.0:
+            thud_phase = math.tau * (54.0 * thud_time - 9.0 * thud_time * thud_time)
+            sample += 0.24 * math.exp(-13.0 * thud_time) * math.sin(thud_phase)
+        samples.append(sample * edge_fade(index, sample_count, 0.006, 0.08))
 
-    return normalize(samples, peak=0.90)
+    return gain_with_peak_limit(samples, 1.0, peak=0.72)
+
+
+def generate_deactivation() -> list[float]:
+    """Reverse activation so deactivation unfolds from the same rupture."""
+    reversed_activation = list(reversed(generate_activation()))
+    sample_count = len(reversed_activation)
+    return [
+        sample * edge_fade(index, sample_count, 0.012, 0.012)
+        for index, sample in enumerate(reversed_activation)
+    ]
 
 
 def ping_voice(time: float, start: float, frequency_hz: float, gain: float) -> float:
@@ -314,7 +462,7 @@ def background_sample(time: float) -> float:
         sample += ping_voice(time, start, frequency_hz, gain)
     for start, gain in ((6.48, 0.054), (9.12, 0.047)):
         sample += hyperspace_sonar_voice(time, start, gain)
-    return sample
+    return sample * BACKGROUND_OUTPUT_GAIN
 
 
 def generate_background_segment(start_time: float) -> list[float]:
@@ -403,6 +551,16 @@ def main() -> None:
                 temporary_directory,
                 f"warp-buzz-{index + 1:02d}",
                 lambda frequency=frequency, index=index: generate_buzz(
+                    frequency,
+                    charge=index / (BUZZ_COUNT - 1),
+                    seed=0xB022 + index,
+                ),
+            )
+            render_sound(
+                ffmpeg,
+                temporary_directory,
+                f"warp-failed-activation-{index + 1:02d}",
+                lambda frequency=frequency, index=index: generate_failed_activation(
                     frequency,
                     charge=index / (BUZZ_COUNT - 1),
                     seed=0xB022 + index,

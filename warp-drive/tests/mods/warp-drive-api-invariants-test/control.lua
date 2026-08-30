@@ -31,6 +31,19 @@ local PLANETARY_PACK_RECIPES = {
 }
 local ORBITAL_ORDER = {"nauvis", "aquilo", "solar-system-edge", "shattered-planet"}
 local ROUTE = "nauvis-vulcanus"
+local WARP_SOUNDS = {
+  "warp-drive-command",
+  "warp-drive-activation",
+  "warp-drive-deactivation",
+  "warp-drive-background-01",
+  "warp-drive-background-02"
+}
+
+for index = 1, 20 do
+  WARP_SOUNDS[#WARP_SOUNDS + 1] = string.format("warp-drive-buzz-%02d", index)
+  WARP_SOUNDS[#WARP_SOUNDS + 1] = string.format(
+    "warp-drive-failed-activation-%02d", index)
+end
 
 local function fail(message)
   error("WARP_TEST_FAIL: " .. message)
@@ -215,6 +228,14 @@ local function check_research_queue_is_the_writable_path()
   end
 end
 
+local function check_warp_sounds()
+  for _, path in pairs(WARP_SOUNDS) do
+    if not helpers.is_valid_sound_path(path) then
+      fail("generated sound prototype " .. path .. " is not a valid runtime sound path")
+    end
+  end
+end
+
 script.on_init(function()
   check_research_unit_energy()
   check_orbital_distances()
@@ -224,6 +245,7 @@ script.on_init(function()
   check_crafting_machine_coverage()
   check_lab_accepts_every_pack()
   check_research_queue_is_the_writable_path()
+  check_warp_sounds()
 
   local force = game.forces.player
   local platform = force.create_space_platform({
@@ -270,6 +292,6 @@ script.on_nth_tick(60, function()
         first, last))
     end
     log("WARP_TEST_PASS: research unit, orbital distance, connection length, recycling, crafting category, "
-      .. "lab input, research queue, and platform distance invariants hold")
+      .. "lab input, research queue, sound, and platform distance invariants hold")
   end
 end)
