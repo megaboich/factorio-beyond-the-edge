@@ -22,10 +22,10 @@ The shared power interface uses consumer-only secondary-input mode, the same pri
 
 | Prototype | Type | Lifetime | Role |
 | --- | --- | --- | --- |
-| `warp-drive-controller` | `constant-combinator` | Always | Visible 6x6 entity, ownership anchor, health, collision, mining, circuit input, and GUI target |
-| `warp-drive-animation` | `electric-energy-interface` | Always | Zero-power 100-frame animation, emission, and shadow |
-| `warp-drive-power-interface` | `electric-energy-interface` | Always | Runtime-sized secondary-priority detector, charging, and support sink; prototype permits requests up to `60 GW` and forbids output |
-| `warp-drive-circuit-output` | `constant-combinator` | Always | Scripted practical `W`, `C`, and `S` outputs, `D`, and pre-Practical `T`, on both wire colors |
+| `bte-warp-drive-controller` | `constant-combinator` | Always | Visible 6x6 entity, ownership anchor, health, collision, mining, circuit input, and GUI target |
+| `bte-warp-drive-animation` | `electric-energy-interface` | Always | Zero-power 100-frame animation, emission, and shadow |
+| `bte-warp-drive-power-interface` | `electric-energy-interface` | Always | Runtime-sized secondary-priority detector, charging, and support sink; prototype permits requests up to `60 GW` and forbids output |
+| `bte-warp-drive-circuit-output` | `constant-combinator` | Always | Scripted practical `W`, `C`, and `S` outputs, `D`, and pre-Practical `T`, on both wire colors |
 
 Legacy detector, support, and tiered charge-buffer prototypes remain defined only so supported saves can load and migrate their companions and stored energy.
 
@@ -124,11 +124,11 @@ Every output is independently enabled and signal-selectable. `W`, `C`, and `S` r
 
 ## Validation
 
-After changing composition prototypes or lifecycle code:
+After changing composition prototypes or lifecycle code, from the repository root:
 
-1. Run `./make.sh`.
+1. Run `./make.sh warp-drive`.
 2. Run Factorio with `--dump-data` and inspect resolved prototypes.
-3. Run `./tests/run-runtime-tests.sh`.
+3. Run `./warp-drive/tests/run-runtime-tests.sh`.
 4. Run `git diff --check`.
 
 The scripted suite covers placement, duplicate rejection, companion recovery and cleanup, electrical transitions, circuit output, research revocation, and relocation. Interactive checks remain necessary for electrical behavior, graphics, GUI interception, robots and ghosts, and wire geometry.

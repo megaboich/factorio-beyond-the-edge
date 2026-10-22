@@ -1,22 +1,22 @@
 local Drive = {}
 
-local DRIVE_NAME = "warp-drive-controller"
-local DRIVE_ITEM_NAME = "warp-drive"
-local POWER_NAME = "warp-drive-power-interface"
-local SUPPORT_NAME = "warp-drive-support-load"
-local DETECTOR_NAME = "warp-drive-detector-load"
-local CHARGE_NAME = "warp-drive-charge-buffer"
+local DRIVE_NAME = "bte-warp-drive-controller"
+local DRIVE_ITEM_NAME = "bte-warp-drive"
+local POWER_NAME = "bte-warp-drive-power-interface"
+local SUPPORT_NAME = "bte-warp-drive-support-load"
+local DETECTOR_NAME = "bte-warp-drive-detector-load"
+local CHARGE_NAME = "bte-warp-drive-charge-buffer"
 local LEGACY_POWER_NAMES = {
   SUPPORT_NAME,
   DETECTOR_NAME,
-  "warp-drive-charge-buffer-100mj",
-  "warp-drive-charge-buffer-1gj",
-  "warp-drive-charge-buffer-10gj",
+  "bte-warp-drive-charge-buffer-100mj",
+  "bte-warp-drive-charge-buffer-1gj",
+  "bte-warp-drive-charge-buffer-10gj",
   CHARGE_NAME
 }
-local CIRCUIT_OUTPUT_NAME = "warp-drive-circuit-output"
-local ANIMATION_NAME = "warp-drive-animation"
-local PRACTICAL_TECH = "practical-warp-drive"
+local CIRCUIT_OUTPUT_NAME = "bte-warp-drive-circuit-output"
+local ANIMATION_NAME = "bte-warp-drive-animation"
+local PRACTICAL_TECH = "bte-practical-warp-drive"
 local CHARGE_JOULES_PER_KG = 100
 local TICKS_PER_SECOND = 60
 local WARP_BOOST_PER_LEVEL = 10
@@ -216,7 +216,7 @@ local function recover_orphan_companions(record)
   local migrated_energy = 0
   for _, name in ipairs(LEGACY_POWER_NAMES) do
     for _, companion in pairs(entity.surface.find_entities_filtered({name = name})) do
-      if string.find(name, "warp-drive-charge-buffer", 1, true) then
+      if string.find(name, "bte-warp-drive-charge-buffer", 1, true) then
         migrated_energy = math.max(migrated_energy, companion.energy)
       end
       companion.destroy()
@@ -296,22 +296,22 @@ end
 
 function Drive.serialize_settings(record)
   return {
-    warp_drive_enabled = record.enabled,
-    warp_drive_circuit_enabled = record.circuit_enabled,
-    warp_drive_circuit_first_signal = record.circuit_first_signal,
-    warp_drive_circuit_comparator = record.circuit_comparator,
-    warp_drive_circuit_second_signal = record.circuit_second_signal,
-    warp_drive_circuit_constant = record.circuit_constant,
-    warp_drive_output_warp_enabled = record.output_warp_enabled,
-    warp_drive_output_warp_signal = record.output_warp_signal,
-    warp_drive_output_distance_enabled = record.output_distance_enabled,
-    warp_drive_output_distance_signal = record.output_distance_signal,
-    warp_drive_output_charge_enabled = record.output_charge_enabled,
-    warp_drive_output_charge_signal = record.output_charge_signal,
-    warp_drive_output_speed_enabled = record.output_speed_enabled,
-    warp_drive_output_speed_signal = record.output_speed_signal,
-    warp_drive_output_tachyon_density_enabled = record.output_tachyon_density_enabled,
-    warp_drive_output_tachyon_density_signal = record.output_tachyon_density_signal
+    bte_warp_drive_enabled = record.enabled,
+    bte_warp_drive_circuit_enabled = record.circuit_enabled,
+    bte_warp_drive_circuit_first_signal = record.circuit_first_signal,
+    bte_warp_drive_circuit_comparator = record.circuit_comparator,
+    bte_warp_drive_circuit_second_signal = record.circuit_second_signal,
+    bte_warp_drive_circuit_constant = record.circuit_constant,
+    bte_warp_drive_output_warp_enabled = record.output_warp_enabled,
+    bte_warp_drive_output_warp_signal = record.output_warp_signal,
+    bte_warp_drive_output_distance_enabled = record.output_distance_enabled,
+    bte_warp_drive_output_distance_signal = record.output_distance_signal,
+    bte_warp_drive_output_charge_enabled = record.output_charge_enabled,
+    bte_warp_drive_output_charge_signal = record.output_charge_signal,
+    bte_warp_drive_output_speed_enabled = record.output_speed_enabled,
+    bte_warp_drive_output_speed_signal = record.output_speed_signal,
+    bte_warp_drive_output_tachyon_density_enabled = record.output_tachyon_density_enabled,
+    bte_warp_drive_output_tachyon_density_signal = record.output_tachyon_density_signal
   }
 end
 
@@ -342,27 +342,27 @@ function Drive.tag_blueprint(blueprint, mapping)
 end
 
 function Drive.apply_settings(record, tags)
-  if not record or not tags or tags.warp_drive_circuit_enabled == nil then
+  if not record or not tags or tags.bte_warp_drive_circuit_enabled == nil then
     return false
   end
-  record.enabled = tags.warp_drive_enabled ~= false
-  record.circuit_enabled = tags.warp_drive_circuit_enabled == true
+  record.enabled = tags.bte_warp_drive_enabled ~= false
+  record.circuit_enabled = tags.bte_warp_drive_circuit_enabled == true
   Drive.normalize_engagement(record)
-  record.circuit_first_signal = tags.warp_drive_circuit_first_signal
+  record.circuit_first_signal = tags.bte_warp_drive_circuit_first_signal
   record.circuit_comparator = CIRCUIT_COMPARATORS[
-    CIRCUIT_COMPARATOR_INDEX[tags.warp_drive_circuit_comparator] or 1]
-  record.circuit_second_signal = tags.warp_drive_circuit_second_signal
-  record.circuit_constant = tags.warp_drive_circuit_constant or 0
-  record.output_warp_enabled = tags.warp_drive_output_warp_enabled ~= false
-  record.output_warp_signal = tags.warp_drive_output_warp_signal or WARP_LEVEL_SIGNAL
-  record.output_distance_enabled = tags.warp_drive_output_distance_enabled == true
-  record.output_distance_signal = tags.warp_drive_output_distance_signal or DISTANCE_SIGNAL
-  record.output_charge_enabled = tags.warp_drive_output_charge_enabled ~= false
-  record.output_charge_signal = tags.warp_drive_output_charge_signal or CHARGE_SIGNAL
-  record.output_speed_enabled = tags.warp_drive_output_speed_enabled ~= false
-  record.output_speed_signal = tags.warp_drive_output_speed_signal or SPEED_SIGNAL
-  record.output_tachyon_density_enabled = tags.warp_drive_output_tachyon_density_enabled == true
-  record.output_tachyon_density_signal = tags.warp_drive_output_tachyon_density_signal
+    CIRCUIT_COMPARATOR_INDEX[tags.bte_warp_drive_circuit_comparator] or 1]
+  record.circuit_second_signal = tags.bte_warp_drive_circuit_second_signal
+  record.circuit_constant = tags.bte_warp_drive_circuit_constant or 0
+  record.output_warp_enabled = tags.bte_warp_drive_output_warp_enabled ~= false
+  record.output_warp_signal = tags.bte_warp_drive_output_warp_signal or WARP_LEVEL_SIGNAL
+  record.output_distance_enabled = tags.bte_warp_drive_output_distance_enabled == true
+  record.output_distance_signal = tags.bte_warp_drive_output_distance_signal or DISTANCE_SIGNAL
+  record.output_charge_enabled = tags.bte_warp_drive_output_charge_enabled ~= false
+  record.output_charge_signal = tags.bte_warp_drive_output_charge_signal or CHARGE_SIGNAL
+  record.output_speed_enabled = tags.bte_warp_drive_output_speed_enabled ~= false
+  record.output_speed_signal = tags.bte_warp_drive_output_speed_signal or SPEED_SIGNAL
+  record.output_tachyon_density_enabled = tags.bte_warp_drive_output_tachyon_density_enabled == true
+  record.output_tachyon_density_signal = tags.bte_warp_drive_output_tachyon_density_signal
     or TACHYON_DENSITY_SIGNAL
   record.output_detector_power_enabled = nil
   record.output_detector_power_signal = nil
@@ -388,7 +388,7 @@ function Drive.register(entity, tags)
       allow_belts = false
     })
     entity.destroy({raise_destroy = true})
-    platform.force.print({"warp-drive.duplicate"})
+    platform.force.print({"bte-warp-drive.duplicate"})
     return nil
   end
   if existing and existing.entity ~= entity then

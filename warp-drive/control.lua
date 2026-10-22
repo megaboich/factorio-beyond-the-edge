@@ -3,7 +3,7 @@ local Research = require("scripts.research")
 local Gui = require("scripts.gui")
 local Warp = require("scripts.warp")
 
-local DRIVE_NAME = "warp-drive-controller"
+local DRIVE_NAME = "bte-warp-drive-controller"
 local UPDATE_TICKS = 10
 local RESEARCH_UPDATE_TICKS = 60
 
@@ -12,8 +12,8 @@ Gui.configure({
   engagement_changed = Warp.engagement_changed
 })
 
-if script.active_mods["warp-drive-runtime-test"] then
-  remote.add_interface("warp-drive-runtime-test", {
+if script.active_mods["bte-warp-drive-runtime-test"] then
+  remote.add_interface("bte-warp-drive-runtime-test", {
     reserve_energy = function(platform_index, value)
       local record = Drive.get(platform_index)
       if not record then

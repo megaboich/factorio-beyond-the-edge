@@ -2,7 +2,7 @@ local Drive = require("scripts.drive")
 
 local Warp = {}
 
-local PRACTICAL_TECH = "practical-warp-drive"
+local PRACTICAL_TECH = "bte-practical-warp-drive"
 local CHARGE_JOULES_PER_KG = 100
 local SUPPORT_WATTS_PER_KG = 10
 local SUPPORT_POWER_TOLERANCE = 0.999
@@ -10,19 +10,19 @@ local WARP_RESERVE_SECONDS = 10
 local ENTRY_RESERVE_RATIO = 0.1
 local SPEED_EXIT_GRACE_TICKS = 5 * 60
 local WARP_STREAK_COUNT = 48
-local LIGHTNING_NAME = "warp-drive-lightning"
+local LIGHTNING_NAME = "bte-warp-drive-lightning"
 local LIGHTNING_DURATION_TICKS = 36
 local LIGHTNING_DENSITY_TILES = 32 * 32
 local WARP_EFFECT_FIELD_MARGIN = 64
 local CHARGE_SOUND_COUNT = 20
 local CHARGE_SOUND_TICKS = 30
-local WARP_COMMAND_SOUND = "warp-drive-command"
-local WARP_ACTIVATION_SOUND = "warp-drive-activation"
-local WARP_DEACTIVATION_SOUND = "warp-drive-deactivation"
+local WARP_COMMAND_SOUND = "bte-warp-drive-command"
+local WARP_ACTIVATION_SOUND = "bte-warp-drive-activation"
+local WARP_DEACTIVATION_SOUND = "bte-warp-drive-deactivation"
 local FAILED_ACTIVATION_COOLDOWN_TICKS = 5 * 60
 local WARP_ACTIVATION_TICKS = 90
 local WARP_BACKGROUND_TICKS = 6 * 60
-local POWER_NAME = "warp-drive-power-interface"
+local POWER_NAME = "bte-warp-drive-power-interface"
 local DETECTOR_REFERENCE_POWER_WATTS = 200000000
 local DETECTOR_MAX_POWER_WATTS = 1000000000
 local DETECTOR_PROBE_WATTS = 10000000
@@ -202,7 +202,7 @@ local function update_charge_sound(record, platform)
   local charge = required_charge(platform)
   local ratio = charge > 0 and math.min(1, (record.reserve_energy or 0) / charge) or 0
   local step = math.min(CHARGE_SOUND_COUNT, math.floor(ratio * CHARGE_SOUND_COUNT) + 1)
-  play_global_sound(record, string.format("warp-drive-buzz-%02d", step))
+  play_global_sound(record, string.format("bte-warp-drive-buzz-%02d", step))
   record.charge_sound_step = step
   record.charge_sound_next_tick = game.tick + CHARGE_SOUND_TICKS
 end
@@ -236,7 +236,7 @@ local function update_warp_background_sound(record)
     return
   end
   local index = record.warp_background_sound_index or 1
-  play_global_sound(record, string.format("warp-drive-background-%02d", index))
+  play_global_sound(record, string.format("bte-warp-drive-background-%02d", index))
   record.warp_background_sound_index = index == 1 and 2 or 1
   record.warp_sound_next_tick = game.tick + WARP_BACKGROUND_TICKS
 end
@@ -259,7 +259,7 @@ local function start_failed_activation(record, reason)
   if not step then
     return false
   end
-  play_global_sound(record, string.format("warp-drive-failed-activation-%02d", step))
+  play_global_sound(record, string.format("bte-warp-drive-failed-activation-%02d", step))
   start_cooldown(record, FAILED_ACTIVATION_COOLDOWN_TICKS,
     reason or "activation-interrupted")
   reset_charge_sound(record)

@@ -15,7 +15,7 @@ end
 
 local function static_drive_sprite()
   return {
-    filename = "__warp-drive__/graphics/entity/warp-drive/quantum-stabilizer-hr-animation-1.png",
+    filename = "__bte-warp-drive__/graphics/entity/warp-drive/quantum-stabilizer-hr-animation-1.png",
     priority = "high",
     width = 410,
     height = 410,
@@ -71,10 +71,10 @@ end
 
 local function animation_layers()
   return {
-    striped_animation("__warp-drive__/graphics/entity/warp-drive/quantum-stabilizer-hr-animation"),
-    striped_animation("__warp-drive__/graphics/entity/warp-drive/quantum-stabilizer-hr-emission", "additive"),
+    striped_animation("__bte-warp-drive__/graphics/entity/warp-drive/quantum-stabilizer-hr-animation"),
+    striped_animation("__bte-warp-drive__/graphics/entity/warp-drive/quantum-stabilizer-hr-emission", "additive"),
     {
-      filename = "__warp-drive__/graphics/entity/warp-drive/quantum-stabilizer-hr-shadow.png",
+      filename = "__bte-warp-drive__/graphics/entity/warp-drive/quantum-stabilizer-hr-shadow.png",
       priority = "high",
       width = 900,
       height = 420,
@@ -90,12 +90,12 @@ end
 
 local drive = {
   type = "constant-combinator",
-  name = "warp-drive-controller",
+  name = "bte-warp-drive-controller",
   localised_name = {"entity-name.warp-drive"},
-  icon = "__warp-drive__/graphics/icons/warp-drive.png",
+  icon = "__bte-warp-drive__/graphics/icons/warp-drive.png",
   icon_size = 64,
   flags = {"placeable-neutral", "placeable-player", "player-creation"},
-  minable = {mining_time = 1, result = "warp-drive"},
+  minable = {mining_time = 1, result = "bte-warp-drive"},
   max_health = 3000,
   corpse = "nuclear-reactor-remnants",
   dying_explosion = "nuclear-reactor-explosion",
@@ -115,9 +115,9 @@ local drive = {
 
 local drive_animation = {
   type = "electric-energy-interface",
-  name = "warp-drive-animation",
+  name = "bte-warp-drive-animation",
   localised_name = {"entity-name.warp-drive"},
-  icon = "__warp-drive__/graphics/icons/warp-drive.png",
+  icon = "__bte-warp-drive__/graphics/icons/warp-drive.png",
   icon_size = 64,
   flags = {"not-on-map", "not-blueprintable", "not-deconstructable", "not-flammable", "not-repairable"},
   hidden = true,
@@ -145,9 +145,9 @@ local drive_animation = {
 -- Legacy accumulators remain defined so existing saves can migrate their stored energy.
 local charge_buffer = {
   type = "accumulator",
-  name = "warp-drive-charge-buffer",
+  name = "bte-warp-drive-charge-buffer",
   localised_name = {"entity-name.warp-drive"},
-  icon = "__warp-drive__/graphics/icons/warp-drive.png",
+  icon = "__bte-warp-drive__/graphics/icons/warp-drive.png",
   icon_size = 64,
   flags = {"not-on-map", "not-blueprintable", "not-deconstructable", "not-flammable", "not-repairable"},
   hidden = true,
@@ -175,22 +175,22 @@ local charge_buffer = {
 }
 
 local charge_buffer_100mj = table.deepcopy(charge_buffer)
-charge_buffer_100mj.name = "warp-drive-charge-buffer-100mj"
+charge_buffer_100mj.name = "bte-warp-drive-charge-buffer-100mj"
 charge_buffer_100mj.energy_source.buffer_capacity = "100MJ"
 
 local charge_buffer_1gj = table.deepcopy(charge_buffer)
-charge_buffer_1gj.name = "warp-drive-charge-buffer-1gj"
+charge_buffer_1gj.name = "bte-warp-drive-charge-buffer-1gj"
 charge_buffer_1gj.energy_source.buffer_capacity = "1GJ"
 
 local charge_buffer_10gj = table.deepcopy(charge_buffer)
-charge_buffer_10gj.name = "warp-drive-charge-buffer-10gj"
+charge_buffer_10gj.name = "bte-warp-drive-charge-buffer-10gj"
 charge_buffer_10gj.energy_source.buffer_capacity = "10GJ"
 
 local support_load = {
   type = "electric-energy-interface",
-  name = "warp-drive-support-load",
+  name = "bte-warp-drive-support-load",
   localised_name = {"entity-name.warp-drive"},
-  icon = "__warp-drive__/graphics/icons/warp-drive.png",
+  icon = "__bte-warp-drive__/graphics/icons/warp-drive.png",
   icon_size = 64,
   flags = {"not-on-map", "not-blueprintable", "not-deconstructable", "not-flammable", "not-repairable"},
   hidden = true,
@@ -217,12 +217,12 @@ local support_load = {
 }
 
 local power_interface = table.deepcopy(support_load)
-power_interface.name = "warp-drive-power-interface"
+power_interface.name = "bte-warp-drive-power-interface"
 power_interface.energy_source.usage_priority = "secondary-input"
 
 local subspace_smoke = {
   type = "trivial-smoke",
-  name = "warp-drive-subspace-smoke",
+  name = "bte-warp-drive-subspace-smoke",
   animation = smoke_animations.trivial_smoke_fast({
     animation_speed = 0.35,
     scale = 1.4,
@@ -241,7 +241,7 @@ local subspace_smoke = {
 -- Reuse Fulgora's procedurally forked bolt and all of its visual variations without damage,
 -- attractor energy, thunder, camera flash, debris, or smoke.
 local warp_lightning = table.deepcopy(data.raw.lightning.lightning)
-warp_lightning.name = "warp-drive-lightning"
+warp_lightning.name = "bte-warp-drive-lightning"
 warp_lightning.hidden = true
 warp_lightning.factoriopedia_simulation = nil
 warp_lightning.damage = nil
@@ -254,12 +254,12 @@ warp_lightning.attractor_hit_effect = nil
 warp_lightning.graphics_set.explosion = nil
 
 local detector_load = table.deepcopy(charge_buffer)
-detector_load.name = "warp-drive-detector-load"
+detector_load.name = "bte-warp-drive-detector-load"
 detector_load.energy_source.buffer_capacity = "166.667MJ"
 detector_load.energy_source.input_flow_limit = "1GW"
 
 local circuit_output = table.deepcopy(combinator_source)
-circuit_output.name = "warp-drive-circuit-output"
+circuit_output.name = "bte-warp-drive-circuit-output"
 circuit_output.localised_name = {"entity-name.warp-drive"}
 circuit_output.flags = {"not-on-map", "not-blueprintable", "not-deconstructable", "not-flammable", "not-repairable"}
 circuit_output.hidden = true

@@ -2,8 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_DIR="$(cd "$ROOT_DIR/.." && pwd)"
 FACTORIO_BIN="${FACTORIO_BIN:-/Applications/factorio.app/Contents/MacOS/factorio}"
-TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/warp-drive-tests.XXXXXX")"
+TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/bte-warp-drive-tests.XXXXXX")"
 BUILD_MODS="$TEST_ROOT/build-mods"
 BASIC_MODS="$TEST_ROOT/basic-mods"
 PLATFORM_MODS="$TEST_ROOT/platform-mods"
@@ -26,9 +27,9 @@ if [[ ! -x "$FACTORIO_BIN" ]]; then
 fi
 
 mkdir "$BUILD_MODS" "$BASIC_MODS" "$PLATFORM_MODS" "$RELAY_MODS" "$LOCAL_MODS" "$API_MODS"
-FACTORIO_MODS_DIR="$BUILD_MODS" "$ROOT_DIR/make.sh"
+FACTORIO_MODS_DIR="$BUILD_MODS" "$REPO_DIR/make.sh" warp-drive
 
-PACKAGE="$(printf '%s\n' "$BUILD_MODS"/warp-drive_*.zip)"
+PACKAGE="$(printf '%s\n' "$BUILD_MODS"/bte-warp-drive_*.zip)"
 if [[ ! -f "$PACKAGE" ]]; then
   printf 'Warp Drive package was not created\n' >&2
   exit 1
@@ -51,8 +52,8 @@ cp "$PACKAGE" "$BASIC_MODS/"
 printf 'WARP_TEST_PASS: fresh-save smoke test\n'
 
 cp "$PACKAGE" "$PLATFORM_MODS/"
-cp -R "$ROOT_DIR/tests/mods/aaa-warp-drive-speed-test" "$PLATFORM_MODS/"
-cp -R "$ROOT_DIR/tests/mods/warp-drive-runtime-test" "$PLATFORM_MODS/"
+cp -R "$ROOT_DIR/tests/mods/aaa-bte-warp-drive-speed-test" "$PLATFORM_MODS/"
+cp -R "$ROOT_DIR/tests/mods/bte-warp-drive-runtime-test" "$PLATFORM_MODS/"
 "$FACTORIO_BIN" \
   --mod-directory "$PLATFORM_MODS" \
   --create "$TEST_ROOT/platform-save.zip" \
@@ -72,7 +73,7 @@ fi
 # Factorio update that changes a unit or a prototype shape fails here with a precise
 # message instead of silently changing balance.
 cp "$PACKAGE" "$API_MODS/"
-cp -R "$ROOT_DIR/tests/mods/warp-drive-api-invariants-test" "$API_MODS/"
+cp -R "$ROOT_DIR/tests/mods/bte-warp-drive-api-invariants-test" "$API_MODS/"
 "$FACTORIO_BIN" \
   --mod-directory "$API_MODS" \
   --create "$TEST_ROOT/api-save.zip" \
@@ -88,7 +89,7 @@ if ! grep -qE 'WARP_TEST_PASS: .*invariants hold' "$TEST_ROOT/api.log"; then
   exit 1
 fi
 
-# The two research-branch runs differ only by warp-drive-space-science-test, which removes
+# The two research-branch runs differ only by bte-warp-drive-space-science-test, which removes
 # the four vanilla planetary science pack surface conditions. Warp Drive must switch from
 # the force-wide relay to platform-local acceleration on capability alone.
 run_branch_test() {
@@ -97,8 +98,8 @@ run_branch_test() {
   local marker="$3"
   shift 3
   cp "$PACKAGE" "$mods_dir/"
-  cp -R "$ROOT_DIR/tests/mods/aaa-warp-drive-branch-helper" "$mods_dir/"
-  cp -R "$ROOT_DIR/tests/mods/warp-drive-branch-test" "$mods_dir/"
+  cp -R "$ROOT_DIR/tests/mods/aaa-bte-warp-drive-branch-helper" "$mods_dir/"
+  cp -R "$ROOT_DIR/tests/mods/bte-warp-drive-branch-test" "$mods_dir/"
   for extra in "$@"; do
     cp -R "$ROOT_DIR/tests/mods/$extra" "$mods_dir/"
   done
@@ -121,6 +122,6 @@ run_branch_test "$RELAY_MODS" relay \
   'WARP_TEST_PASS: relay research branch accelerated force-wide laboratories'
 run_branch_test "$LOCAL_MODS" local \
   'WARP_TEST_PASS: local research branch accelerated platform laboratories only' \
-  warp-drive-space-science-test
+  bte-warp-drive-space-science-test
 
 printf 'WARP_TEST_PASS: all runtime tests\n'

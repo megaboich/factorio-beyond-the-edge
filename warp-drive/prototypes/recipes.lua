@@ -1,7 +1,7 @@
 data:extend({
   {
     type = "recipe",
-    name = "warp-drive",
+    name = "bte-warp-drive",
     enabled = false,
     energy_required = 120,
     ingredients = {
@@ -11,8 +11,8 @@ data:extend({
       {type = "item", name = "carbon-fiber", amount = 500},
       {type = "item", name = "supercapacitor", amount = 500}
     },
-    results = {{type = "item", name = "warp-drive", amount = 1}},
+    results = {{type = "item", name = "bte-warp-drive", amount = 1}},
     allow_productivity = false,
-    main_product = "warp-drive"
+    main_product = "bte-warp-drive"
   }
 })

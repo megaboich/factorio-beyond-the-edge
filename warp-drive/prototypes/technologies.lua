@@ -16,30 +16,30 @@ local full_science_set = {
 data:extend({
   {
     type = "technology",
-    name = "theoretical-warp-drive",
-    icon = "__warp-drive__/graphics/icons/warp-drive-big.png",
+    name = "bte-theoretical-warp-drive",
+    icon = "__bte-warp-drive__/graphics/icons/warp-drive-big.png",
     icon_size = 640,
     prerequisites = {"promethium-science-pack"},
-    effects = {{type = "unlock-recipe", recipe = "warp-drive"}},
+    effects = {{type = "unlock-recipe", recipe = "bte-warp-drive"}},
     unit = {
       count = 10000,
       time = 120,
       ingredients = full_science_set
     },
-    order = "z[warp-drive]-a[theoretical]"
+    order = "z[bte-warp-drive]-a[theoretical]"
   },
   {
     type = "technology",
-    name = "practical-warp-drive",
-    icon = "__warp-drive__/graphics/icons/warp-drive-big.png",
+    name = "bte-practical-warp-drive",
+    icon = "__bte-warp-drive__/graphics/icons/warp-drive-big.png",
     icon_size = 640,
-    prerequisites = {"theoretical-warp-drive"},
+    prerequisites = {"bte-theoretical-warp-drive"},
     unit = {
       count = 1000000000,
       time = 120,
       ingredients = full_science_set
     },
     essential = true,
-    order = "z[warp-drive]-b[practical]"
+    order = "z[bte-warp-drive]-b[practical]"
   }
 })

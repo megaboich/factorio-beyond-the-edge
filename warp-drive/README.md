@@ -215,7 +215,7 @@ Both technologies use Automation, Logistic, Military, Chemical, Production, Util
 
 ## Optional SPACELAB Integration
 
-Warp Drive began as the final chapter of SPACELAB and was split into a standalone mod so subspace research and travel would not require an orbital-industry overhaul. SPACELAB makes platforms self-sufficient; Warp Drive gives them a reason to travel deep into space.
+Warp Drive began as the final chapter of [SPACELAB](../spacelab/README.md) and was split into a standalone mod so subspace research and travel would not require an orbital-industry overhaul. SPACELAB makes platforms self-sufficient; Warp Drive gives them a reason to travel deep into space.
 
 SPACELAB is never required or detected by name. Its orbital science recipes make every required pack producible in space, so the research bonus applies only to working laboratories on the drive's platform. Any mod providing the same capability has the same effect.
 

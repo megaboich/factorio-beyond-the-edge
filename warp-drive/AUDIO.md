@@ -84,10 +84,10 @@ Requirements:
 - Python 3.9 or newer
 - `ffmpeg` with `libvorbis` support (`brew install ffmpeg`)
 
-Run from any directory:
+Run from any directory; from the repository root:
 
 ```sh
-python3 resources/audio/generate.py
+python3 warp-drive/resources/audio/generate.py
 ```
 
 Edit the constants near the top of `generate.py` to change durations, pitch range,
@@ -114,7 +114,7 @@ ffmpeg -y -i /tmp/warp-command.aiff \
   -af "silenceremove=start_periods=1:start_duration=0.02:start_threshold=-50dB:stop_periods=-1:stop_duration=0.12:stop_threshold=-50dB,highpass=f=90:poles=2,lowpass=f=9000:poles=2,acompressor=threshold=0.09:ratio=2.5:attack=10:release=80:makeup=1.8,apad=pad_dur=0.12,afade=t=in:st=0:d=0.015,alimiter=limit=0.89:attack=5:release=50" \
   -map_metadata -1 -ar 48000 -ac 1 -c:a libvorbis -q:a 5 \
   -fflags +bitexact -flags:a +bitexact -write_xing 0 -serial_offset 1 \
-  resources/audio/warp-command.ogg
+  warp-drive/resources/audio/warp-command.ogg
 ```
 
 System voice revisions can change the waveform across macOS releases. Review the
@@ -122,12 +122,12 @@ result before replacing the committed asset.
 
 ## Validation
 
-After changing audio assets, prototypes, or scheduling:
+After changing audio assets, prototypes, or scheduling, from the repository root:
 
 1. Inspect regenerated files with `ffprobe` and listen to transitions in sequence.
-2. Run `./make.sh` and verify the assets are present in the ZIP.
+2. Run `./make.sh warp-drive` and verify the assets are present in the ZIP.
 3. Run Factorio with `--dump-data` and inspect the resolved sound prototypes.
-4. Run `./tests/run-runtime-tests.sh`.
+4. Run `./warp-drive/tests/run-runtime-tests.sh`.
 5. Run `git diff --check`.
 
 Headless tests verify sound paths and scheduling state, but Factorio disables audio

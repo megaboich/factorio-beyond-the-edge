@@ -1,5 +1,5 @@
 {
-  "name": "warp-drive",
+  "name": "bte-warp-drive",
   "version": "0.1.0",
   "title": "Warp Drive",
   "author": "Oleksandr Boiko",
@@ -7,7 +7,7 @@
   "dependencies": [
     "base >= 2.1.0",
     "space-age >= 2.1.0",
-    "? spacelab >= 0.1.0"
+    "? bte-spacelab >= 0.1.0"
   ],
   "description": "Adds an experimental Warp Drive for tachyon-assisted deep-space research and accelerated space-platform travel."
 }

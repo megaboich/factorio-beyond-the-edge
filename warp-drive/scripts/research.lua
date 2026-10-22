@@ -1,7 +1,7 @@
 local Research = {}
 
-local PRACTICAL_TECH = "practical-warp-drive"
-local IMPATIENT_SETTING = "warp-drive-severely-impatient"
+local PRACTICAL_TECH = "bte-practical-warp-drive"
+local IMPATIENT_SETTING = "bte-warp-drive-severely-impatient"
 local IMPATIENT_MULTIPLIER = 1000
 local BASE_TACHYONS_PER_SECOND = 2
 local LOCATION_MULTIPLIER_MINIMUM = 10
@@ -169,11 +169,11 @@ function Research.tachyon_density(platform)
 end
 
 local function spacelab_multiplier(surface)
-  if not SPACELAB_INTEGRATION_ENABLED or not script.active_mods.spacelab then
+  if not SPACELAB_INTEGRATION_ENABLED or not script.active_mods["bte-spacelab"] then
     return 1
   end
   local working = 0
-  for _, entity in pairs(surface.find_entities_filtered({name = "spacelab-growth-facility"})) do
+  for _, entity in pairs(surface.find_entities_filtered({name = "bte-growth-facility"})) do
     if entity.status == defines.entity_status.working then
       working = working + 1
     end

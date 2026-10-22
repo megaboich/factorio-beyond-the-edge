@@ -1,29 +1,29 @@
-local Drive = require("__warp-drive__/scripts/drive")
-local Research = require("__warp-drive__/scripts/research")
+local Drive = require("__bte-warp-drive__/scripts/drive")
+local Research = require("__bte-warp-drive__/scripts/research")
 
 local Gui = {}
 
-local DRIVE_NAME = "warp-drive-controller"
-local CIRCUIT_OUTPUT_NAME = "warp-drive-circuit-output"
-local IMPATIENT_SETTING = "warp-drive-severely-impatient"
-local GUI_NAME = "warp_drive_window"
-local GUI_TOGGLE = "warp_drive_enabled"
-local GUI_CIRCUIT_TOGGLE = "warp_drive_circuit_enabled"
-local GUI_CIRCUIT_FIRST_SIGNAL = "warp_drive_circuit_first_signal"
-local GUI_CIRCUIT_COMPARATOR = "warp_drive_circuit_comparator"
-local GUI_CIRCUIT_SECOND_SIGNAL = "warp_drive_circuit_second_signal"
-local GUI_CIRCUIT_CONSTANT = "warp_drive_circuit_constant"
-local GUI_OUTPUT_WARP_ENABLED = "warp_drive_output_warp_enabled"
-local GUI_OUTPUT_WARP_SIGNAL = "warp_drive_output_warp_signal"
-local GUI_OUTPUT_DISTANCE_ENABLED = "warp_drive_output_distance_enabled"
-local GUI_OUTPUT_DISTANCE_SIGNAL = "warp_drive_output_distance_signal"
-local GUI_OUTPUT_CHARGE_ENABLED = "warp_drive_output_charge_enabled"
-local GUI_OUTPUT_CHARGE_SIGNAL = "warp_drive_output_charge_signal"
-local GUI_OUTPUT_SPEED_ENABLED = "warp_drive_output_speed_enabled"
-local GUI_OUTPUT_SPEED_SIGNAL = "warp_drive_output_speed_signal"
-local GUI_OUTPUT_TACHYON_DENSITY_ENABLED = "warp_drive_output_tachyon_density_enabled"
-local GUI_OUTPUT_TACHYON_DENSITY_SIGNAL = "warp_drive_output_tachyon_density_signal"
-local GUI_CLOSE = "warp_drive_close"
+local DRIVE_NAME = "bte-warp-drive-controller"
+local CIRCUIT_OUTPUT_NAME = "bte-warp-drive-circuit-output"
+local IMPATIENT_SETTING = "bte-warp-drive-severely-impatient"
+local GUI_NAME = "bte_warp_drive_window"
+local GUI_TOGGLE = "bte_warp_drive_enabled"
+local GUI_CIRCUIT_TOGGLE = "bte_warp_drive_circuit_enabled"
+local GUI_CIRCUIT_FIRST_SIGNAL = "bte_warp_drive_circuit_first_signal"
+local GUI_CIRCUIT_COMPARATOR = "bte_warp_drive_circuit_comparator"
+local GUI_CIRCUIT_SECOND_SIGNAL = "bte_warp_drive_circuit_second_signal"
+local GUI_CIRCUIT_CONSTANT = "bte_warp_drive_circuit_constant"
+local GUI_OUTPUT_WARP_ENABLED = "bte_warp_drive_output_warp_enabled"
+local GUI_OUTPUT_WARP_SIGNAL = "bte_warp_drive_output_warp_signal"
+local GUI_OUTPUT_DISTANCE_ENABLED = "bte_warp_drive_output_distance_enabled"
+local GUI_OUTPUT_DISTANCE_SIGNAL = "bte_warp_drive_output_distance_signal"
+local GUI_OUTPUT_CHARGE_ENABLED = "bte_warp_drive_output_charge_enabled"
+local GUI_OUTPUT_CHARGE_SIGNAL = "bte_warp_drive_output_charge_signal"
+local GUI_OUTPUT_SPEED_ENABLED = "bte_warp_drive_output_speed_enabled"
+local GUI_OUTPUT_SPEED_SIGNAL = "bte_warp_drive_output_speed_signal"
+local GUI_OUTPUT_TACHYON_DENSITY_ENABLED = "bte_warp_drive_output_tachyon_density_enabled"
+local GUI_OUTPUT_TACHYON_DENSITY_SIGNAL = "bte_warp_drive_output_tachyon_density_signal"
+local GUI_CLOSE = "bte_warp_drive_close"
 local CIRCUIT_PANEL_WIDTH = 272
 local MAIN_PANEL_WIDTH = CIRCUIT_PANEL_WIDTH * 2
 local PANEL_GAP = 4
@@ -114,18 +114,18 @@ end
 
 local function format_duration(seconds)
   if seconds < 60 then
-    return {"warp-drive.duration-seconds", math.ceil(seconds)}
+    return {"bte-warp-drive.duration-seconds", math.ceil(seconds)}
   end
   if seconds < 3600 then
-    return {"warp-drive.duration-minutes-seconds", math.floor(seconds / 60), math.floor(seconds % 60)}
+    return {"bte-warp-drive.duration-minutes-seconds", math.floor(seconds / 60), math.floor(seconds % 60)}
   end
   if seconds < 86400 then
-    return {"warp-drive.duration-hours-minutes", math.floor(seconds / 3600), math.floor(seconds % 3600 / 60)}
+    return {"bte-warp-drive.duration-hours-minutes", math.floor(seconds / 3600), math.floor(seconds % 3600 / 60)}
   end
   if seconds < 31536000 then
-    return {"warp-drive.duration-days-hours", math.floor(seconds / 86400), math.floor(seconds % 86400 / 3600)}
+    return {"bte-warp-drive.duration-days-hours", math.floor(seconds / 86400), math.floor(seconds % 86400 / 3600)}
   end
-  return {"warp-drive.duration-years-days", math.floor(seconds / 31536000), math.floor(seconds % 31536000 / 86400)}
+  return {"bte-warp-drive.duration-years-days", math.floor(seconds / 31536000), math.floor(seconds % 31536000 / 86400)}
 end
 
 local function format_km(value)
@@ -194,15 +194,15 @@ local function signal_rich_text(signal)
 end
 
 local function circuit_network_tooltip(network, color)
-  local color_caption = {"warp-drive.circuit-network-color-" .. color}
+  local color_caption = {"bte-warp-drive.circuit-network-color-" .. color}
   if not network then
-    return {"warp-drive.circuit-network-tooltip-disconnected", color_caption}
+    return {"bte-warp-drive.circuit-network-tooltip-disconnected", color_caption}
   end
   local signals = network.signals or {}
   local heading = #signals > 0
-    and {"warp-drive.circuit-network-tooltip-heading-signals", color_caption,
+    and {"bte-warp-drive.circuit-network-tooltip-heading-signals", color_caption,
       network.network_id, network.connected_circuit_count, #signals}
-    or {"warp-drive.circuit-network-tooltip-heading", color_caption,
+    or {"bte-warp-drive.circuit-network-tooltip-heading", color_caption,
       network.network_id, network.connected_circuit_count}
   local tooltip = {"", heading}
   if #signals > 0 then
@@ -252,14 +252,14 @@ end
 local function update_circuit_network_row(element, record, color, wire_id)
   local network = player_circuit_network(record, wire_id)
   local signal_count = network and network.signals and #network.signals or 0
-  local color_caption = {"warp-drive.circuit-network-color-" .. color}
+  local color_caption = {"bte-warp-drive.circuit-network-color-" .. color}
   if not network then
-    element.caption = {"warp-drive.circuit-network-disconnected", color_caption}
+    element.caption = {"bte-warp-drive.circuit-network-disconnected", color_caption}
   elseif signal_count > 0 then
-    element.caption = {"warp-drive.circuit-network-connected-signals", color_caption,
+    element.caption = {"bte-warp-drive.circuit-network-connected-signals", color_caption,
       network.network_id, network.connected_circuit_count, signal_count}
   else
-    element.caption = {"warp-drive.circuit-network-connected", color_caption,
+    element.caption = {"bte-warp-drive.circuit-network-connected", color_caption,
       network.network_id, network.connected_circuit_count}
   end
   element.tooltip = circuit_network_tooltip(network, color)
@@ -269,8 +269,8 @@ local function add_circuit_network_row(parent, name, color)
   local label = parent.add({
     type = "label",
     name = name,
-    caption = {"warp-drive.circuit-network-disconnected",
-      {"warp-drive.circuit-network-color-" .. color}}
+    caption = {"bte-warp-drive.circuit-network-disconnected",
+      {"bte-warp-drive.circuit-network-color-" .. color}}
   })
   label.style.single_line = false
   label.style.width = CIRCUIT_PANEL_WIDTH - 24
@@ -310,8 +310,8 @@ end
 
 local function update_gui_height(player)
   local frame = player.gui.screen[GUI_NAME]
-  local body = frame and frame.warp_drive_body
-  local scroll = body and body.warp_drive_content_scroll
+  local body = frame and frame.bte_warp_drive_body
+  local scroll = body and body.bte_warp_drive_content_scroll
   if scroll then
     scroll.style.maximal_height = math.max(300,
       player.display_resolution.height / player.display_scale - 100)
@@ -329,38 +329,38 @@ local function view_from_frame(frame)
   if not frame or frame.tags.layout_version ~= 8 then
     return nil
   end
-  local body = frame and frame.warp_drive_body
-  local scroll = body and body.warp_drive_content_scroll
-  local content = scroll and scroll.warp_drive_content
-  local detector = content and content.warp_drive_detector_section
-  local research = content and content.warp_drive_research_section
-  local warp = content and content.warp_drive_warp_section
-  local circuit = body and body.warp_drive_circuit_panel
-  local networks = circuit and circuit.warp_drive_circuit_networks
-  local editor = circuit and circuit.warp_drive_circuit_editor
-  local circuit_state = circuit and circuit.warp_drive_circuit_state
+  local body = frame and frame.bte_warp_drive_body
+  local scroll = body and body.bte_warp_drive_content_scroll
+  local content = scroll and scroll.bte_warp_drive_content
+  local detector = content and content.bte_warp_drive_detector_section
+  local research = content and content.bte_warp_drive_research_section
+  local warp = content and content.bte_warp_drive_warp_section
+  local circuit = body and body.bte_warp_drive_circuit_panel
+  local networks = circuit and circuit.bte_warp_drive_circuit_networks
+  local editor = circuit and circuit.bte_warp_drive_circuit_editor
+  local circuit_state = circuit and circuit.bte_warp_drive_circuit_state
   if not content or not detector or not research or not warp or not circuit or not networks
       or not editor or not circuit_state
-      or not content.warp_drive_mode_help
-      or not content.warp_drive_alert
-      or not content.warp_drive_alert.warp_drive_alert_details
-      or not content.warp_drive_alert.warp_drive_alert_details.warp_drive_alert_header
-      or not content.warp_drive_alert.warp_drive_alert_details.warp_drive_alert_header.warp_drive_alert_sprite
-      or not content.warp_drive_alert.warp_drive_alert_details.warp_drive_alert_header.warp_drive_alert_text
-      or not content.warp_drive_alert.warp_drive_alert_details.warp_drive_alert_boost
-      or not content.warp_drive_alert.warp_drive_alert_details.warp_drive_alert_speed
-      or not content.warp_drive_alert.warp_drive_alert_details.warp_drive_alert_charge_progress
-      or not content.warp_drive_location_heading
-      or not content.warp_drive_location_row
-      or not content.warp_drive_location_row.warp_drive_location_label
-      or not content.warp_drive_location_row.warp_drive_location
-      or not detector.warp_drive_detector_bar
-      or not status(research, "warp_drive_average_lab_rate")
-      or not research.warp_drive_detector_help
-      or not research.warp_drive_completion_section
-      or not status(research.warp_drive_completion_section, "warp_drive_research_estimate")
-      or not warp.warp_drive_requirement_control_row
-      or not warp.warp_drive_requirement_acceleration_row
+      or not content.bte_warp_drive_mode_help
+      or not content.bte_warp_drive_alert
+      or not content.bte_warp_drive_alert.bte_warp_drive_alert_details
+      or not content.bte_warp_drive_alert.bte_warp_drive_alert_details.bte_warp_drive_alert_header
+      or not content.bte_warp_drive_alert.bte_warp_drive_alert_details.bte_warp_drive_alert_header.bte_warp_drive_alert_sprite
+      or not content.bte_warp_drive_alert.bte_warp_drive_alert_details.bte_warp_drive_alert_header.bte_warp_drive_alert_text
+      or not content.bte_warp_drive_alert.bte_warp_drive_alert_details.bte_warp_drive_alert_boost
+      or not content.bte_warp_drive_alert.bte_warp_drive_alert_details.bte_warp_drive_alert_speed
+      or not content.bte_warp_drive_alert.bte_warp_drive_alert_details.bte_warp_drive_alert_charge_progress
+      or not content.bte_warp_drive_location_heading
+      or not content.bte_warp_drive_location_row
+      or not content.bte_warp_drive_location_row.bte_warp_drive_location_label
+      or not content.bte_warp_drive_location_row.bte_warp_drive_location
+      or not detector.bte_warp_drive_detector_bar
+      or not status(research, "bte_warp_drive_average_lab_rate")
+      or not research.bte_warp_drive_detector_help
+      or not research.bte_warp_drive_completion_section
+      or not status(research.bte_warp_drive_completion_section, "bte_warp_drive_research_estimate")
+      or not warp.bte_warp_drive_requirement_control_row
+      or not warp.bte_warp_drive_requirement_acceleration_row
       or not circuit[GUI_TOGGLE]
       or not circuit[GUI_CIRCUIT_TOGGLE]
       or not editor[GUI_CIRCUIT_FIRST_SIGNAL]
@@ -372,33 +372,33 @@ local function view_from_frame(frame)
       or not circuit[GUI_OUTPUT_CHARGE_ENABLED .. "_row"]
       or not circuit[GUI_OUTPUT_SPEED_ENABLED .. "_row"]
       or not circuit[GUI_OUTPUT_TACHYON_DENSITY_ENABLED .. "_row"]
-      or not networks.warp_drive_circuit_red_network
-      or not networks.warp_drive_circuit_green_network then
+      or not networks.bte_warp_drive_circuit_red_network
+      or not networks.bte_warp_drive_circuit_green_network then
     return nil
   end
   for _, name in pairs({
-    "warp_drive_detector_status", "warp_drive_detector_power"
+    "bte_warp_drive_detector_status", "bte_warp_drive_detector_power"
   }) do
     if not status(detector, name) then
       return nil
     end
   end
   for _, name in pairs({
-    "warp_drive_signal_multiplier", "warp_drive_detector_speed",
-    "warp_drive_detector_power_multiplier", "warp_drive_tachyon_rate",
-    "warp_drive_research_status", "warp_drive_research_branch", "warp_drive_working_labs",
-    "warp_drive_average_lab_rate", "warp_drive_research_bonus",
-    "warp_drive_research_progress"
+    "bte_warp_drive_signal_multiplier", "bte_warp_drive_detector_speed",
+    "bte_warp_drive_detector_power_multiplier", "bte_warp_drive_tachyon_rate",
+    "bte_warp_drive_research_status", "bte_warp_drive_research_branch", "bte_warp_drive_working_labs",
+    "bte_warp_drive_average_lab_rate", "bte_warp_drive_research_bonus",
+    "bte_warp_drive_research_progress"
   }) do
     if not status(research, name) then
       return nil
     end
   end
   for _, name in pairs({
-    "warp_drive_requirement_control", "warp_drive_requirement_travel",
-    "warp_drive_requirement_clearance", "warp_drive_requirement_cooldown",
-    "warp_drive_requirement_charge", "warp_drive_requirement_power",
-    "warp_drive_requirement_speed", "warp_drive_requirement_acceleration"
+    "bte_warp_drive_requirement_control", "bte_warp_drive_requirement_travel",
+    "bte_warp_drive_requirement_clearance", "bte_warp_drive_requirement_cooldown",
+    "bte_warp_drive_requirement_charge", "bte_warp_drive_requirement_power",
+    "bte_warp_drive_requirement_speed", "bte_warp_drive_requirement_acceleration"
   }) do
     local row = warp[name .. "_row"]
     if not row or not row[name .. "_icon"] or not row[name .. "_label"] or not row[name] then
@@ -445,20 +445,20 @@ local function render_mode(view, record, snapshot)
   view.detector.visible = not practical
   view.research.visible = not practical
   view.warp.visible = practical
-  view.content.warp_drive_location_heading.caption = practical
-    and {"warp-drive.current-position-section"} or {"warp-drive.location-section"}
-  view.content.warp_drive_location_row.warp_drive_location_label.visible = not practical
-  view.content.warp_drive_location_row.warp_drive_location.style.width = practical
+  view.content.bte_warp_drive_location_heading.caption = practical
+    and {"bte-warp-drive.current-position-section"} or {"bte-warp-drive.location-section"}
+  view.content.bte_warp_drive_location_row.bte_warp_drive_location_label.visible = not practical
+  view.content.bte_warp_drive_location_row.bte_warp_drive_location.style.width = practical
     and STATUS_LABEL_WIDTH + STATUS_VALUE_WIDTH or STATUS_VALUE_WIDTH
-  view.content.warp_drive_mode_help.visible = not practical
-  local alert = view.content.warp_drive_alert
-  local details = alert.warp_drive_alert_details
-  local header = details.warp_drive_alert_header
-  local alert_sprite = header.warp_drive_alert_sprite
-  local alert_text = header.warp_drive_alert_text
-  local alert_boost = details.warp_drive_alert_boost
-  local alert_speed = details.warp_drive_alert_speed
-  local charge_progress = details.warp_drive_alert_charge_progress
+  view.content.bte_warp_drive_mode_help.visible = not practical
+  local alert = view.content.bte_warp_drive_alert
+  local details = alert.bte_warp_drive_alert_details
+  local header = details.bte_warp_drive_alert_header
+  local alert_sprite = header.bte_warp_drive_alert_sprite
+  local alert_text = header.bte_warp_drive_alert_text
+  local alert_boost = details.bte_warp_drive_alert_boost
+  local alert_speed = details.bte_warp_drive_alert_speed
+  local charge_progress = details.bte_warp_drive_alert_charge_progress
   alert.visible = practical
   local active = record.state == "warp" and record.warp_warning ~= "power"
   local charging = record.state == "charging"
@@ -468,124 +468,124 @@ local function render_mode(view, record, snapshot)
   if record.warp_warning == "power" then
     alert_sprite.sprite = "utility/danger_icon"
     alert_text.style = "bold_red_label"
-    alert_text.caption = {"warp-drive.warning-power"}
+    alert_text.caption = {"bte-warp-drive.warning-power"}
   elseif record.state == "warp" then
     alert_sprite.sprite = "utility/status_working"
     alert_text.style = "label"
-    alert_text.caption = {"warp-drive.active-warp-level",
+    alert_text.caption = {"bte-warp-drive.active-warp-level",
       string.format("%.1f", record.warp_level or 1)}
-    alert_boost.caption = {"warp-drive.active-warp-boost",
+    alert_boost.caption = {"bte-warp-drive.active-warp-boost",
       string.format("%.2f", snapshot.warp_boost)}
-    alert_speed.caption = {"warp-drive.active-warp-effective-speed",
+    alert_speed.caption = {"bte-warp-drive.active-warp-effective-speed",
       string.format("%.2f", snapshot.effective_speed)}
   elseif charging then
     alert_sprite.sprite = "utility/status_yellow"
     alert_text.style = "orange_label"
-    alert_text.caption = {"warp-drive.charging-status"}
+    alert_text.caption = {"bte-warp-drive.charging-status"}
     charge_progress.value = snapshot.charge_ratio
-    charge_progress.caption = {"warp-drive.percent-value",
+    charge_progress.caption = {"bte-warp-drive.percent-value",
       math.floor(snapshot.charge_ratio * 100)}
     alert_speed.visible = true
-    alert_speed.caption = {"warp-drive.charging-remaining",
+    alert_speed.caption = {"bte-warp-drive.charging-remaining",
       format_energy(math.max(0, snapshot.required_charge - snapshot.stored_charge))}
   elseif record.last_exit_reason and record.state ~= "warp" then
     alert_sprite.sprite = "utility/status_not_working"
     alert_text.style = "label"
-    alert_text.caption = {"warp-drive.inactive-status"}
-    alert_boost.caption = {"warp-drive.last-deactivation-reason",
-      {"warp-drive.deactivation-reason-" .. record.last_exit_reason}}
+    alert_text.caption = {"bte-warp-drive.inactive-status"}
+    alert_boost.caption = {"bte-warp-drive.last-deactivation-reason",
+      {"bte-warp-drive.deactivation-reason-" .. record.last_exit_reason}}
   else
     alert_sprite.sprite = "utility/status_not_working"
     alert_text.style = "label"
-    alert_text.caption = {"warp-drive.inactive-status"}
-    alert_boost.caption = {"warp-drive.last-deactivation-reason",
-      {"warp-drive.deactivation-reason-none"}}
+    alert_text.caption = {"bte-warp-drive.inactive-status"}
+    alert_boost.caption = {"bte-warp-drive.last-deactivation-reason",
+      {"bte-warp-drive.deactivation-reason-none"}}
   end
 end
 
 local function render_research(view, record, snapshot, research_snapshot)
   local practical = snapshot.practical
-  status(view.detector, "warp_drive_detector_status").caption = {
-    "warp-drive.state-" .. (practical and "complete" or record.state)
+  status(view.detector, "bte_warp_drive_detector_status").caption = {
+    "bte-warp-drive.state-" .. (practical and "complete" or record.state)
   }
-  status(view.detector, "warp_drive_detector_power").caption = {
-    "warp-drive.power-value",
+  status(view.detector, "bte_warp_drive_detector_power").caption = {
+    "bte-warp-drive.power-value",
     format_power(record.detector_power or 0),
     format_power(DETECTOR_MAX_POWER_WATTS),
     math.floor((record.detector_power or 0) / DETECTOR_MAX_POWER_WATTS * 100)
   }
   local detector_power_fraction = math.min(1,
     (record.detector_power or 0) / DETECTOR_MAX_POWER_WATTS)
-  view.detector.warp_drive_detector_bar.value = detector_power_fraction
-  view.detector.warp_drive_detector_bar.caption = {
-    "warp-drive.percent-value", math.floor(detector_power_fraction * 100)
+  view.detector.bte_warp_drive_detector_bar.value = detector_power_fraction
+  view.detector.bte_warp_drive_detector_bar.caption = {
+    "bte-warp-drive.percent-value", math.floor(detector_power_fraction * 100)
   }
   local branch = research_snapshot.branch
   local researching_practical = research_snapshot.researching_practical
-  status(view.research, "warp_drive_research_branch").caption = {
-    "warp-drive.branch-" .. (branch or "unknown")
+  status(view.research, "bte_warp_drive_research_branch").caption = {
+    "bte-warp-drive.branch-" .. (branch or "unknown")
   }
-  status(view.research, "warp_drive_research_status").caption = practical
-    and {"warp-drive.research-status-complete"}
-    or (researching_practical and {"warp-drive.research-status-active"}
-      or {"warp-drive.research-status-inactive"})
+  status(view.research, "bte_warp_drive_research_status").caption = practical
+    and {"bte-warp-drive.research-status-complete"}
+    or (researching_practical and {"bte-warp-drive.research-status-active"}
+      or {"bte-warp-drive.research-status-inactive"})
   local best = research_snapshot.deepest_location
-  local best_name = best and location_label(best) or {"warp-drive.location-unknown"}
+  local best_name = best and location_label(best) or {"bte-warp-drive.location-unknown"}
   local emphasized_best_name = {"", "[font=default-bold]", best_name, "[/font]"}
-  local location = view.content.warp_drive_location_row.warp_drive_location
+  local location = view.content.bte_warp_drive_location_row.bte_warp_drive_location
   if snapshot.location then
-    location.caption = {"warp-drive.location-parked", location_label(snapshot.location)}
+    location.caption = {"bte-warp-drive.location-parked", location_label(snapshot.location)}
   elseif snapshot.route_from then
     location.caption = {
-      "warp-drive.location-transit-distance",
+      "bte-warp-drive.location-transit-distance",
       location_label(snapshot.route_from),
       location_label(snapshot.route_to),
       format_km(snapshot.remaining_km)
     }
   else
-    location.caption = {"warp-drive.location-unknown"}
+    location.caption = {"bte-warp-drive.location-unknown"}
   end
-  status(view.research, "warp_drive_signal_multiplier").caption = {
-    "warp-drive.density-value", string.format("%.1f", research_snapshot.density)
+  status(view.research, "bte_warp_drive_signal_multiplier").caption = {
+    "bte-warp-drive.density-value", string.format("%.1f", research_snapshot.density)
   }
-  status(view.research, "warp_drive_detector_speed").caption = {
-    "warp-drive.detector-speed-value",
+  status(view.research, "bte_warp_drive_detector_speed").caption = {
+    "bte-warp-drive.detector-speed-value",
     string.format("%.2f", research_snapshot.detector_speed),
     string.format("%.2f", research_snapshot.detector_speed_factor)
   }
-  status(view.research, "warp_drive_detector_power_multiplier").caption = {
-    "warp-drive.multiplier-value", string.format("%.2f", research_snapshot.power_ratio)
+  status(view.research, "bte_warp_drive_detector_power_multiplier").caption = {
+    "bte-warp-drive.multiplier-value", string.format("%.2f", research_snapshot.power_ratio)
   }
-  view.research.warp_drive_detector_help.caption = practical
-    and {"warp-drive.detector-help-complete"} or {
-      "warp-drive.detector-help-" .. (branch or "unknown"),
+  view.research.bte_warp_drive_detector_help.caption = practical
+    and {"bte-warp-drive.detector-help-complete"} or {
+      "bte-warp-drive.detector-help-" .. (branch or "unknown"),
       emphasized_best_name,
       string.format("%.0f", research_snapshot.maximum_density)
     }
-  status(view.research, "warp_drive_tachyon_rate").caption = {
-    "warp-drive.tachyon-value", string.format("%.2f", research_snapshot.detector_signal)
+  status(view.research, "bte_warp_drive_tachyon_rate").caption = {
+    "bte-warp-drive.tachyon-value", string.format("%.2f", research_snapshot.detector_signal)
   }
-  status(view.research, "warp_drive_working_labs").caption = bold_number(research_snapshot.lab_count)
-  view.research.warp_drive_average_lab_rate_row.visible = researching_practical
+  status(view.research, "bte_warp_drive_working_labs").caption = bold_number(research_snapshot.lab_count)
+  view.research.bte_warp_drive_average_lab_rate_row.visible = researching_practical
   if researching_practical then
-    status(view.research, "warp_drive_average_lab_rate").caption = {
-      "warp-drive.research-rate-value", string.format("%.4f", research_snapshot.average_lab_rate)
+    status(view.research, "bte_warp_drive_average_lab_rate").caption = {
+      "bte-warp-drive.research-rate-value", string.format("%.4f", research_snapshot.average_lab_rate)
     }
   end
-  status(view.research, "warp_drive_research_bonus").caption = {
-    "warp-drive.research-rate-value", string.format("%.2f", research_snapshot.bonus_rate)
+  status(view.research, "bte_warp_drive_research_bonus").caption = {
+    "bte-warp-drive.research-rate-value", string.format("%.2f", research_snapshot.bonus_rate)
   }
-  view.research.warp_drive_research_progress_row.visible = researching_practical
-  view.research.warp_drive_completion_section.visible = researching_practical
+  view.research.bte_warp_drive_research_progress_row.visible = researching_practical
+  view.research.bte_warp_drive_completion_section.visible = researching_practical
   if researching_practical then
-    status(view.research, "warp_drive_research_progress").caption = {
-      "warp-drive.percent-value", string.format("%.6f", research_snapshot.progress * 100)
+    status(view.research, "bte_warp_drive_research_progress").caption = {
+      "bte-warp-drive.percent-value", string.format("%.6f", research_snapshot.progress * 100)
     }
-    status(view.research.warp_drive_completion_section, "warp_drive_research_estimate").caption =
-      research_snapshot.total_rate > 0 and {"warp-drive.estimate-value",
+    status(view.research.bte_warp_drive_completion_section, "bte_warp_drive_research_estimate").caption =
+      research_snapshot.total_rate > 0 and {"bte-warp-drive.estimate-value",
         format_duration(research_snapshot.remaining_units / research_snapshot.total_rate),
         string.format("%.2f", research_snapshot.total_rate)}
-      or {"warp-drive.estimate-unavailable"}
+      or {"bte-warp-drive.estimate-unavailable"}
   end
 end
 
@@ -593,59 +593,59 @@ local function render_warp_requirements(view, record, snapshot)
   local control_state, control_caption
   if record.enabled then
     control_state = "pass"
-    control_caption = {"warp-drive.requirement-control-automatic"}
+    control_caption = {"bte-warp-drive.requirement-control-automatic"}
   elseif record.circuit_enabled and snapshot.circuit_active then
     control_state = "pass"
-    control_caption = {"warp-drive.requirement-control-circuit-active"}
+    control_caption = {"bte-warp-drive.requirement-control-circuit-active"}
   elseif record.circuit_enabled then
     control_state = "warning"
-    control_caption = {"warp-drive.requirement-control-circuit-waiting"}
+    control_caption = {"bte-warp-drive.requirement-control-circuit-waiting"}
   else
     control_state = "disabled"
-    control_caption = {"warp-drive.requirement-control-disabled"}
+    control_caption = {"bte-warp-drive.requirement-control-disabled"}
   end
-  requirement(view, "warp_drive_requirement_control", control_state, control_caption)
+  requirement(view, "bte_warp_drive_requirement_control", control_state, control_caption)
   local reserve_active = record.state == "warp" or snapshot.preparation_ready
-  requirement(view, "warp_drive_requirement_charge", not reserve_active and "disabled"
+  requirement(view, "bte_warp_drive_requirement_charge", not reserve_active and "disabled"
       or (snapshot.charge_ratio >= 0.999 and "pass" or "warning"),
-    {"warp-drive.charge-value", format_energy(snapshot.stored_charge),
+    {"bte-warp-drive.charge-value", format_energy(snapshot.stored_charge),
       format_energy(snapshot.required_charge), math.floor(snapshot.charge_ratio * 100)})
   local speed_state = not snapshot.control_active and "disabled"
     or (snapshot.speed_ready and "pass"
       or (record.state == "warp" and record.speed_exit_at and "warning" or "fail"))
   local speed_caption = speed_state == "warning"
-    and {"warp-drive.requirement-speed-warning", string.format("%.1f", snapshot.speed),
+    and {"bte-warp-drive.requirement-speed-warning", string.format("%.1f", snapshot.speed),
       string.format("%.1f", math.max(0, record.speed_exit_at - game.tick) / TICKS_PER_SECOND)}
-    or {"warp-drive.requirement-speed-value", string.format("%.1f", snapshot.speed)}
-  requirement(view, "warp_drive_requirement_speed", speed_state, speed_caption)
+    or {"bte-warp-drive.requirement-speed-value", string.format("%.1f", snapshot.speed)}
+  requirement(view, "bte_warp_drive_requirement_speed", speed_state, speed_caption)
   local power_active = record.state == "warp" or record.state == "charging"
   local power_state = not snapshot.control_active and "disabled"
     or (not power_active and "disabled"
       or ((record.state == "charging" or record.warp_ramp_state == "stabilizing")
         and "warning" or (snapshot.power_ready and "pass" or "fail")))
-  requirement(view, "warp_drive_requirement_power", power_state,
-    {"warp-drive.requirement-power-value", format_power(record.support_power or 0)})
+  requirement(view, "bte_warp_drive_requirement_power", power_state,
+    {"bte-warp-drive.requirement-power-value", format_power(record.support_power or 0)})
   local ramp_state = record.warp_ramp_state or "inactive"
   local acceleration_state = (not snapshot.control_active or record.state ~= "warp") and "disabled"
     or (ramp_state == "accelerating" and "pass"
       or (ramp_state == "reserve" and "fail" or "warning"))
-  requirement(view, "warp_drive_requirement_acceleration", acceleration_state,
-    {"warp-drive.ramp-" .. ramp_state})
-  requirement(view, "warp_drive_requirement_travel", not snapshot.control_active and "disabled"
+  requirement(view, "bte_warp_drive_requirement_acceleration", acceleration_state,
+    {"bte-warp-drive.ramp-" .. ramp_state})
+  requirement(view, "bte_warp_drive_requirement_travel", not snapshot.control_active and "disabled"
       or (snapshot.travel_active and snapshot.destination and "pass" or "fail"),
     snapshot.destination and location_label(snapshot.destination)
-      or {"warp-drive.requirement-travel-inactive"})
-  requirement(view, "warp_drive_requirement_clearance", not snapshot.control_active and "disabled"
+      or {"bte-warp-drive.requirement-travel-inactive"})
+  requirement(view, "bte_warp_drive_requirement_clearance", not snapshot.control_active and "disabled"
       or (snapshot.clearance and "pass" or "fail"),
-    snapshot.clearance and {"warp-drive.requirement-clearance-clear"}
+    snapshot.clearance and {"bte-warp-drive.requirement-clearance-clear"}
       or (snapshot.closest_endpoint and snapshot.endpoint_blocked
-        and {"warp-drive.requirement-clearance-blocked",
+        and {"bte-warp-drive.requirement-clearance-blocked",
           format_km(snapshot.endpoint_distance_km), location_label(snapshot.closest_endpoint)}
-        or {"warp-drive.requirement-clearance-unavailable"}))
-  requirement(view, "warp_drive_requirement_cooldown", not snapshot.control_active and "disabled"
+        or {"bte-warp-drive.requirement-clearance-unavailable"}))
+  requirement(view, "bte_warp_drive_requirement_cooldown", not snapshot.control_active and "disabled"
       or (snapshot.cooldown_ready and "pass" or "fail"),
-    snapshot.cooldown_ready and {"warp-drive.requirement-cooldown-ready"}
-      or {"warp-drive.requirement-cooldown-waiting", math.ceil(snapshot.cooldown_seconds)})
+    snapshot.cooldown_ready and {"bte-warp-drive.requirement-cooldown-ready"}
+      or {"bte-warp-drive.requirement-cooldown-waiting", math.ceil(snapshot.cooldown_seconds)})
 end
 
 local function output_controls(view, enabled_name, signal_name)
@@ -655,15 +655,15 @@ end
 
 local function render_circuit_network(view, record, snapshot)
   view.circuit[GUI_TOGGLE].state = record.enabled
-  view.circuit[GUI_TOGGLE].caption = {"warp-drive."
+  view.circuit[GUI_TOGGLE].caption = {"bte-warp-drive."
     .. (snapshot.practical and "enabled" or "research-enabled")}
-  view.circuit[GUI_TOGGLE].tooltip = {"warp-drive."
+  view.circuit[GUI_TOGGLE].tooltip = {"bte-warp-drive."
     .. (snapshot.practical and "enabled-tooltip" or "research-enabled-tooltip")}
   view.circuit[GUI_TOGGLE].enabled = true
   view.circuit[GUI_CIRCUIT_TOGGLE].state = record.circuit_enabled
-  view.circuit[GUI_CIRCUIT_TOGGLE].caption = {"warp-drive."
+  view.circuit[GUI_CIRCUIT_TOGGLE].caption = {"bte-warp-drive."
     .. (snapshot.practical and "circuit-enabled" or "research-circuit-enabled")}
-  view.circuit[GUI_CIRCUIT_TOGGLE].tooltip = {"warp-drive."
+  view.circuit[GUI_CIRCUIT_TOGGLE].tooltip = {"bte-warp-drive."
     .. (snapshot.practical and "circuit-enabled-tooltip"
       or "research-circuit-enabled-tooltip")}
   view.circuit[GUI_CIRCUIT_TOGGLE].enabled = true
@@ -699,9 +699,9 @@ local function render_circuit_network(view, record, snapshot)
   signal.enabled = record.output_tachyon_density_enabled == true
   view.circuit[GUI_OUTPUT_TACHYON_DENSITY_ENABLED .. "_row"].visible = not snapshot.practical
   view.circuit_state.visible = record.circuit_enabled and snapshot.circuit_active
-  update_circuit_network_row(view.networks.warp_drive_circuit_red_network, record, "red",
+  update_circuit_network_row(view.networks.bte_warp_drive_circuit_red_network, record, "red",
     defines.wire_connector_id.circuit_red)
-  update_circuit_network_row(view.networks.warp_drive_circuit_green_network, record, "green",
+  update_circuit_network_row(view.networks.bte_warp_drive_circuit_green_network, record, "green",
     defines.wire_connector_id.circuit_green)
 end
 
@@ -719,11 +719,11 @@ local function draw_gui(player, record)
   frame.tags = {platform_index = record.platform_index, layout_version = 8}
   frame.style.width = MAIN_PANEL_WIDTH + PANEL_GAP + CIRCUIT_PANEL_WIDTH + 24
   frame.auto_center = true
-  local title = frame.add({type = "flow", name = "warp_drive_title", direction = "horizontal"})
+  local title = frame.add({type = "flow", name = "bte_warp_drive_title", direction = "horizontal"})
   title.style.vertical_align = "center"
   title.drag_target = frame
   title.add({type = "sprite", sprite = "entity/warp-drive-controller"})
-  local title_label = title.add({type = "label", caption = {"warp-drive.title"}, style = "frame_title"})
+  local title_label = title.add({type = "label", caption = {"bte-warp-drive.title"}, style = "frame_title"})
   title_label.style.left_margin = 8
   local spacer = title.add({type = "empty-widget", style = "draggable_space_header"})
   spacer.style.horizontally_stretchable = true
@@ -731,62 +731,62 @@ local function draw_gui(player, record)
   spacer.drag_target = frame
   title.add({type = "sprite-button", name = GUI_CLOSE, sprite = "utility/close", style = "frame_action_button"})
 
-  local body = frame.add({type = "flow", name = "warp_drive_body", direction = "horizontal"})
+  local body = frame.add({type = "flow", name = "bte_warp_drive_body", direction = "horizontal"})
   body.style.width = MAIN_PANEL_WIDTH + PANEL_GAP + CIRCUIT_PANEL_WIDTH
   body.style.horizontal_spacing = PANEL_GAP
   body.style.vertical_align = "top"
   local scroll = body.add({
     type = "scroll-pane",
-    name = "warp_drive_content_scroll",
+    name = "bte_warp_drive_content_scroll",
     direction = "vertical",
     style = "scroll_pane_in_shallow_frame"
   })
   scroll.style.width = MAIN_PANEL_WIDTH
-  local content = scroll.add({type = "flow", name = "warp_drive_content", direction = "vertical"})
+  local content = scroll.add({type = "flow", name = "bte_warp_drive_content", direction = "vertical"})
   content.style.padding = 12
   content.style.width = 512
   local mode_help = content.add({
     type = "label",
-    name = "warp_drive_mode_help",
-    caption = {"warp-drive.mode-experimental-help"}
+    name = "bte_warp_drive_mode_help",
+    caption = {"bte-warp-drive.mode-experimental-help"}
   })
   mode_help.style.single_line = false
   mode_help.style.top_margin = 4
   mode_help.style.bottom_margin = 8
-  local alert = content.add({type = "flow", name = "warp_drive_alert", direction = "vertical"})
+  local alert = content.add({type = "flow", name = "bte_warp_drive_alert", direction = "vertical"})
   alert.style.height = 76
   alert.style.top_margin = 6
   alert.style.bottom_margin = 8
   local alert_details = alert.add({
     type = "flow",
-    name = "warp_drive_alert_details",
+    name = "bte_warp_drive_alert_details",
     direction = "vertical"
   })
   alert_details.style.width = 480
   local alert_header = alert_details.add({
     type = "flow",
-    name = "warp_drive_alert_header",
+    name = "bte_warp_drive_alert_header",
     direction = "horizontal"
   })
   alert_header.style.vertical_align = "center"
   alert_header.style.horizontal_spacing = 8
   local alert_sprite = alert_header.add({
     type = "sprite",
-    name = "warp_drive_alert_sprite",
+    name = "bte_warp_drive_alert_sprite",
     sprite = "utility/status_inactive"
   })
   alert_sprite.style.size = 18
   alert_sprite.style.stretch_image_to_widget_size = true
   local alert_text = alert_header.add({
     type = "label",
-    name = "warp_drive_alert_text",
-    caption = {"warp-drive.inactive-status"}
+    name = "bte_warp_drive_alert_text",
+    caption = {"bte-warp-drive.inactive-status"}
   })
   alert_text.style.single_line = false
   alert_text.style.width = 454
   local alert_boost = alert_details.add({
     type = "label",
-    name = "warp_drive_alert_boost",
+    name = "bte_warp_drive_alert_boost",
     caption = ""
   })
   alert_boost.style.left_margin = 26
@@ -794,87 +794,87 @@ local function draw_gui(player, record)
   alert_boost.style.single_line = false
   local charge_progress = alert_details.add({
     type = "progressbar",
-    name = "warp_drive_alert_charge_progress",
+    name = "bte_warp_drive_alert_charge_progress",
     value = 0,
-    caption = {"warp-drive.percent-value", 0},
+    caption = {"bte-warp-drive.percent-value", 0},
     style = "production_progressbar"
   })
   charge_progress.style.left_margin = 26
   charge_progress.style.width = 454
   local alert_speed = alert_details.add({
     type = "label",
-    name = "warp_drive_alert_speed",
+    name = "bte_warp_drive_alert_speed",
     caption = ""
   })
   alert_speed.style.left_margin = 26
   alert_speed.style.width = 454
   alert_speed.style.single_line = false
 
-  local detector = content.add({type = "flow", name = "warp_drive_detector_section", direction = "vertical"})
+  local detector = content.add({type = "flow", name = "bte_warp_drive_detector_section", direction = "vertical"})
   detector.style.horizontally_stretchable = true
   detector.add({type = "line"})
-  add_section_heading(detector, {"warp-drive.detector-section"})
-  add_status_row(detector, "warp_drive_detector_status", {"warp-drive.detector-status"})
-  add_status_row(detector, "warp_drive_detector_power", {"warp-drive.detector-power"})
-  local detector_bar = detector.add({type = "progressbar", name = "warp_drive_detector_bar", value = 0, style = "production_progressbar"})
+  add_section_heading(detector, {"bte-warp-drive.detector-section"})
+  add_status_row(detector, "bte_warp_drive_detector_status", {"bte-warp-drive.detector-status"})
+  add_status_row(detector, "bte_warp_drive_detector_power", {"bte-warp-drive.detector-power"})
+  local detector_bar = detector.add({type = "progressbar", name = "bte_warp_drive_detector_bar", value = 0, style = "production_progressbar"})
   detector_bar.style.horizontally_stretchable = true
   detector_bar.style.bottom_margin = 8
 
-  add_section_heading(content, {"warp-drive.location-section"}, "warp_drive_location_heading")
-  local location_row = content.add({type = "flow", name = "warp_drive_location_row", direction = "horizontal"})
-  local location_label_element = location_row.add({type = "label", name = "warp_drive_location_label", caption = {"warp-drive.location"}})
+  add_section_heading(content, {"bte-warp-drive.location-section"}, "bte_warp_drive_location_heading")
+  local location_row = content.add({type = "flow", name = "bte_warp_drive_location_row", direction = "horizontal"})
+  local location_label_element = location_row.add({type = "label", name = "bte_warp_drive_location_label", caption = {"bte-warp-drive.location"}})
   location_label_element.style.width = STATUS_LABEL_WIDTH
   location_label_element.style.single_line = false
-  local location = location_row.add({type = "label", name = "warp_drive_location", caption = ""})
+  local location = location_row.add({type = "label", name = "bte_warp_drive_location", caption = ""})
   location.style.width = STATUS_VALUE_WIDTH
   location.style.single_line = false
 
-  local research = content.add({type = "flow", name = "warp_drive_research_section", direction = "vertical"})
+  local research = content.add({type = "flow", name = "bte_warp_drive_research_section", direction = "vertical"})
   research.style.horizontally_stretchable = true
-  add_status_row(research, "warp_drive_signal_multiplier", {"warp-drive.signal-multiplier"})
-  add_status_row(research, "warp_drive_detector_speed", {"warp-drive.detector-speed"})
-  add_status_row(research, "warp_drive_detector_power_multiplier", {"warp-drive.detector-power-signal"})
-  add_status_row(research, "warp_drive_tachyon_rate", {"warp-drive.tachyon-rate"})
-  add_section_heading(research, {"warp-drive.research-section"})
-  add_status_row(research, "warp_drive_research_status", {"warp-drive.research-status"})
-  add_status_row(research, "warp_drive_research_branch", {"warp-drive.research-branch"})
-  add_status_row(research, "warp_drive_working_labs", {"warp-drive.working-labs"})
-  add_status_row(research, "warp_drive_average_lab_rate", {"warp-drive.average-lab-rate"})
-  add_status_row(research, "warp_drive_research_bonus", {"warp-drive.research-bonus"})
-  add_status_row(research, "warp_drive_research_progress", {"warp-drive.research-progress"})
-  local completion = research.add({type = "flow", name = "warp_drive_completion_section", direction = "vertical"})
+  add_status_row(research, "bte_warp_drive_signal_multiplier", {"bte-warp-drive.signal-multiplier"})
+  add_status_row(research, "bte_warp_drive_detector_speed", {"bte-warp-drive.detector-speed"})
+  add_status_row(research, "bte_warp_drive_detector_power_multiplier", {"bte-warp-drive.detector-power-signal"})
+  add_status_row(research, "bte_warp_drive_tachyon_rate", {"bte-warp-drive.tachyon-rate"})
+  add_section_heading(research, {"bte-warp-drive.research-section"})
+  add_status_row(research, "bte_warp_drive_research_status", {"bte-warp-drive.research-status"})
+  add_status_row(research, "bte_warp_drive_research_branch", {"bte-warp-drive.research-branch"})
+  add_status_row(research, "bte_warp_drive_working_labs", {"bte-warp-drive.working-labs"})
+  add_status_row(research, "bte_warp_drive_average_lab_rate", {"bte-warp-drive.average-lab-rate"})
+  add_status_row(research, "bte_warp_drive_research_bonus", {"bte-warp-drive.research-bonus"})
+  add_status_row(research, "bte_warp_drive_research_progress", {"bte-warp-drive.research-progress"})
+  local completion = research.add({type = "flow", name = "bte_warp_drive_completion_section", direction = "vertical"})
   completion.style.horizontally_stretchable = true
-  add_section_heading(completion, {"warp-drive.completion-section"}, "warp_drive_completion_heading")
-  add_status_row(completion, "warp_drive_research_estimate", {"warp-drive.research-estimate"})
-  add_section_heading(research, {"warp-drive.research-help-section"}, "warp_drive_research_help_heading")
-  local help = research.add({type = "label", name = "warp_drive_detector_help", caption = {"warp-drive.detector-help-unknown"}})
+  add_section_heading(completion, {"bte-warp-drive.completion-section"}, "bte_warp_drive_completion_heading")
+  add_status_row(completion, "bte_warp_drive_research_estimate", {"bte-warp-drive.research-estimate"})
+  add_section_heading(research, {"bte-warp-drive.research-help-section"}, "bte_warp_drive_research_help_heading")
+  local help = research.add({type = "label", name = "bte_warp_drive_detector_help", caption = {"bte-warp-drive.detector-help-unknown"}})
   help.style.single_line = false
   help.style.bottom_margin = 8
 
-  local warp = content.add({type = "flow", name = "warp_drive_warp_section", direction = "vertical"})
+  local warp = content.add({type = "flow", name = "bte_warp_drive_warp_section", direction = "vertical"})
   warp.style.horizontally_stretchable = true
   warp.add({type = "line"})
-  add_section_heading(warp, {"warp-drive.warp-section"})
-  add_requirement(warp, "warp_drive_requirement_control", {"warp-drive.requirement-control-label"})
-  add_requirement(warp, "warp_drive_requirement_travel", {"warp-drive.requirement-travel-label"})
-  add_requirement(warp, "warp_drive_requirement_clearance", {"warp-drive.requirement-clearance-label"})
-  add_requirement(warp, "warp_drive_requirement_cooldown", {"warp-drive.requirement-cooldown-label"})
-  add_requirement(warp, "warp_drive_requirement_charge", {"warp-drive.requirement-charge-label"})
-  add_requirement(warp, "warp_drive_requirement_power", {"warp-drive.requirement-power-label"})
-  add_requirement(warp, "warp_drive_requirement_speed", {"warp-drive.requirement-speed-label"})
-  add_requirement(warp, "warp_drive_requirement_acceleration", {"warp-drive.requirement-acceleration-label"})
+  add_section_heading(warp, {"bte-warp-drive.warp-section"})
+  add_requirement(warp, "bte_warp_drive_requirement_control", {"bte-warp-drive.requirement-control-label"})
+  add_requirement(warp, "bte_warp_drive_requirement_travel", {"bte-warp-drive.requirement-travel-label"})
+  add_requirement(warp, "bte_warp_drive_requirement_clearance", {"bte-warp-drive.requirement-clearance-label"})
+  add_requirement(warp, "bte_warp_drive_requirement_cooldown", {"bte-warp-drive.requirement-cooldown-label"})
+  add_requirement(warp, "bte_warp_drive_requirement_charge", {"bte-warp-drive.requirement-charge-label"})
+  add_requirement(warp, "bte_warp_drive_requirement_power", {"bte-warp-drive.requirement-power-label"})
+  add_requirement(warp, "bte_warp_drive_requirement_speed", {"bte-warp-drive.requirement-speed-label"})
+  add_requirement(warp, "bte_warp_drive_requirement_acceleration", {"bte-warp-drive.requirement-acceleration-label"})
 
-  local circuit = body.add({type = "frame", name = "warp_drive_circuit_panel", direction = "vertical", style = "inside_shallow_frame"})
+  local circuit = body.add({type = "frame", name = "bte_warp_drive_circuit_panel", direction = "vertical", style = "inside_shallow_frame"})
   circuit.style.width = CIRCUIT_PANEL_WIDTH
   circuit.style.padding = 12
-  add_section_heading(circuit, {"warp-drive.circuit-panel"})
-  local networks = circuit.add({type = "flow", name = "warp_drive_circuit_networks", direction = "vertical"})
+  add_section_heading(circuit, {"bte-warp-drive.circuit-panel"})
+  local networks = circuit.add({type = "flow", name = "bte_warp_drive_circuit_networks", direction = "vertical"})
   networks.style.bottom_margin = 8
-  add_circuit_network_row(networks, "warp_drive_circuit_red_network", "red")
-  add_circuit_network_row(networks, "warp_drive_circuit_green_network", "green")
-  add_labeled_checkbox(circuit, GUI_TOGGLE, {"warp-drive.enabled"}, {"warp-drive.enabled-tooltip"}, true)
-  add_labeled_checkbox(circuit, GUI_CIRCUIT_TOGGLE, {"warp-drive.circuit-enabled"}, {"warp-drive.circuit-enabled-tooltip"}, false)
-  local editor = circuit.add({type = "flow", name = "warp_drive_circuit_editor", direction = "horizontal"})
+  add_circuit_network_row(networks, "bte_warp_drive_circuit_red_network", "red")
+  add_circuit_network_row(networks, "bte_warp_drive_circuit_green_network", "green")
+  add_labeled_checkbox(circuit, GUI_TOGGLE, {"bte-warp-drive.enabled"}, {"bte-warp-drive.enabled-tooltip"}, true)
+  add_labeled_checkbox(circuit, GUI_CIRCUIT_TOGGLE, {"bte-warp-drive.circuit-enabled"}, {"bte-warp-drive.circuit-enabled-tooltip"}, false)
+  local editor = circuit.add({type = "flow", name = "bte_warp_drive_circuit_editor", direction = "horizontal"})
   editor.style.vertical_align = "center"
   editor.style.top_margin = 8
   editor.add({type = "choose-elem-button", name = GUI_CIRCUIT_FIRST_SIGNAL, elem_type = "signal", signal = record.circuit_first_signal})
@@ -883,30 +883,30 @@ local function draw_gui(player, record)
   editor.add({type = "choose-elem-button", name = GUI_CIRCUIT_SECOND_SIGNAL, elem_type = "signal", signal = record.circuit_second_signal})
   local constant = editor.add({type = "textfield", name = GUI_CIRCUIT_CONSTANT, text = tostring(record.circuit_constant or 0), numeric = true, allow_decimal = false, allow_negative = true})
   constant.style.width = 72
-  local circuit_state = circuit.add({type = "flow", name = "warp_drive_circuit_state", direction = "horizontal"})
+  local circuit_state = circuit.add({type = "flow", name = "bte_warp_drive_circuit_state", direction = "horizontal"})
   circuit_state.style.vertical_align = "center"
   circuit_state.style.bottom_margin = 8
-  local circuit_state_icon = circuit_state.add({type = "sprite", name = "warp_drive_circuit_state_icon", sprite = "utility/status_working"})
+  local circuit_state_icon = circuit_state.add({type = "sprite", name = "bte_warp_drive_circuit_state_icon", sprite = "utility/status_working"})
   circuit_state_icon.style.size = 18
   circuit_state_icon.style.stretch_image_to_widget_size = true
-  circuit_state.add({type = "label", name = "warp_drive_circuit_state_label", caption = {"warp-drive.circuit-condition-active"}, style = "green_label"})
+  circuit_state.add({type = "label", name = "bte_warp_drive_circuit_state_label", caption = {"bte-warp-drive.circuit-condition-active"}, style = "green_label"})
   circuit.add({type = "line"})
-  add_section_heading(circuit, {"warp-drive.circuit-outputs"})
+  add_section_heading(circuit, {"bte-warp-drive.circuit-outputs"})
   add_circuit_output(circuit, GUI_OUTPUT_WARP_ENABLED, GUI_OUTPUT_WARP_SIGNAL,
-    {"warp-drive.output-warp-level"}, {"warp-drive.output-warp-level-tooltip"},
+    {"bte-warp-drive.output-warp-level"}, {"bte-warp-drive.output-warp-level-tooltip"},
     record.output_warp_enabled ~= false, record.output_warp_signal or WARP_LEVEL_SIGNAL)
   add_circuit_output(circuit, GUI_OUTPUT_DISTANCE_ENABLED, GUI_OUTPUT_DISTANCE_SIGNAL,
-    {"warp-drive.output-distance"}, {"warp-drive.output-distance-tooltip"},
+    {"bte-warp-drive.output-distance"}, {"bte-warp-drive.output-distance-tooltip"},
     record.output_distance_enabled == true, record.output_distance_signal or DISTANCE_SIGNAL)
   add_circuit_output(circuit, GUI_OUTPUT_CHARGE_ENABLED, GUI_OUTPUT_CHARGE_SIGNAL,
-    {"warp-drive.output-charge"}, {"warp-drive.output-charge-tooltip"},
+    {"bte-warp-drive.output-charge"}, {"bte-warp-drive.output-charge-tooltip"},
     record.output_charge_enabled ~= false, record.output_charge_signal or CHARGE_SIGNAL)
   add_circuit_output(circuit, GUI_OUTPUT_SPEED_ENABLED, GUI_OUTPUT_SPEED_SIGNAL,
-    {"warp-drive.output-speed"}, {"warp-drive.output-speed-tooltip"},
+    {"bte-warp-drive.output-speed"}, {"bte-warp-drive.output-speed-tooltip"},
     record.output_speed_enabled ~= false, record.output_speed_signal or SPEED_SIGNAL)
   add_circuit_output(circuit, GUI_OUTPUT_TACHYON_DENSITY_ENABLED,
     GUI_OUTPUT_TACHYON_DENSITY_SIGNAL,
-    {"warp-drive.output-tachyon-density"}, {"warp-drive.output-tachyon-density-tooltip"},
+    {"bte-warp-drive.output-tachyon-density"}, {"bte-warp-drive.output-tachyon-density-tooltip"},
     record.output_tachyon_density_enabled == true,
     record.output_tachyon_density_signal or TACHYON_DENSITY_SIGNAL)
   player.opened = frame
@@ -1162,9 +1162,9 @@ Gui.handlers = handlers
 
 -- Integration test mods require this module to call its helpers directly. Only the owning mod
 -- may register the event handlers, because Factorio permits one handler per event per mod.
-if script.mod_name == "warp-drive" then
+if script.mod_name == "bte-warp-drive" then
   script.on_event(defines.events.on_gui_opened, handlers.on_gui_opened)
-  script.on_event("warp-drive-open", handlers.on_custom_open)
+  script.on_event("bte-warp-drive-open", handlers.on_custom_open)
   script.on_event(defines.events.on_gui_click, handlers.on_gui_click)
   script.on_event(defines.events.on_gui_checked_state_changed,
     handlers.on_gui_checked_state_changed)
