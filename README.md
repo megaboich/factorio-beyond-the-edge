@@ -26,7 +26,7 @@ See [spacelab/README.md](spacelab/README.md) for the full design, recipes, techn
 ## Warp Drive
 
 <p align="center">
-  <img src="warp-drive/graphics/warp-drive.gif" alt="Warp Drive animation" width="160">
+  <img src="warp-drive/docs/warp-drive-warp.gif" alt="Warp Drive at warp" width="200">
 </p>
 
 Warp Drive adds one platform-only building and two technologies. At first the drive is a detector: the deeper a platform travels into space, the more it speeds up research of its own final technology. Once that research completes, the same building becomes an engine that moves the platform through subspace. It speeds up travel but does not teleport, and engine thrust, platform weight, and power still matter. Asteroids disappear in subspace, so fast travel also cuts off asteroid collection.
@@ -50,4 +50,4 @@ Development rules, validation steps, and tests are described in [AGENTS.md](AGEN
 
 ## Status
 
-Both mods are in early development. Some bundled art is a placeholder or still awaiting confirmed permission; see each mod's **Asset Attribution** section before redistributing.
+Both mods are in early development. See each mod's **Asset Attribution** section for the origin of its art and sounds.

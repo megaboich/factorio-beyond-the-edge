@@ -17,8 +17,8 @@ data:extend({
   {
     type = "technology",
     name = "bte-theoretical-warp-drive",
-    icon = "__bte-warp-drive__/graphics/icons/warp-drive-big.png",
-    icon_size = 640,
+    icon = "__bte-warp-drive__/graphics/technology/warp-drive.png",
+    icon_size = 256,
     prerequisites = {"promethium-science-pack"},
     effects = {{type = "unlock-recipe", recipe = "bte-warp-drive"}},
     unit = {
@@ -31,8 +31,8 @@ data:extend({
   {
     type = "technology",
     name = "bte-practical-warp-drive",
-    icon = "__bte-warp-drive__/graphics/icons/warp-drive-big.png",
-    icon_size = 640,
+    icon = "__bte-warp-drive__/graphics/technology/warp-drive.png",
+    icon_size = 256,
     prerequisites = {"bte-theoretical-warp-drive"},
     unit = {
       count = 1000000000,

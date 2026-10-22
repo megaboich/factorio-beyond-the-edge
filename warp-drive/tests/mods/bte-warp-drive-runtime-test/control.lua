@@ -63,6 +63,18 @@ local function set_reserve_energy(platform, energy)
   remote.call("bte-warp-drive-runtime-test", "reserve_energy", platform.index, energy)
 end
 
+-- The drive-core overlay animations drawn on `entity`, sorted and comma-joined.
+local function overlay_names(entity)
+  local names = {}
+  for _, object in pairs(rendering.get_all_objects("bte-warp-drive")) do
+    if object.type == "animation" and object.target.entity == entity then
+      names[#names + 1] = object.animation
+    end
+  end
+  table.sort(names)
+  return table.concat(names, ",")
+end
+
 local function sound_state(platform)
   return remote.call("bte-warp-drive-runtime-test", "sound_state", platform.index)
 end
@@ -166,6 +178,9 @@ local function configure_circuit_condition(player, first_signal, comparator_inde
 end
 
 script.on_init(function()
+  if not helpers.is_valid_sprite_path(Gui.TITLE_SPRITE) then
+    fail("drive window title sprite " .. Gui.TITLE_SPRITE .. " does not exist")
+  end
   storage.runtime_test = {}
   set_phase("detector_gui")
 
@@ -181,8 +196,8 @@ script.on_init(function()
   platform.apply_starter_pack()
 
   local tiles = {}
-  for x = -12, 12 do
-    for y = -12, 12 do
+  for x = -16, 16 do
+    for y = -16, 16 do
       tiles[#tiles + 1] = {name = "space-platform-foundation", position = {x, y}}
     end
   end
@@ -200,7 +215,7 @@ script.on_init(function()
   })
   local drive_pole = platform.surface.create_entity({
     name = "substation",
-    position = {4, 8},
+    position = {6, 4},
     force = force
   })
   local ship_load = platform.surface.create_entity({
@@ -218,7 +233,7 @@ script.on_init(function()
 
   local drive = platform.surface.create_entity({
     name = "bte-warp-drive-controller",
-    position = {0, 8},
+    position = {0.5, 9.5},
     force = force,
     raise_built = true
   })
@@ -227,7 +242,7 @@ script.on_init(function()
   end
   local duplicate = platform.surface.create_entity({
     name = "bte-warp-drive-controller",
-    position = {10, 8},
+    position = {10.5, 9.5},
     force = force,
     raise_built = true
   })
@@ -258,8 +273,8 @@ script.on_init(function()
   end
   settings_platform.apply_starter_pack()
   local settings_tiles = {}
-  for x = -12, 12 do
-    for y = -12, 12 do
+  for x = -16, 16 do
+    for y = -16, 16 do
       settings_tiles[#settings_tiles + 1] = {
         name = "space-platform-foundation",
         position = {x, y}
@@ -269,7 +284,7 @@ script.on_init(function()
   settings_platform.surface.set_tiles(settings_tiles)
   local settings_drive = settings_platform.surface.create_entity({
     name = "bte-warp-drive-controller",
-    position = {0, 8},
+    position = {0.5, 9.5},
     force = force,
     raise_built = true
   })
@@ -300,7 +315,7 @@ script.on_init(function()
   local mapping = blueprint.create_blueprint({
     surface = platform.surface,
     force = force,
-    area = {{-3, 5}, {3, 11}}
+    area = {{-4, 5}, {5, 14}}
   })
   local blueprint_entity
   for entity_number, source_entity in pairs(mapping) do
@@ -327,7 +342,7 @@ script.on_init(function()
   local ghosts = blueprint.build_blueprint({
     surface = settings_platform.surface,
     force = force,
-    position = {8, 8}
+    position = {0.5, -9.5}
   })
   local blueprint_ghost
   for _, ghost in pairs(ghosts) do
@@ -772,7 +787,7 @@ script.on_nth_tick(10, function()
       if object.type == "line" then
         streaks = streaks + 1
         local position = object.from.position
-        if position.x < -76 or position.x > 77 or position.y < -76 or position.y > 77 then
+        if position.x < -80 or position.x > 81 or position.y < -80 or position.y > 81 then
           fail(string.format(
             "subspace streak escaped 64-tile platform field: x=%s y=%s",
             position.x, position.y))
@@ -785,6 +800,10 @@ script.on_nth_tick(10, function()
     if #platform.surface.find_entities_filtered({name = "bte-warp-drive-lightning"}) < 1 then
       fail("warp entry did not create full procedural Fulgora lightning")
     end
+    local overlays = overlay_names(storage.drive)
+    if overlays ~= "bte-warp-drive-activation-glow,bte-warp-drive-activation-interior" then
+      fail("warp entry did not start the activation pulse overlays: " .. overlays)
+    end
     if circuit_signal("signal-W") ~= 1 then
       fail("circuit output did not report active warp")
     end
@@ -794,6 +813,10 @@ script.on_nth_tick(10, function()
     end
   elseif phase == "warp_ramp" and elapsed >= 20 and elapsed <= 560 then
     if elapsed == 200 then
+      local overlays = overlay_names(storage.drive)
+      if overlays ~= "bte-warp-drive-warp-glow,bte-warp-drive-warp-interior" then
+        fail("activation overlays did not hand off to the warp overlays: " .. overlays)
+      end
       local sound = sound_state(platform)
       if sound.background_index ~= 2
           or sound.warp_next_tick ~= storage.runtime_test.started_at + 460 then
@@ -1519,13 +1542,15 @@ script.on_nth_tick(10, function()
     drive.destroy()
     local orphan = platform.surface.create_entity({
       name = "bte-warp-drive-animation",
-      position = {-8, 8},
-      force = game.forces.player
+      position = {-9.5, 9.5},
+      force = game.forces.player,
+      snap_to_grid = false
     })
     local duplicate_orphan = platform.surface.create_entity({
       name = "bte-warp-drive-animation",
-      position = {-8, 8},
-      force = game.forces.player
+      position = {-9.5, 9.5},
+      force = game.forces.player,
+      snap_to_grid = false
     })
     local stray_output = platform.surface.create_entity({
       name = "bte-warp-drive-circuit-output",
@@ -1538,7 +1563,7 @@ script.on_nth_tick(10, function()
     storage.orphan_animations = {orphan, duplicate_orphan}
     storage.drive = platform.surface.create_entity({
       name = "bte-warp-drive-controller",
-      position = {-8, 8},
+      position = {-9.5, 9.5},
       force = game.forces.player,
       raise_built = true
     })
@@ -1546,6 +1571,9 @@ script.on_nth_tick(10, function()
       fail("replacement drive creation returned nil")
     end
   elseif phase == "relocation" and elapsed == 20 then
+    if select(2, string.gsub(overlay_names(storage.drive), "[^,]+", "")) ~= 2 then
+      fail("replacement drive did not get exactly one interior and one glow overlay")
+    end
     local companion_names = {
       "bte-warp-drive-animation",
       POWER_INTERFACE_NAME,
@@ -1553,7 +1581,7 @@ script.on_nth_tick(10, function()
     }
     for _, name in pairs(companion_names) do
       local companions = platform.surface.find_entities_filtered({name = name})
-      if #companions ~= 1 or companions[1].position.x ~= -8 or companions[1].position.y ~= 8 then
+      if #companions ~= 1 or companions[1].position.x ~= -9.5 or companions[1].position.y ~= 9.5 then
         fail(name .. " was not moved with the replacement drive")
       end
     end
@@ -1575,7 +1603,7 @@ script.on_nth_tick(10, function()
     end
     if not platform.surface.can_place_entity({
       name = "bte-warp-drive-controller",
-      position = {0, 8},
+      position = {0.5, 9.5},
       force = game.forces.player
     }) then
       fail("hidden companion blocked rebuilding at the old drive position")

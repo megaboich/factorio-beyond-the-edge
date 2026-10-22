@@ -2,9 +2,11 @@
 
 Warp Drive is a standalone Factorio: Space Age post-game mod. It adds one platform-only building and two technologies. The experimental drive detects tachyons to accelerate its own final research; the completed drive emulates subspace travel with a speed boost derived from active engine thrust.
 
-![Warp Drive animation](graphics/warp-drive.gif)
-
-*The Warp Drive building uses this exact illustration. See [Asset Attribution](#asset-attribution).*
+| Standby | Charging |
+| --- | --- |
+| ![Warp Drive on standby](docs/warp-drive-standby.gif) | ![Warp Drive charging](docs/warp-drive-charging.gif) |
+| **Activation** | **Warp** |
+| ![Warp Drive entering warp](docs/warp-drive-activation.gif) | ![Warp Drive at warp](docs/warp-drive-warp.gif) |
 
 The mod requires `base >= 2.1.0` and `space-age >= 2.1.0`. SPACELAB is optional.
 
@@ -198,20 +200,27 @@ All circuit outputs are independently enabled and can use any signal. `W` and `S
 
 ## Building And Technologies
 
-The Warp Drive occupies a `6x6` platform footprint and takes 120 seconds to craft from:
+<img src="docs/icons/bte-warp-drive.png" width="24" height="24" alt=""> **Warp Drive:** A `9x9` platform-only drive core. Five magnetic rings float in a quartz glass column between two injector caps, caged by dark structural ribs; glass conduits arc from both caps to field projectors in the four corners, and liquid-helium lines feed the column from four manifold pumps. The core shows what the drive is doing:
 
-- 200 Quantum Processors
-- 500 Superconductors
-- 1,000 Tungsten Plates
-- 500 Carbon Fibers
-- 500 Supercapacitors
+- **Standby:** The rings hang motionless in alignment around a needle-thin black core in a faint icy halo. The drive looks like this while idle, cooling down, or switched off.
+- **Charging:** Alternate rings counter-rotate, injectors at both caps fire into a pulsing cobalt-white plasma column, and the inside of the tube seems to stretch into endless depth. The rings spin faster and the plasma brightens as the warp reserve fills. Before Practical Warp Drive, detecting tachyons looks the same, scaled by detector power.
+- **Activation:** On warp entry, the rings snap into alignment, the core draws in and flashes, a shockwave leaves the column, and the conduits flare azure, in time with the activation sound.
+- **Warp:** Blue and violet waves cascade down the column around flickering filaments, and the conduits carry azure plasma to the projectors.
+
+The Warp Drive takes 120 seconds to craft from:
+
+- <img src="docs/icons/quantum-processor.png" width="24" height="24" alt=""> 200 Quantum Processors
+- <img src="docs/icons/superconductor.png" width="24" height="24" alt=""> 500 Superconductors
+- <img src="docs/icons/tungsten-plate.png" width="24" height="24" alt=""> 1,000 Tungsten Plates
+- <img src="docs/icons/carbon-fiber.png" width="24" height="24" alt=""> 500 Carbon Fibers
+- <img src="docs/icons/supercapacitor.png" width="24" height="24" alt=""> 500 Supercapacitors
 
 | Technology | Cost | Unlock |
 | --- | --- | --- |
-| Theoretical Warp Drive | `10,000` units at 120 seconds each | Experimental detector |
-| Practical Warp Drive | `1,000,000,000` units at 120 seconds each | Functional warp travel |
+| <img src="docs/icons/technology/bte-theoretical-warp-drive.png" width="48" height="48" alt=""><br>Theoretical Warp Drive | `10,000` units at 120 seconds each | Experimental detector |
+| <img src="docs/icons/technology/bte-practical-warp-drive.png" width="48" height="48" alt=""><br>Practical Warp Drive | `1,000,000,000` units at 120 seconds each | Functional warp travel |
 
-Both technologies use Automation, Logistic, Military, Chemical, Production, Utility, Space, Metallurgic, Electromagnetic, Agricultural, Cryogenic, and Promethium science packs. Practical Warp Drive is intentionally prohibitive without the detector bonus.
+Both technologies use <img src="docs/icons/automation-science-pack.png" width="24" height="24" alt=""> Automation, <img src="docs/icons/logistic-science-pack.png" width="24" height="24" alt=""> Logistic, <img src="docs/icons/military-science-pack.png" width="24" height="24" alt=""> Military, <img src="docs/icons/chemical-science-pack.png" width="24" height="24" alt=""> Chemical, <img src="docs/icons/production-science-pack.png" width="24" height="24" alt=""> Production, <img src="docs/icons/utility-science-pack.png" width="24" height="24" alt=""> Utility, <img src="docs/icons/space-science-pack.png" width="24" height="24" alt=""> Space, <img src="docs/icons/metallurgic-science-pack.png" width="24" height="24" alt=""> Metallurgic, <img src="docs/icons/electromagnetic-science-pack.png" width="24" height="24" alt=""> Electromagnetic, <img src="docs/icons/agricultural-science-pack.png" width="24" height="24" alt=""> Agricultural, <img src="docs/icons/cryogenic-science-pack.png" width="24" height="24" alt=""> Cryogenic, and <img src="docs/icons/promethium-science-pack.png" width="24" height="24" alt=""> Promethium science packs. Practical Warp Drive is intentionally prohibitive without the detector bonus.
 
 ## Optional SPACELAB Integration
 
@@ -221,10 +230,6 @@ SPACELAB is never required or detected by name. Its orbital science recipes make
 
 ## Asset Attribution
 
-The bundled Quantum Stabilizer artwork is by **Hurricane046**. The source post and its Figma resource describe the artwork as free to use; explicit permission has not yet been requested. The creator will be contacted before release.
+The Warp Drive building graphics (hull, shadow, status lamps, and the per-state core overlays), its item icon, and its technology icon are original art, rendered from Three.js models in this repository (`tools/sprites/models/warp-drive.js`, `warp-drive-icon.js`, and `warp-drive-technology.js`). The sounds are synthesized or recorded locally; see [`AUDIO.md`](AUDIO.md).
 
-| Link | Description |
-| --- | --- |
-| [Hurricane046 on Factorio Mods](https://mods.factorio.com/user/Hurricane046) | Artist profile and published Factorio mods |
-| [Original Reddit post](https://www.reddit.com/r/factorio/comments/1g6cnhu/ive_been_learning_how_to_make_custom_factorio/) | Source post introducing the custom building artwork |
-| [Factorio Buildings on Figma](https://www.figma.com/proto/y1IQG08ZG2jIeJ5sTyF4MP/Factorio-Buildings) | Showcase of the artist's Factorio building artwork |
+The item and technology icons in this README are extracted from Factorio and this mod by `tools/readme-icons.py` and are not part of the mod package.

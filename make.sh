@@ -25,7 +25,7 @@ import zipfile
 from pathlib import Path
 
 mods_dir = Path(sys.argv[1]).expanduser()
-excluded_names = {".git", ".claude", ".DS_Store", "tests"}
+excluded_names = {".git", ".claude", ".DS_Store", "tests", "docs"}
 
 
 def ignore(_directory, names):

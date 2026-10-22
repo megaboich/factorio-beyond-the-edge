@@ -9,6 +9,8 @@ import argparse
 import importlib.util
 import json
 import math
+import re
+import struct
 import sys
 from pathlib import Path
 
@@ -32,6 +34,20 @@ def watts(value):
     raise ValueError(f"unrecognized power value {value!r}")
 
 
+def png_size(path):
+    """Width and height from a PNG's IHDR chunk, without an image library."""
+    with open(path, "rb") as f:
+        header = f.read(24)
+    if header[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError(f"{path} is not a PNG")
+    return struct.unpack(">II", header[16:24])
+
+
+def mod_directories(repo):
+    """Maps each repository mod's info.json name to its directory."""
+    return {json.loads(info.read_text())["name"]: info.parent for info in repo.glob("*/info.json")}
+
+
 def _products(entries):
     return sorted((e["name"], e.get("amount"), e.get("independent_probability", 1)) for e in entries or [])
 
@@ -41,9 +57,11 @@ def _expected_products(entries):
 
 
 class Checker:
-    def __init__(self, raw, vanilla):
+    def __init__(self, raw, vanilla, mods=None, locale_files=()):
         self.raw = raw
+        self.locale_files = list(locale_files)
         self.vanilla = vanilla
+        self.mods = mods or {}
         self.checks = 0
         self.failures = []
 
@@ -91,6 +109,54 @@ class Checker:
                    sorted(unlocks))
         return tech
 
+    def sprite_sheet(self, label, sprite):
+        """Asserts a sprite from one of this repository's mods exists and holds all its frames."""
+        match = re.fullmatch(r"__([^/]+)__/(.+)", sprite.get("filename", ""))
+        if not match or match[1] not in self.mods:
+            self.check(f"{label} file is bundled by a repository mod", sprite.get("filename"), "__<repository mod>__/...")
+            return
+        path = self.mods[match[1]] / match[2]
+        self.check(f"{label} file {match[2]} exists", path.is_file(), True)
+        if not path.is_file():
+            return
+        width, height = png_size(path)
+        frames = sprite.get("frame_count", 1)
+        per_row = sprite.get("line_length") or frames
+        needed = (sprite["width"] * min(frames, per_row), sprite["height"] * math.ceil(frames / per_row))
+        self.check(f"{label} sheet {width}x{height} holds {frames} frames", width >= needed[0] and height >= needed[1], True)
+
+    def locale(self, prefix):
+        """Asserts every prototype whose name starts with `prefix` has a name players can read.
+
+        Uses the --dump-prototype-locale output beside the data dump (<category>-locale.json),
+        which resolves default keys and fallbacks as the game does and leaves out any prototype
+        whose name does not resolve; in game those show "Unknown key". Entities and items share
+        one file each across their many prototype types.
+        """
+        names = {path.name[:-len("-locale.json")]: json.loads(path.read_text()).get("names", {})
+                 for path in self.locale_files}
+        self.check(f"prototype locale dump found for {prefix}*", bool(names), True)
+
+        def category(type_name, prototype):
+            if type_name in names:
+                return type_name
+            if "stack_size" in prototype:
+                return "item"
+            if "collision_box" in prototype or "selection_box" in prototype or "max_health" in prototype:
+                return "entity"
+            return None
+
+        unresolved = []
+        for type_name, prototypes in self.raw.items():
+            for name, prototype in prototypes.items():
+                kind = category(type_name, prototype)
+                if not name.startswith(prefix) or kind is None:
+                    continue
+                text = names[kind].get(name) if kind in names else None
+                if text is None or "Unknown key" in text:
+                    unresolved.append(f"{type_name} {name}")
+        self.check(f"{prefix}* prototype names resolve in the locale", sorted(unresolved), [])
+
     def footprint(self, entity):
         (x1, y1), (x2, y2) = (tuple(p) if isinstance(p, list) else (p["x"], p["y"]) for p in entity["collision_box"])
         return math.ceil(x2 - x1), math.ceil(y2 - y1)
@@ -123,7 +189,7 @@ def main():
         spec = importlib.util.spec_from_file_location(f"{mod}_prototypes", repo / mod / "tests" / "prototypes.py")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        checker = Checker(raw, vanilla)
+        checker = Checker(raw, vanilla, mod_directories(repo), sorted(Path(args.dump).parent.glob("*-locale.json")))
         module.check(checker)
         status = "PASS" if not checker.failures else "FAIL"
         print(f"PROTOTYPE_TEST_{status}: {args.label} {mod}: {checker.checks} checks, {len(checker.failures)} failures")

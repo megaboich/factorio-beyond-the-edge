@@ -63,7 +63,7 @@ add_technology({
   type = "technology",
   name = "bte-growth-facility",
   icons = {
-    {icon = "__bte-spacelab__/graphics/technology/growth-facility.png", icon_size = 128, scale = 1.0, shift = {0, 0}},
+    {icon = "__bte-spacelab__/graphics/technology/growth-facility.png", icon_size = 256, scale = 0.5, shift = {0, 0}},
     item_icon_layer("yumako", 0.7, {-52, -48}),
     item_icon_layer("jellynut", 0.7, {52, -48}),
     item_icon_layer("biter-egg", 0.7, {-52, 48}),

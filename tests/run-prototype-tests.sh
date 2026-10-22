@@ -34,12 +34,17 @@ dump_data() {
     FACTORIO_MODS_DIR="$run_dir/mods" "$REPO_DIR/make.sh" "$@" >/dev/null
   fi
   printf '[path]\nread-data=__PATH__system-read-data__\nwrite-data=%s\n' "$run_dir/write-data" > "$run_dir/config.ini"
-  if ! "$FACTORIO_BIN" --config "$run_dir/config.ini" --mod-directory "$run_dir/mods" --dump-data \
-      > "$run_dir/factorio.log" 2>&1; then
-    printf 'Factorio failed to load mod set %s:\n' "$label" >&2
-    tail -20 "$run_dir/factorio.log" >&2
-    exit 1
-  fi
+  # Factorio performs one dump per launch: resolved prototypes, then the names and descriptions
+  # players see (<type>-locale.json beside it).
+  local dump
+  for dump in --dump-data --dump-prototype-locale; do
+    if ! "$FACTORIO_BIN" --config "$run_dir/config.ini" --mod-directory "$run_dir/mods" "$dump" \
+        > "$run_dir/factorio.log" 2>&1; then
+      printf 'Factorio failed to load mod set %s:\n' "$label" >&2
+      tail -20 "$run_dir/factorio.log" >&2
+      exit 1
+    fi
+  done
   printf '%s\n' "$run_dir/write-data/script-output/data-raw-dump.json"
 }
 

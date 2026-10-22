@@ -127,8 +127,8 @@ local function create_branch_probe(force)
   end
   platform.apply_starter_pack()
   local tiles = {}
-  for x = -12, 12 do
-    for y = -12, 12 do
+  for x = -16, 16 do
+    for y = -16, 16 do
       tiles[#tiles + 1] = {name = "space-platform-foundation", position = {x, y}}
     end
   end
@@ -136,7 +136,7 @@ local function create_branch_probe(force)
   platform.surface.ignore_surface_conditions = true
   local drive = platform.surface.create_entity({
     name = "bte-warp-drive-controller",
-    position = {0, 10},
+    position = {0.5, 10.5},
     force = force,
     raise_built = true
   })
@@ -185,8 +185,8 @@ script.on_init(function()
   end
   platform.apply_starter_pack()
   local platform_tiles = {}
-  for x = -14, 14 do
-    for y = -14, 14 do
+  for x = -16, 16 do
+    for y = -16, 16 do
       platform_tiles[#platform_tiles + 1] = {name = "space-platform-foundation", position = {x, y}}
     end
   end
@@ -194,7 +194,7 @@ script.on_init(function()
 
   local drive = platform.surface.create_entity({
     name = "bte-warp-drive-controller",
-    position = {0, 10},
+    position = {0.5, 10.5},
     force = force,
     raise_built = true
   })

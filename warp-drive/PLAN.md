@@ -25,7 +25,8 @@ This file tracks unresolved decisions and validation only. Implemented behavior 
 - Verify GUI layout, values, controls, scrolling, and close behavior.
 - Verify asteroid removal during warp.
 - Listen for click-free charge-step boundaries, activation handoff, background alternation, and exit overlap at normal and accelerated game speeds.
-- Inspect animation, emission, shadow, footprint, and selection box.
+- Inspect the hull, shadow, footprint, and selection box, and each core overlay state (standby, charging speed-up, activation timing against its sound, and warp) in normal play, including night on planets in remote view and with "Hide tall entities".
+- Decide whether existing saves need a migration for drives that overlap neighbours after the footprint grew from 6x6 to 9x9.
 - Inspect both circuit-wire colors for attachment, sag, shadows, and crossing.
 
 ## Deferred Features

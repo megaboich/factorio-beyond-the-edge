@@ -11,6 +11,66 @@ local circuit_connector = table.deepcopy(circuit_source.circuit_connector)
 local circuit_wire_max_distance = circuit_source.circuit_wire_max_distance
 
 local animation_speed = (0.5 / 4) / 2
+-- Sheets rendered by tools/sprites (models/growth-facility.js). Each layer's .lua carries the
+-- width, height, shift, and line_length that util.sprite_load reads, as vanilla graphics do.
+local sprite_path = "__bte-spacelab__/graphics/entity/growth-facility/growth-facility-"
+local frame_count = 32
+
+local function sprite_layer(name, options)
+  options.frame_count = options.frame_count or frame_count
+  options.animation_speed = animation_speed
+  options.scale = 0.5
+  return util.sprite_load(sprite_path .. name, options)
+end
+
+-- Each growth recipe owns one recipe tint channel, which it sets to white while the others are
+-- transparent (growth_recipe_tints in recipes.lua). Its specimens, fluid tint, and light use that
+-- channel, so only the running recipe shows. Contents stay drawn, frozen, while the machine idles.
+-- Specimens grow through their life cycle over 8 building loops: 64 frames at a quarter of the
+-- building's frame rate. Fluid colours match VARIANT_COLORS in tools/sprites/models/growth-facility.js.
+local specimen_frames = 64
+local specimen_speed = animation_speed * specimen_frames / (8 * frame_count)
+local recipe_channels = {
+  {name = "yumako", channel = "primary", fluid = {0.72, 0.38, 0.31}, light = {r = 0.85, g = 0.25, b = 0.15}},
+  {name = "jellynut", channel = "secondary", fluid = {0.78, 0.58, 0.79}, light = {r = 0.9, g = 0.45, b = 0.9}},
+  {name = "biter-egg", channel = "tertiary", fluid = {0.86, 0.65, 0.37}, light = {r = 1, g = 0.6, b = 0.2}},
+  {name = "pentapod-egg", channel = "quaternary", fluid = {0.54, 0.77, 0.45}, light = {r = 0.45, g = 0.95, b = 0.3}}
+}
+local no_recipe_tint = {
+  primary = {0, 0, 0, 0}, secondary = {0, 0, 0, 0}, tertiary = {0, 0, 0, 0}, quaternary = {0, 0, 0, 0}
+}
+
+-- Specimens first, then the translucent fluid over them, matching the rendered layer order.
+local working_visualisations = {}
+for _, recipe in pairs(recipe_channels) do
+  local specimens = sprite_layer("specimens-" .. recipe.name, {frame_count = specimen_frames, draw_as_glow = true})
+  specimens.animation_speed = specimen_speed
+  table.insert(working_visualisations, {apply_recipe_tint = recipe.channel, always_draw = true, animation = specimens})
+end
+for _, recipe in pairs(recipe_channels) do
+  table.insert(working_visualisations, {
+    apply_recipe_tint = recipe.channel,
+    always_draw = true,
+    animation = sprite_layer("fluid", {tint = recipe.fluid, draw_as_glow = true})
+  })
+end
+table.insert(working_visualisations, {
+  -- Status lamps, consoles, grow lights, and the roof beacon.
+  fadeout = true,
+  animation = sprite_layer("glow-lights", {blend_mode = "additive", draw_as_glow = true})
+})
+table.insert(working_visualisations, {
+  effect = "uranium-glow",
+  light = {intensity = 0.25, size = 18, shift = {0, 0}, color = {r = 0.7, g = 0.8, b = 1}}
+})
+for _, recipe in pairs(recipe_channels) do
+  table.insert(working_visualisations, {
+    apply_recipe_tint = recipe.channel,
+    effect = "flicker",
+    fadeout = true,
+    light = {intensity = 1, size = 18, shift = {0, 0}, color = recipe.light}
+  })
+end
 
 local growth_facility = {
   type = "assembling-machine",
@@ -25,7 +85,7 @@ local growth_facility = {
   alert_icon_shift = util.by_pixel(0, -12),
   collision_box = {{-4.3, -4.3}, {4.3, 4.3}},
   selection_box = {{-4.5, -4.5}, {4.5, 4.5}},
-  drawing_box_vertical_extension = 0.4,
+  drawing_box_vertical_extension = 1.8,
   circuit_connector = circuit_connector,
   circuit_wire_max_distance = circuit_wire_max_distance,
   resistances = {
@@ -85,84 +145,13 @@ local growth_facility = {
   graphics_set = {
     animation = {
       layers = {
-        {
-          filename = "__bte-spacelab__/graphics/entity/growth-facility/growth-facility.png",
-          priority = "high",
-          width = 4032 / 7,
-          height = 3360 / 5,
-          frame_count = 32,
-          line_length = 7,
-          shift = util.by_pixel(0, -24),
-          animation_speed = animation_speed,
-          scale = 0.5
-        },
-        {
-          draw_as_shadow = true,
-          filename = "__bte-spacelab__/graphics/entity/growth-facility/growth-facility-shadow.png",
-          priority = "high",
-          width = 618,
-          height = 570,
-          frame_count = 1,
-          line_length = 1,
-          repeat_count = 32,
-          shift = util.by_pixel(8, 2),
-          animation_speed = animation_speed,
-          scale = 0.5
-        }
+        sprite_layer("main", {priority = "high"}),
+        sprite_layer("shadow", {priority = "high", frame_count = 1, repeat_count = frame_count, draw_as_shadow = true})
       }
     },
-    working_visualisations = {
-      {
-        apply_recipe_tint = "primary",
-        effect = "flicker",
-        fadeout = true,
-        animation = {
-          filename = "__space-age__/graphics/entity/biolab/biolab-lights.png",
-          blend_mode = "additive",
-          draw_as_glow = true,
-          width = 326,
-          height = 362,
-          frame_count = 32,
-          line_length = 8,
-          animation_speed = 0.2,
-          shift = util.by_pixel(0, -18),
-          scale = 1.08
-        }
-      },
-      {
-        apply_recipe_tint = "secondary",
-        effect = "flicker",
-        fadeout = true,
-        animation = {
-          filename = "__space-age__/graphics/entity/biolab/biolab-lights.png",
-          blend_mode = "additive",
-          draw_as_glow = true,
-          width = 326,
-          height = 362,
-          frame_count = 32,
-          line_length = 8,
-          animation_speed = 0.2,
-          shift = util.by_pixel(0, -18),
-          scale = 0.57
-        }
-      },
-      {
-        effect = "uranium-glow",
-        light = {intensity = 0.25, size = 18, shift = {0, 0}, color = {r = 0.7, g = 0.8, b = 1}}
-      },
-      {
-        apply_recipe_tint = "primary",
-        effect = "flicker",
-        fadeout = true,
-        light = {intensity = 1.35, size = 18, shift = {0, 0}, color = {r = 1, g = 1, b = 1}}
-      },
-      {
-        apply_recipe_tint = "secondary",
-        effect = "flicker",
-        fadeout = true,
-        light = {intensity = 0.675, size = 10, shift = {0, 0}, color = {r = 1, g = 1, b = 1}}
-      }
-    }
+    default_recipe_tint = no_recipe_tint,
+    recipe_not_set_tint = no_recipe_tint,
+    working_visualisations = working_visualisations
   },
   crafting_categories = {"bte-spacelab-growth"},
   crafting_speed = 4,
@@ -171,7 +160,7 @@ local growth_facility = {
     usage_priority = "secondary-input",
     emissions_per_minute = { pollution = 4 }
   },
-  energy_usage = "40000kW",
+  energy_usage = "100MW",
   module_slots = 8,
   allowed_effects = {"consumption"}
 }

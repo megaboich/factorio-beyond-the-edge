@@ -1,4 +1,5 @@
 local Drive = require("scripts.drive")
+local Visuals = require("scripts.visuals")
 
 local Warp = {}
 
@@ -726,31 +727,27 @@ local function update_idle_or_charging(record, platform, direction, charge_buffe
   end
 end
 
-function Warp.update(record)
-  local entity = record.entity
-  if not entity or not entity.valid then
-    Drive.destroy_companions(record)
-    return false
+-- Charging progress, or detector power relative to its maximum, for the core overlays.
+local function visual_level(record, platform)
+  if record.state == "detecting" then
+    return (record.detector_power or 0) / DETECTOR_MAX_POWER_WATTS
   end
-  local platform = entity.surface.platform
-  if not platform or platform.index ~= record.platform_index then
-    Drive.destroy_companions(record)
-    return false
-  end
-  Drive.ensure_animation(record)
-  Drive.ensure_circuit_output(record)
-  local direction = update_direction(record, platform)
+  local charge = required_charge(platform)
+  return charge > 0 and (record.reserve_energy or 0) / charge or 0
+end
+
+-- Advances the drive's electrical and warp state. Returns false when the power interface could
+-- not be created, which skips this update's sound scheduling.
+local function update_state(record, platform, direction)
   if not practical_researched(platform.force) then
     update_experimental(record)
-    update_charge_sound(record, platform)
-    update_warp_background_sound(record)
     return true
   end
   Drive.destroy_detector(record)
   local charge_buffer = Drive.ensure_power(record)
   if not charge_buffer then
     record.state = "charging"
-    return true
+    return false
   end
   local charge = required_charge(platform)
   if record.power_mode ~= "practical" then
@@ -767,8 +764,28 @@ function Warp.update(record)
   else
     update_idle_or_charging(record, platform, direction, charge_buffer)
   end
-  update_charge_sound(record, platform)
-  update_warp_background_sound(record)
+  return true
+end
+
+function Warp.update(record)
+  local entity = record.entity
+  if not entity or not entity.valid then
+    Drive.destroy_companions(record)
+    return false
+  end
+  local platform = entity.surface.platform
+  if not platform or platform.index ~= record.platform_index then
+    Drive.destroy_companions(record)
+    return false
+  end
+  Drive.ensure_animation(record)
+  Drive.ensure_circuit_output(record)
+  local direction = update_direction(record, platform)
+  if update_state(record, platform, direction) then
+    update_charge_sound(record, platform)
+    update_warp_background_sound(record)
+  end
+  Visuals.update(record, visual_level(record, platform))
   return true
 end
 

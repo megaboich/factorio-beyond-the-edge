@@ -1,3 +1,5 @@
+local Visuals = require("scripts.visuals")
+
 local Drive = {}
 
 local DRIVE_NAME = "bte-warp-drive-controller"
@@ -168,6 +170,7 @@ function Drive.destroy_companions(record)
   destroy_power(record)
   destroy_animation(record)
   destroy_circuit_output(record)
+  Visuals.reset(record)
 end
 
 local function find_companion(record, field, name)
@@ -240,11 +243,14 @@ local function create_companion(record, field, name, direction)
   if not entity or not entity.valid then
     return nil
   end
+  -- Zero-size companions would snap to tile corners, while the odd-sized controller sits on a tile
+  -- centre (or, in saves from the 6x6 drive, on a corner); keep them exactly on the controller.
   record[field] = entity.surface.create_entity({
     name = name,
     position = entity.position,
     direction = direction,
     force = entity.force,
+    snap_to_grid = false,
     create_build_effect_smoke = false
   })
   return record[field]
@@ -439,6 +445,8 @@ function Drive.rebuild()
       if #entities > 0 then
         local record = Drive.normalize_record(old_drives[platform.index] or {}, entities[1], platform)
         rebuilt[platform.index] = record
+        -- Overlay animations may have changed with the mod version; redraw them on the next update.
+        Visuals.reset(record)
         recover_orphan_companions(record)
         Drive.ensure_animation(record)
         Drive.ensure_circuit_output(record)

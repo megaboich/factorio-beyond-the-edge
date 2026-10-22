@@ -8,23 +8,16 @@ local fluid = helpers.fluid
 local ammonia_ingredient = helpers.ammonia_ingredient
 local add_optional_ingredient = helpers.add_optional_ingredient
 
+-- The Growth Facility draws one capsule-contents overlay per growth recipe, each tinted by its own
+-- recipe tint channel (spacelab/prototypes/entities.lua). A recipe turns its channel on (white)
+-- and the others off (transparent), so only its own specimens show.
+local on = {r = 1, g = 1, b = 1, a = 1}
+local off = {r = 0, g = 0, b = 0, a = 0}
 local growth_recipe_tints = {
-  yumako = {
-    primary = {r = 0.55, g = 0.02, b = 0.02, a = 1},
-    secondary = {r = 0.85, g = 0.08, b = 0.08, a = 1}
-  },
-  jellynut = {
-    primary = {r = 1, g = 0.18, b = 0.62, a = 1},
-    secondary = {r = 1, g = 0.55, b = 0.82, a = 1}
-  },
-  biter_egg = {
-    primary = {r = 1, g = 0.38, b = 0.02, a = 1},
-    secondary = {r = 1, g = 0.62, b = 0.12, a = 1}
-  },
-  pentapod_egg = {
-    primary = {r = 0.25, g = 0.95, b = 0.12, a = 1},
-    secondary = {r = 0.55, g = 1, b = 0.32, a = 1}
-  }
+  yumako = {primary = on, secondary = off, tertiary = off, quaternary = off},
+  jellynut = {primary = off, secondary = on, tertiary = off, quaternary = off},
+  biter_egg = {primary = off, secondary = off, tertiary = on, quaternary = off},
+  pentapod_egg = {primary = off, secondary = off, tertiary = off, quaternary = on}
 }
 
 add_recipe({
@@ -221,15 +214,15 @@ add_recipe({
   always_show_made_in = true
 })
 
-local yumako_ingredients = {item("nutrients", 5), fluid("water", 100), fluid("steam", 50), item("yumako-seed", 1), item("calcite", 1), item("carbon", 2)}
-add_optional_ingredient(yumako_ingredients, ammonia_ingredient(25))
+local yumako_ingredients = {item("nutrients", 25), fluid("water", 500), fluid("steam", 250), item("yumako-seed", 1), item("calcite", 5), item("carbon", 10)}
+add_optional_ingredient(yumako_ingredients, ammonia_ingredient(125))
 add_recipe({
   type = "recipe",
   name = "bte-yumako-cultivation",
   categories = {"bte-spacelab-growth"},
   energy_required = 60,
   ingredients = yumako_ingredients,
-  results = {item("yumako", 50)},
+  results = {item("yumako", 57)},
   crafting_machine_tint = growth_recipe_tints.yumako,
   preserve_products_in_machine_output = true,
   enabled = false,
@@ -239,15 +232,15 @@ add_recipe({
   always_show_made_in = true
 })
 
-local jellynut_ingredients = {item("nutrients", 5), fluid("water", 100), fluid("steam", 50), item("jellynut-seed", 1), item("calcite", 1), item("carbon", 2)}
-add_optional_ingredient(jellynut_ingredients, ammonia_ingredient(25))
+local jellynut_ingredients = {item("nutrients", 25), fluid("water", 500), fluid("steam", 250), item("jellynut-seed", 1), item("calcite", 5), item("carbon", 10)}
+add_optional_ingredient(jellynut_ingredients, ammonia_ingredient(125))
 add_recipe({
   type = "recipe",
   name = "bte-jellynut-cultivation",
   categories = {"bte-spacelab-growth"},
   energy_required = 60,
   ingredients = jellynut_ingredients,
-  results = {item("jellynut", 50)},
+  results = {item("jellynut", 57)},
   crafting_machine_tint = growth_recipe_tints.jellynut,
   preserve_products_in_machine_output = true,
   enabled = false,
@@ -257,15 +250,15 @@ add_recipe({
   always_show_made_in = true
 })
 
-local biter_egg_ingredients = {item("nutrients", 10), item("bioflux", 1), fluid("water", 100), fluid("steam", 50), item("biter-egg", 1), item("calcite", 1), item("carbon", 2)}
-add_optional_ingredient(biter_egg_ingredients, ammonia_ingredient(25))
+local biter_egg_ingredients = {item("nutrients", 50), item("bioflux", 5), fluid("water", 500), fluid("steam", 250), item("biter-egg", 1), item("calcite", 5), item("carbon", 10)}
+add_optional_ingredient(biter_egg_ingredients, ammonia_ingredient(125))
 add_recipe({
   type = "recipe",
   name = "bte-biter-egg-incubation",
   categories = {"bte-spacelab-growth"},
   energy_required = 120,
   ingredients = biter_egg_ingredients,
-  results = {item("biter-egg", 20)},
+  results = {item("biter-egg", 19)},
   crafting_machine_tint = growth_recipe_tints.biter_egg,
   preserve_products_in_machine_output = true,
   enabled = false,
@@ -275,15 +268,15 @@ add_recipe({
   always_show_made_in = true
 })
 
-local pentapod_egg_ingredients = {item("nutrients", 10), item("bioflux", 1), fluid("water", 100), fluid("steam", 50), item("pentapod-egg", 1), item("calcite", 1), item("carbon", 2)}
-add_optional_ingredient(pentapod_egg_ingredients, ammonia_ingredient(25))
+local pentapod_egg_ingredients = {item("nutrients", 50), item("bioflux", 5), fluid("water", 500), fluid("steam", 250), item("pentapod-egg", 1), item("calcite", 5), item("carbon", 10)}
+add_optional_ingredient(pentapod_egg_ingredients, ammonia_ingredient(125))
 add_recipe({
   type = "recipe",
   name = "bte-pentapod-egg-incubation",
   categories = {"bte-spacelab-growth"},
   energy_required = 120,
   ingredients = pentapod_egg_ingredients,
-  results = {item("pentapod-egg", 20)},
+  results = {item("pentapod-egg", 19)},
   crafting_machine_tint = growth_recipe_tints.pentapod_egg,
   preserve_products_in_machine_output = true,
   enabled = false,

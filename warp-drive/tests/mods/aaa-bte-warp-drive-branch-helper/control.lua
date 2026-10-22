@@ -27,7 +27,7 @@ local function ensure_power_source(platform)
       position = {0, 10},
       force = platform.force
     })
-    surface.create_entity({name = "substation", position = {4, 10}, force = platform.force})
+    surface.create_entity({name = "substation", position = {7, 4}, force = platform.force})
   end
   return source
 end

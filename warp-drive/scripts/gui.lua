@@ -4,6 +4,7 @@ local Research = require("__bte-warp-drive__/scripts/research")
 local Gui = {}
 
 local DRIVE_NAME = "bte-warp-drive-controller"
+local TITLE_SPRITE = "entity/" .. DRIVE_NAME
 local CIRCUIT_OUTPUT_NAME = "bte-warp-drive-circuit-output"
 local IMPATIENT_SETTING = "bte-warp-drive-severely-impatient"
 local GUI_NAME = "bte_warp_drive_window"
@@ -722,7 +723,7 @@ local function draw_gui(player, record)
   local title = frame.add({type = "flow", name = "bte_warp_drive_title", direction = "horizontal"})
   title.style.vertical_align = "center"
   title.drag_target = frame
-  title.add({type = "sprite", sprite = "entity/warp-drive-controller"})
+  title.add({type = "sprite", sprite = TITLE_SPRITE})
   local title_label = title.add({type = "label", caption = {"bte-warp-drive.title"}, style = "frame_title"})
   title_label.style.left_margin = 8
   local spacer = title.add({type = "empty-widget", style = "draggable_space_header"})
@@ -1159,6 +1160,8 @@ function handlers.on_gui_closed(event)
 end
 
 Gui.handlers = handlers
+-- Exposed so the runtime tests, which run without a player to open the window, can validate it.
+Gui.TITLE_SPRITE = TITLE_SPRITE
 
 -- Integration test mods require this module to call its helpers directly. Only the owning mod
 -- may register the event handlers, because Factorio permits one handler per event per mod.
