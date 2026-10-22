@@ -1,0 +1,11 @@
+{
+  "name": "aaa-warp-drive-speed-test",
+  "version": "0.0.1",
+  "title": "Warp Drive Speed Test Helper",
+  "author": "Warp Drive test suite",
+  "factorio_version": "2.1",
+  "dependencies": [
+    "base >= 2.1.0",
+    "space-age >= 2.1.0"
+  ]
+}
