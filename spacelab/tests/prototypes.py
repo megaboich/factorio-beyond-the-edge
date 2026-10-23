@@ -28,6 +28,7 @@ def check(t):
     check_flurolite(t)
     check_technologies(t)
     check_vanilla_overrides(t)
+    check_crafting_menu(t)
     t.locale("bte-")
 
 
@@ -114,7 +115,8 @@ def tint_alpha(color):
 
 
 def check_growth_facility_graphics(t, machine):
-    """Original tools/sprites art: a 32-frame building and shadow, lights, and per-recipe specimens and fluid.
+    """Original tools/sprites art: a 32-frame building and shadow, lights, and per-recipe fluid, vat
+    glows, and specimens, drawn in that order so the glows light the fluid but not the specimens.
 
     Specimens grow over 8 building loops: 64 frames at a quarter of the building's frame rate.
     """
@@ -129,8 +131,10 @@ def check_growth_facility_graphics(t, machine):
             [(v["animation"].get("filename", "").rsplit("growth-facility-", 1)[-1], v.get("apply_recipe_tint"),
               bool(v.get("always_draw")), v["animation"].get("blend_mode", "normal"), v["animation"].get("frame_count"),
               v["animation"].get("animation_speed") / building_speed if building_speed else None) for v in overlays],
-            [(f"{sprite}.png", channel, True, "normal", 64, 0.25) for channel, sprite in GROWTH_CHANNELS.values()]
-            + [("fluid.png", channel, True, "normal", 32, 1.0) for channel, _ in GROWTH_CHANNELS.values()]
+            [("fluid.png", channel, True, "normal", 32, 1.0) for channel, _ in GROWTH_CHANNELS.values()]
+            + [(f"glow-vat-{glow}.png", channel, True, "additive", 1, 1.0)
+               for glow in ("bottom", "top") for channel, _ in GROWTH_CHANNELS.values()]
+            + [(f"{sprite}.png", channel, True, "normal", 64, 0.25) for channel, sprite in GROWTH_CHANNELS.values()]
             + [("glow-lights.png", None, False, "additive", 32, 1.0)])
     t.check("Growth Facility recipe lights use one channel each",
             sorted(v.get("apply_recipe_tint") for v in graphics.get("working_visualisations", [])
@@ -175,3 +179,21 @@ def check_vanilla_overrides(t):
         t.check(f"recipe {name} surface conditions removed",
                 t.raw["recipe"].get(name, {}).get("surface_conditions"), None)
         t.same_as_vanilla("recipe", name, ignore=("surface_conditions",))
+
+
+def check_crafting_menu(t):
+    """SPACELAB has no crafting tab of its own: its entries sit in Space Age's subgroups."""
+    t.absent("item-group", "bte-spacelab")
+    expected = {
+        ("item", "bte-growth-facility"): "agriculture",
+        ("recipe", "bte-growth-facility"): "agriculture",
+        ("item", "bte-flurolite"): "space-material",
+        **{("recipe", name): "space-crushing" for name in [*STONE_FOCUSED, *FLUROLITE_FOCUSED]},
+        **{("recipe", name): "agriculture-processes" for name in GROWTH_RECIPES},
+    }
+    for (kind, name), subgroup in expected.items():
+        prototype = t.prototype(kind, name)
+        if prototype is not None:
+            t.check(f"{name} {kind} subgroup", prototype.get("subgroup"), subgroup)
+    leftover = sorted(name for name in t.raw.get("item-subgroup", {}) if name.startswith("bte-spacelab"))
+    t.check("SPACELAB item subgroups", leftover, [])

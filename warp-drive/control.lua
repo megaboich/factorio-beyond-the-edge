@@ -44,12 +44,12 @@ if script.active_mods["bte-warp-drive-runtime-test"] then
         state = record.state,
         cooldown_until = record.cooldown_until,
         last_exit_reason = record.last_exit_reason,
-        readiness_announced = record.readiness_announced == true,
-        readiness_sound_tick = record.readiness_sound_tick,
         charge_next_tick = record.charge_sound_next_tick,
         charge_step = record.charge_sound_step,
         warp_next_tick = record.warp_sound_next_tick,
-        background_index = record.warp_background_sound_index
+        background_index = record.warp_background_sound_index,
+        shockwaves_sent = record.shockwaves_sent,
+        anomalies = record.anomalies and #record.anomalies or 0
       }
     end
   })

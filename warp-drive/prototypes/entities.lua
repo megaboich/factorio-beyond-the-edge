@@ -64,13 +64,14 @@ local function glow_layer(name, options)
 end
 
 -- One animation prototype per state overlay, drawn with LuaRendering.draw_animation, which sets
--- the playback speed itself. Frame counts match the model's layers: static interiors where the
--- rings are still, 32-frame loops, and the 30-frame activation pulse.
+-- the playback speed itself. Frame counts match the model's layers: a static interior while the
+-- rings are still on standby, 32-frame loops, and the 30-frame activation pulse.
 local overlay_frames = {
   standby = {interior = 1, glow = 32},
+  detecting = {interior = 32, glow = 32},
   charging = {interior = 32, glow = 32},
   activation = {interior = 30, glow = 30},
-  warp = {interior = 1, glow = 32}
+  warp = {interior = 32, glow = 32}
 }
 local overlays = {}
 for state, frames in pairs(overlay_frames) do
@@ -140,6 +141,35 @@ local drive_animation = {
   continuous_animation = true,
   -- Status lamps blinking over a 64-tick loop pair: 32 frames at a quarter frame per tick.
   animation = glow_layer("lamps", {frame_count = 32, animation_speed = 0.25})
+}
+
+-- Exists only while warp holds, so the building hums with the field it maintains. Any entity
+-- plays its working sound continuously, like Vulcanus's chimney vents; the sound is positional,
+-- unlike the drive's ship-wide event sounds.
+local field_hum = {
+  type = "simple-entity-with-owner",
+  name = "bte-warp-drive-field-hum",
+  localised_name = {"entity-name.bte-warp-drive"},
+  icon = "__bte-warp-drive__/graphics/icons/warp-drive.png",
+  icon_size = 64,
+  flags = {"not-on-map", "not-blueprintable", "not-deconstructable", "not-flammable", "not-repairable"},
+  hidden = true,
+  selectable_in_game = false,
+  collision_mask = {layers = {}},
+  collision_box = {{0, 0}, {0, 0}},
+  selection_box = {{0, 0}, {0, 0}},
+  working_sound = {
+    sound = {
+      filename = "__bte-warp-drive__/resources/audio/warp-field-hum.ogg",
+      category = "game-effect",
+      volume = 0.9,
+      audible_distance_modifier = 1.2
+    },
+    use_doppler_shift = false,
+    max_sounds_per_prototype = 2,
+    fade_in_ticks = 120,
+    fade_out_ticks = 30
+  }
 }
 
 -- Legacy accumulators remain defined so existing saves can migrate their stored energy.
@@ -253,6 +283,99 @@ warp_lightning.strike_effect = nil
 warp_lightning.attractor_hit_effect = nil
 warp_lightning.graphics_set.explosion = nil
 
+-- Warp field effects from tools/sprites/models/warp-field.js: neutral white light, tinted per use.
+local function field_layer(name, options)
+  options = options or {}
+  options.scale = options.scale or 0.5
+  options.blend_mode = "additive"
+  options.draw_as_glow = true
+  return util.sprite_load("__bte-warp-drive__/graphics/entity/warp-field/warp-field-" .. name, options)
+end
+
+local function scaled(color, k)
+  return {color[1] * k, color[2] * k, color[3] * k, 1}
+end
+
+-- Lightning's own cloud is a dim, neutral flash of the nebula sheet (eight frames of one cloud's
+-- life, played over the strike), so strikes do not blink colour. The colourful clouds are the
+-- background anomalies below, independent of the strikes.
+local lightning_cloud = field_layer("nebula", {frame_count = 8, scale = 1, tint = {0.22, 0.3, 0.38, 1}})
+warp_lightning.graphics_set.cloud_background = lightning_cloud
+
+-- Background anomalies: six unrelated cloud shapes that scripts/anomalies.lua draws with
+-- LuaRendering, one frame per layer (animation_speed 0), tinted, scaled, turned, and moved.
+local anomaly = {
+  type = "animation",
+  name = "bte-warp-drive-anomaly",
+  layers = {field_layer("anomaly", {frame_count = 6})}
+}
+
+-- Subspace streaks: particles, so the engine moves them smoothly every tick. scripts/warp.lua
+-- spawns them heading south with their head (the sheet's south end) leading. Each variation is
+-- one of the four shapes (one row of eight frames that fades in, then holds, played once over the
+-- particle's life), in one of five light blues from cyan to a violet tinge, at one of three
+-- lengths. Life and frame timing are duplicated in scripts/warp.lua (WARP_STREAK_LIFE).
+local STREAK_LIFE = 120
+-- Tints stay at or below 1: Factorio reads a colour with any channel above 1 as 0-255.
+local streak_pictures = {}
+for shape = 0, 3 do
+  for _, color in pairs({{0.3, 0.75, 1}, {0.45, 0.85, 1}, {0.6, 0.95, 1}, {0.25, 0.6, 1}, {0.55, 0.65, 1}}) do
+    for _, size in pairs({{scale = 0.4, light = 0.85}, {scale = 0.6, light = 1}, {scale = 0.85, light = 1}}) do
+      local picture = field_layer("streak", {
+        frame_count = 8,
+        scale = size.scale,
+        animation_speed = 8 / (STREAK_LIFE + 4),
+        tint = scaled(color, size.light)
+      })
+      picture.y = shape * picture.height
+      table.insert(streak_pictures, picture)
+    end
+  end
+end
+local streak = {
+  type = "optimized-particle",
+  name = "bte-warp-drive-streak",
+  pictures = streak_pictures,
+  life_time = STREAK_LIFE,
+  fade_away_duration = 20,
+  -- Particles fall unless their vertical motion is zero; streaks glide at deck level.
+  vertical_acceleration = 0,
+  movement_modifier = 1,
+  movement_modifier_when_on_ground = 1,
+  render_layer = "projectile",
+  render_layer_when_on_ground = "projectile",
+  draw_shadow_when_on_ground = false
+}
+
+local field_effects = {warp_lightning, anomaly, streak}
+
+-- The activation shockwave carried across the ship: trivial smoke grows the ring from the
+-- building's edge, where the drive's own shockwave fades, to `reach` tiles at 1.2 tiles per tick.
+-- scripts/warp.lua picks the smallest reach that covers the platform.
+local SHOCKWAVE_RING = 7 -- ring radius in tiles at scale 1
+local SHOCKWAVE_START = 4.5
+for _, reach in pairs({32, 64, 128, 256}) do
+  for name, color in pairs({azure = {0.35, 0.75, 1}, violet = {0.6, 0.45, 1}}) do
+    local ticks = math.ceil((reach - SHOCKWAVE_START) / 1.2)
+    table.insert(field_effects, {
+      type = "trivial-smoke",
+      name = "bte-warp-drive-shockwave-" .. name .. "-" .. reach,
+      animation = field_layer("shockwave", {tint = scaled(color, 1)}),
+      cyclic = true,
+      duration = ticks,
+      fade_in_duration = 0,
+      fade_away_duration = math.floor(ticks * 0.6),
+      spread_duration = ticks,
+      start_scale = SHOCKWAVE_START / SHOCKWAVE_RING,
+      end_scale = reach / SHOCKWAVE_RING,
+      render_layer = "smoke",
+      affected_by_wind = false,
+      movement_slow_down_factor = 0,
+      show_when_smoke_off = true
+    })
+  end
+end
+
 local detector_load = table.deepcopy(charge_buffer)
 detector_load.name = "bte-warp-drive-detector-load"
 detector_load.energy_source.buffer_capacity = "166.667MJ"
@@ -282,6 +405,7 @@ data:extend(overlays)
 data:extend({
   drive,
   drive_animation,
+  field_hum,
   power_interface,
   -- Legacy companions can be removed after supported saves no longer contain them.
   support_load,
@@ -291,6 +415,6 @@ data:extend({
   charge_buffer_10gj,
   charge_buffer,
   circuit_output,
-  subspace_smoke,
-  warp_lightning
+  subspace_smoke
 })
+data:extend(field_effects)

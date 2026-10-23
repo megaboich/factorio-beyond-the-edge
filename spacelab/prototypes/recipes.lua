@@ -37,8 +37,8 @@ add_recipe({
   },
   results = {item("bte-growth-facility", 1)},
   enabled = false,
-  subgroup = "bte-spacelab-buildings",
-  order = "a[bte-growth-facility]",
+  subgroup = "agriculture",
+  order = "z[bte]-a[bte-growth-facility]",
   always_show_made_in = true
 })
 
@@ -60,8 +60,8 @@ add_recipe({
     recipe_icon_layer(item("stone", 1), 0.28, {-11, 11})
   },
   enabled = false,
-  subgroup = "bte-spacelab-asteroid-processing",
-  order = "a[metallic]-a[stone]",
+  subgroup = "space-crushing",
+  order = "z[bte]-a[metallic]-a[stone]",
   allow_productivity = true,
   always_show_made_in = true
 })
@@ -82,8 +82,8 @@ add_recipe({
     recipe_icon_layer(item("stone", 1), 0.28, {11, -11})
   },
   enabled = false,
-  subgroup = "bte-spacelab-asteroid-processing",
-  order = "b[carbonic]-a[stone]",
+  subgroup = "space-crushing",
+  order = "z[bte]-b[carbonic]-a[stone]",
   allow_productivity = true,
   always_show_made_in = true
 })
@@ -104,8 +104,8 @@ add_recipe({
     recipe_icon_layer(item("stone", 1), 0.28, {11, -11})
   },
   enabled = false,
-  subgroup = "bte-spacelab-asteroid-processing",
-  order = "c[oxide]-a[stone]",
+  subgroup = "space-crushing",
+  order = "z[bte]-c[oxide]-a[stone]",
   allow_productivity = true,
   always_show_made_in = true
 })
@@ -131,8 +131,8 @@ add_recipe({
     recipe_icon_layer(item("bte-flurolite", 1), 0.28, {11, 11})
   },
   enabled = false,
-  subgroup = "bte-spacelab-asteroid-processing",
-  order = "a[metallic]-b[flurolite]",
+  subgroup = "space-crushing",
+  order = "z[bte]-a[metallic]-b[flurolite]",
   allow_productivity = true,
   always_show_made_in = true
 })
@@ -156,8 +156,8 @@ add_recipe({
     recipe_icon_layer(item("bte-flurolite", 1), 0.28, {-11, 11})
   },
   enabled = false,
-  subgroup = "bte-spacelab-asteroid-processing",
-  order = "b[carbonic]-b[flurolite]",
+  subgroup = "space-crushing",
+  order = "z[bte]-b[carbonic]-b[flurolite]",
   allow_productivity = true,
   always_show_made_in = true
 })
@@ -181,8 +181,8 @@ add_recipe({
     recipe_icon_layer(item("bte-flurolite", 1), 0.28, {-11, 11})
   },
   enabled = false,
-  subgroup = "bte-spacelab-asteroid-processing",
-  order = "c[oxide]-b[flurolite]",
+  subgroup = "space-crushing",
+  order = "z[bte]-c[oxide]-b[flurolite]",
   allow_productivity = true,
   always_show_made_in = true
 })
@@ -208,8 +208,8 @@ add_recipe({
     recipe_icon_layer(item("bte-flurolite", 1), 0.28, {11, 11})
   },
   enabled = false,
-  subgroup = "bte-spacelab-asteroid-processing",
-  order = "d[promethium]-a[shattered-synthesis]",
+  subgroup = "space-crushing",
+  order = "z[bte]-d[promethium]-a[shattered-synthesis]",
   allow_productivity = true,
   always_show_made_in = true
 })
@@ -226,8 +226,8 @@ add_recipe({
   crafting_machine_tint = growth_recipe_tints.yumako,
   preserve_products_in_machine_output = true,
   enabled = false,
-  subgroup = "bte-spacelab-growth",
-  order = "a[yumako]",
+  subgroup = "agriculture-processes",
+  order = "z[bte]-a[yumako]",
   allow_productivity = true,
   always_show_made_in = true
 })
@@ -244,8 +244,8 @@ add_recipe({
   crafting_machine_tint = growth_recipe_tints.jellynut,
   preserve_products_in_machine_output = true,
   enabled = false,
-  subgroup = "bte-spacelab-growth",
-  order = "b[jellynut]",
+  subgroup = "agriculture-processes",
+  order = "z[bte]-b[jellynut]",
   allow_productivity = true,
   always_show_made_in = true
 })
@@ -262,8 +262,8 @@ add_recipe({
   crafting_machine_tint = growth_recipe_tints.biter_egg,
   preserve_products_in_machine_output = true,
   enabled = false,
-  subgroup = "bte-spacelab-growth",
-  order = "c[biter-egg]",
+  subgroup = "agriculture-processes",
+  order = "z[bte]-c[biter-egg]",
   allow_productivity = true,
   always_show_made_in = true
 })
@@ -280,8 +280,8 @@ add_recipe({
   crafting_machine_tint = growth_recipe_tints.pentapod_egg,
   preserve_products_in_machine_output = true,
   enabled = false,
-  subgroup = "bte-spacelab-growth",
-  order = "d[pentapod-egg]",
+  subgroup = "agriculture-processes",
+  order = "z[bte]-d[pentapod-egg]",
   allow_productivity = true,
   always_show_made_in = true
 })
@@ -308,8 +308,8 @@ if ammonia_results[1] then
       recipe_icon_layer(ammonia_results[1], 0.28, {-11, 11})
     },
     enabled = false,
-    subgroup = "bte-spacelab-cryogenics",
-    order = "a[ammonia-extraction]",
+    subgroup = "space-processing",
+    order = "z[bte]-a[ammonia-extraction]",
     allow_productivity = true,
     always_show_made_in = true
   })
@@ -331,8 +331,8 @@ add_recipe({
     recipe_icon_layer(fluid("fluorine", 1), 0.28, {12, 0})
   },
   enabled = false,
-  subgroup = "bte-spacelab-cryogenics",
-  order = "b[lithium-focused]",
+  subgroup = "space-processing",
+  order = "z[bte]-b[lithium-focused]",
   allow_productivity = true,
   always_show_made_in = true
 })
@@ -353,8 +353,8 @@ add_recipe({
     recipe_icon_layer(fluid("lithium-brine", 1), 0.28, {12, 0})
   },
   enabled = false,
-  subgroup = "bte-spacelab-cryogenics",
-  order = "c[fluorine-focused]",
+  subgroup = "space-processing",
+  order = "z[bte]-c[fluorine-focused]",
   allow_productivity = true,
   always_show_made_in = true
 })

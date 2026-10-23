@@ -1,6 +1,6 @@
 # Warp Drive Composite Building
 
-**Document role:** this is the maintainer reference for the Warp Drive's composite entity: its prototypes, companion ownership, electrical roles, lifecycle, wiring, and rendering. It does not specify gameplay balance, research routing, location calculations, or audio implementation. `README.md` is authoritative for player-facing behavior and values; `AUDIO.md` covers sound assets and runtime playback; `PLAN.md` tracks unfinished work.
+**Document role:** this is the maintainer reference for the Warp Drive's composite entity: its prototypes, companion ownership, electrical roles, lifecycle, wiring, and rendering. It does not specify gameplay balance, research routing, location calculations, or audio implementation. `README.md` is authoritative for player-facing behavior and values; `AUDIO.md` covers sound assets and runtime playback.
 
 ## Why It Is Composite
 
@@ -13,6 +13,7 @@ The controller owns the composite. Companions are never independently placeable,
 | Player interaction and circuit input | Visible `constant-combinator` controller |
 | Continuously blinking status lamps | Zero-power animation companion |
 | Core graphics that follow the drive state | Script-owned `LuaRendering` animations on the controller |
+| A positional hum while warp holds | Hidden simple entity with a looping working sound, present only during warp |
 | Detector, charging, and support sampling | Runtime-configured secondary-input electric energy interface |
 | Persistent warp support reserve | Serialized joule value in the drive record |
 | Scripted circuit output | Hidden output combinator |
@@ -25,12 +26,13 @@ The shared power interface uses consumer-only secondary-input mode, the same pri
 | --- | --- | --- | --- |
 | `bte-warp-drive-controller` | `constant-combinator` | Always | Visible 9x9 entity with the static hull and shadow; ownership anchor, health, collision, mining, circuit input, and GUI target |
 | `bte-warp-drive-animation` | `electric-energy-interface` | Always | Zero-power 32-frame additive status-lamp loop |
+| `bte-warp-drive-field-hum` | `simple-entity-with-owner` | During warp | Plays the looping warp-field hum around the building |
 | `bte-warp-drive-power-interface` | `electric-energy-interface` | Always | Runtime-sized secondary-priority detector, charging, and support sink; prototype permits requests up to `60 GW` and forbids output |
 | `bte-warp-drive-circuit-output` | `constant-combinator` | Always | Scripted practical `W`, `C`, and `S` outputs, `D`, and pre-Practical `T`, on both wire colors |
 
 Legacy detector, support, and tiered charge-buffer prototypes remain defined only so supported saves can load and migrate their companions and stored energy.
 
-Eight `animation` prototypes, `bte-warp-drive-<state>-interior` and `bte-warp-drive-<state>-glow` for the `standby`, `charging`, `activation`, and `warp` states, hold the core overlays.
+Ten `animation` prototypes, `bte-warp-drive-<state>-interior` and `bte-warp-drive-<state>-glow` for the `standby`, `detecting`, `charging`, `activation`, and `warp` states, hold the core overlays.
 
 ## Rendering And Wires
 
@@ -41,17 +43,29 @@ Everything that changes with the drive state lives in `scripts/visuals.lua`. It 
 | Record state | Visual state | Playback |
 | --- | --- | --- |
 | `detector-offline`, `idle`, `cooldown` | `standby` | Static interior; glow loop at 0.25 frames per tick |
-| `charging`, `detecting` | `charging` | 0.25 to 1 frame per tick, glow tint from 45% to 100%, both by reserve progress or detector power |
+| `detecting` | `detecting` | The charging animation in green; 0.25 to 1 frame per tick, glow tint from 45% to 100%, both by detector power |
+| `charging` | `charging` | 0.25 to 1 frame per tick, glow tint from 45% to 100%, both by reserve progress |
 | `warp`, first 90 ticks after entering from `standby` or `charging` | `activation` | 30 frames over 90 ticks, started on frame 0 to match `warp-activation.ogg` |
-| `warp` | `warp` | Static interior; glow loop at 0.5 frames per tick |
+| `warp` | `warp` | Interior (turning rings) and glow loop at 0.5 frames per tick |
 
 `LuaRendering` shows frame `tick * speed + offset` modulo the frame count, so a speed change recomputes the offset to keep the current frame and avoid a jump. Speed and tint are reissued only when they change by more than 2%. Render objects targeted at the controller disappear with it; the record keeps `visual_interior`, `visual_glow`, `visual_state`, `visual_speed`, `visual_glow_level`, and `visual_activation_until`, and `rebuild_drives` resets them so changed prototypes are redrawn on the next update.
 
-During warp, 48 short-lived cyan streaks are regenerated every 10 ticks. A harmless clone of Space Age's Fulgora lightning prototype provides its full procedurally forked bolt, eight ground-streamer variants, shader layers, and native 36-tick lifecycle while removing the endpoint explosion, damage, attractor energy, sound, camera flash, debris, and smoke. Cached platform foundation bounds, expanded by 64 tiles on each side, define the shared streak and lightning field, averaging one active strike per `32 x 32` tiles and working in freely panned remote view. Tile events refresh the bounds without scanning in the 10-tick update. Whole strikes start at randomized moments rather than being seeded partway through an animation.
+During warp, short-lived cyan streaks glide south across the field. A harmless clone of Space Age's Fulgora lightning prototype provides its full procedurally forked bolt, eight ground-streamer variants, shader layers, and native 36-tick lifecycle while removing the endpoint explosion, damage, attractor energy, sound, camera flash, debris, and smoke. Cached platform foundation bounds, expanded by 128 tiles on each side, define the shared streak, lightning, and anomaly field, enough to fill the most zoomed-out game view around a ship; streaks scale with its area, one per 512 tiles (48 to 900), working in freely panned remote view. Tile events refresh the bounds without scanning in the 10-tick update. Whole strikes start at randomized moments rather than being seeded partway through an animation.
 
-Drive audio is owned by the warp lifecycle rather than a companion entity. See
-[`AUDIO.md`](AUDIO.md) for assets, runtime scheduling, persistent state, and
-regeneration.
+A lightning entity draws its cloud at its own position and its bolt `source_offset` tiles south of it, 25 tiles for the Fulgora clone. Candidate strikes are spread over the whole field at one active strike per `16 x 32` tiles. `keep_strike` keeps a candidate only if one limited count finds no foundation tile within a random margin of its cloud-to-tip column. The margin is 7.5 tiles with probability 0.25, otherwise uniform from 7.5 to 20 tiles, so a strike *d* tiles from the ship survives with probability rising linearly from 0.25 at 7.5 tiles to 1 at 20; measured over 44,000 strikes, density reaches the open-space rate by 20 tiles. Counting foundation tiles rather than anything but `empty-space` matters: chunks not generated yet hold `out-of-map` tiles, which would push strikes away from them. About once every 1.7 seconds the same prototype also strikes so that its bolt lands anywhere within 10 tiles of the drive, its cloud 25 tiles north of the landing point.
+
+Streaks are `bte-warp-drive-streak` particles, which the engine moves every tick, so they glide instead of stepping with the 10-tick update. Each update only spawns about enough at random places to keep one streak per 512 tiles of field alive (48 to 900), over a 120-tick life at 0.555 tiles per tick. Spawn points extend one life's travel north of the field so its north edge is as dense as the rest. They always head south with their bright head leading, the way the game's starfield streams past a travelling platform, whichever way it goes. Their sheet, from `tools/sprites/models/warp-field.js`, has four shapes (a clean line, a broader soft one, one with a faint twin, and a gently beaded one), each a row of eight frames that fades in over the first two and then holds; the particle plays its row once over its life, so new streaks fade in rather than pop up, and fade away at the end. Sixty variations combine the shapes with five light blues and three lengths. Particles cannot be listed from scripts, so the runtime test does not count them; the prototype test pins their variations and flight.
+
+Lightning's cloud is the `nebula` sheet of `tools/sprites/models/warp-field.js`, eight frames of one cloud's life drawn as additive glow in neutral white, tinted a dim blue-grey so strikes do not flash colour.
+
+The colourful background is `scripts/anomalies.lua`, independent of the lightning. While warp holds it keeps one anomaly per `36 x 36` tiles of the field (at most 250), each two shapes from the six-frame `anomaly` sheet drawn with `LuaRendering.draw_animation` (`animation_speed` 0) on `under-tiles`, so the deck hides them. Every 10-tick update moves each anomaly along its slow drift, eases its scale between two sizes, turns each shape, crossfades between the two shapes so its form changes, shifts its pastel hue, and fades it in and out over its 30 to 60 second life; expired anomalies are replaced. The first fill starts each anomaly part-way through its life so they never fade together, and the whole field fades in at entry and out over 120 ticks after exit. Space platforms are always day, so the clouds read as lit through additive glow rather than light sources. Render objects expire on their own shortly after their anomaly would end, and removing the drive destroys them.
+
+The activation shockwave continues across the platform as trivial smoke, which the engine grows and fades without script updates. Warp entry records `shockwave_tick`; the warp effect update sends an azure ring 30 ticks later, with the core's flash, and a violet ring at 40 ticks, counting them in `shockwaves_sent`. Each ring grows from the building's 4.5-tile edge, where the model's own shockwave fades, to the smallest of four prototype reaches (32, 64, 128, or 256 tiles) that covers the platform's foundation bounds from the drive. Smoke stays drawn while its centre is off screen, so the ring is visible across large platforms.
+
+Drive audio is owned by the warp lifecycle. Event sounds play ship-wide without an
+entity; only the positional field hum needs one, the warp-only companion above, which the
+warp sound update creates and removes. See [`AUDIO.md`](AUDIO.md) for assets, runtime
+scheduling, persistent state, and regeneration.
 
 The symmetric footprint reuses one circuit connection definition in all directions. When adjusting it:
 
@@ -67,7 +81,7 @@ The symmetric footprint reuses one circuit connection definition in all directio
 | Field | Role |
 | --- | --- |
 | `entity`, `platform_index` | Controller reference and platform identity |
-| `animation`, `power`, `circuit_output` | Active companion references |
+| `animation`, `power`, `circuit_output`, `field_hum` | Active companion references; `field_hum` exists only during warp |
 | `enabled`, `circuit_enabled`, `circuit_first_signal`, `circuit_comparator`, `circuit_second_signal`, `circuit_constant` | Mutually exclusive automatic/circuit engagement settings and configurable circuit condition; an absent first signal is unsatisfied |
 | `output_*_enabled`, `output_*_signal` | Independent circuit output toggles and signal assignments; legacy outputs default enabled and distance defaults disabled |
 | `state`, `cooldown_until` | Composite state and lockout |
@@ -78,6 +92,8 @@ The symmetric footprint reuses one circuit connection definition in all directio
 | `support_power`, `power_sample_watts`, `power_sample_support_watts`, `support_demand_watts`, `support_check_after` | Delivered power, interface request, logical warp demand, and startup grace |
 | `warp_ramp_state` | GUI acceleration status |
 | `lightning_bounds` | Active warp effect footprint |
+| `anomalies`, `anomaly_field_since`, `anomaly_field_until` | Background anomalies (drift, scale, hue, shapes, render objects) and the field's fade-in and fade-out start ticks |
+| `shockwave_tick`, `shockwaves_sent` | Warp entry tick for the pending activation shockwaves, and how many were sent |
 | `visual_*` | Core overlay render objects and their current state, speed, and glow level |
 
 Build events call `register_drive`. Invalid off-platform placement is destroyed. A duplicate controller is destroyed, refunded on the platform surface, and reported to the force.

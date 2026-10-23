@@ -1,3 +1,4 @@
+local Anomalies = require("scripts.anomalies")
 local Visuals = require("scripts.visuals")
 
 local Drive = {}
@@ -18,6 +19,7 @@ local LEGACY_POWER_NAMES = {
 }
 local CIRCUIT_OUTPUT_NAME = "bte-warp-drive-circuit-output"
 local ANIMATION_NAME = "bte-warp-drive-animation"
+local FIELD_HUM_NAME = "bte-warp-drive-field-hum"
 local PRACTICAL_TECH = "bte-practical-warp-drive"
 local CHARGE_JOULES_PER_KG = 100
 local TICKS_PER_SECOND = 60
@@ -42,7 +44,8 @@ local CIRCUIT_COMPARATOR_INDEX = {
 local COMPANION_FIELDS = {
   [POWER_NAME] = "power",
   [CIRCUIT_OUTPUT_NAME] = "circuit_output",
-  [ANIMATION_NAME] = "animation"
+  [ANIMATION_NAME] = "animation",
+  [FIELD_HUM_NAME] = "field_hum"
 }
 
 function Drive.init_storage()
@@ -163,12 +166,22 @@ local function destroy_animation(record)
   end
 end
 
+function Drive.destroy_field_hum(record)
+  if record and record.field_hum and record.field_hum.valid then
+    record.field_hum.destroy()
+  end
+  if record then
+    record.field_hum = nil
+  end
+end
+
 function Drive.destroy_companions(record)
   Drive.destroy_support(record)
   Drive.destroy_detector(record)
   Drive.destroy_charge(record)
   destroy_power(record)
   destroy_animation(record)
+  Drive.destroy_field_hum(record)
   destroy_circuit_output(record)
   Visuals.reset(record)
 end
@@ -272,6 +285,11 @@ function Drive.ensure_power(record)
     power.electric_interface_mode = defines.electric_interface_mode.secondary_input
   end
   return power
+end
+
+--- The positional warp-field hum: a companion that exists only while warp holds.
+function Drive.ensure_field_hum(record)
+  return create_companion(record, "field_hum", FIELD_HUM_NAME)
 end
 
 function Drive.ensure_animation(record)
@@ -418,6 +436,7 @@ function Drive.remove(platform_index, record)
   local current = drives[platform_index]
   if current and (not record or current == record) then
     Drive.destroy_companions(current)
+    Anomalies.destroy(current)
     drives[platform_index] = nil
   end
 end
@@ -459,6 +478,7 @@ function Drive.rebuild()
   for platform_index, old in pairs(old_drives) do
     if not rebuilt[platform_index] then
       Drive.destroy_companions(old)
+      Anomalies.destroy(old)
     end
   end
 end

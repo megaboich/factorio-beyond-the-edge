@@ -12,13 +12,17 @@
 // - lamps: status lamps, always on (drawn by the animation companion).
 // States (variants):
 // - standby: rings motionless in alignment, a black core thread in a faint icy halo.
+// - detecting: the charging animation in neon green, while the experimental drive detects
+//   tachyons. The game speeds it up and brightens it with detector power.
 // - charging: alternate rings counter-rotate, injectors fire into a pulsing cobalt-white plasma
 //   column, and the tube's interior seems to stretch into infinite depth. The game speeds this up
 //   and brightens it as the warp reserve fills.
 // - activation: a one-shot 1.5 s pulse, timed with warp-activation.ogg: the rings snap into
 //   alignment, the core implodes and flashes, a shockwave leaves the column, and the conduits flare.
-// - warp: rings locked, blue and violet waves cascade down the column around flickering
-//   filaments, and the conduits carry azure plasma to the projectors.
+//   The rings then spin up to their warp speed.
+// - warp: alternate rings counter-rotate at the speed of a full charge, blue and violet waves
+//   cascade down the column around flickering filaments, and the conduits carry azure plasma to
+//   the projectors.
 import * as THREE from "three";
 import { random, textured } from "../lib/textures.js";
 import { beam, part, tube } from "../lib/geometry.js";
@@ -29,7 +33,13 @@ const LOOP = 32;
 const ACTIVATION_FRAMES = 30;
 // The activation lasts 90 ticks (1.5 s); a loop of LOOP frames lasts 64 ticks at 0.5 frames per tick.
 const ACTIVATION_SPAN = 90 / 64;
-const STATES = ["standby", "charging", "activation", "warp"];
+const STATES = ["standby", "detecting", "charging", "activation", "warp"];
+// Ring turn per loop, in segments: charging at its base speed (the game plays it from half to double
+// speed), and warp, which matches a full charge.
+const CHARGING_TURN = 2;
+const WARP_TURN = 4;
+// The activation's rings start spinning up at this fraction of it.
+const SPIN_UP_FROM = 0.45;
 
 const BASE = 0.12; // top of the deck plate
 const DAIS = 0.48; // top of the dais
@@ -51,6 +61,11 @@ const CORE_TOP = 5.1;
 const CORE_MID = (CORE_BOTTOM + CORE_TOP) / 2;
 const PROJECTOR = 3.15; // corner projector offset on each axis
 const DIAGONALS = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
+// The round core (dais, caps, column, rings, cooling ring, and their light) is squashed front to
+// back to this fraction. The renderer keeps ground tiles square so the footprint matches the
+// game's grid, which would otherwise draw every flat circle as a circle; vanilla art draws them as
+// ovals about this tall. Duplicated in growth-facility.js and warp-field.js (the shockwave ring).
+const ROUND_DEPTH = 0.78;
 
 const COLORS = {
   icy: 0x9fe8ff,
@@ -59,7 +74,17 @@ const COLORS = {
   deep: 0x2b4cff,
   azure: 0x39b8ff,
   electric: 0x3d7dff,
-  violet: 0x8a5cff
+  violet: 0x8a5cff,
+  // Tachyon detection.
+  mint: 0xe2ffe8,
+  neon: 0x39ff7a,
+  emerald: 0x0bb34a,
+  lime: 0x9dff3d
+};
+// The charging animation's colours, shared by tachyon detection in neon green.
+const PALETTES = {
+  charging: { core: COLORS.white, mid: COLORS.cobalt, deep: COLORS.deep, tunnel: COLORS.violet, accent: COLORS.cobalt },
+  detecting: { core: COLORS.mint, mid: COLORS.neon, deep: COLORS.emerald, tunnel: COLORS.lime, accent: COLORS.neon }
 };
 
 const smoothstep = (a, b, x) => {
@@ -104,11 +129,13 @@ export default {
     { name: "lamps", tag: "lamp", glow: true, frames: LOOP, span: 2, preview: {} },
     { name: "interior-standby", tag: "interior", variant: "standby", frames: 1, preview: { variant: "standby" } },
     { name: "glow-standby", tags: ["interior", "energy"], glow: true, variant: "standby", frames: LOOP, span: 2, preview: { variant: "standby" } },
+    { name: "interior-detecting", tag: "interior", variant: "detecting", frames: LOOP, preview: { variant: "detecting" } },
+    { name: "glow-detecting", tags: ["interior", "energy"], glow: true, variant: "detecting", frames: LOOP, preview: { variant: "detecting" } },
     { name: "interior-charging", tag: "interior", variant: "charging", frames: LOOP, preview: { variant: "charging" } },
     { name: "glow-charging", tags: ["interior", "energy"], glow: true, variant: "charging", frames: LOOP, preview: { variant: "charging" } },
     { name: "interior-activation", tag: "interior", variant: "activation", frames: ACTIVATION_FRAMES, span: ACTIVATION_SPAN, preview: { variant: "activation" } },
     { name: "glow-activation", tags: ["interior", "energy"], glow: true, variant: "activation", frames: ACTIVATION_FRAMES, span: ACTIVATION_SPAN, preview: { variant: "activation" } },
-    { name: "interior-warp", tag: "interior", variant: "warp", frames: 1, preview: { variant: "warp" } },
+    { name: "interior-warp", tag: "interior", variant: "warp", frames: LOOP, preview: { variant: "warp" } },
     { name: "glow-warp", tags: ["interior", "energy"], glow: true, variant: "warp", frames: LOOP, preview: { variant: "warp" } }
   ],
   references: [
@@ -233,6 +260,11 @@ export default {
       part(root, new THREE.BoxGeometry(w, 0.03, d), m.hazard, [x, BASE + 0.015, z]);
     }
 
+    // Children added between these marks form the round core; the deck, corner projectors,
+    // conduits, and circuit terminal keep their grid positions.
+    const round = [];
+    let roundFrom = root.children.length;
+
     // Dais: two round steps with a hazard band and a grating ring.
     part(root, new THREE.CylinderGeometry(3.1, 3.15, 0.18, 64), m.cap, [0, BASE + 0.09, 0]);
     part(root, new THREE.CylinderGeometry(3.16, 3.16, 0.07, 64), m.hazard, [0, BASE + 0.14, 0]);
@@ -290,6 +322,8 @@ export default {
     part(root, new THREE.CylinderGeometry(0.05, 0.05, 0.5, 8), m.pipe, [0, capTop + 1.0, 0]);
     lamp(root, new THREE.SphereGeometry(0.08, 16, 8), 0xff3020, [0, capTop + 1.28, 0], { cycles: 2, duty: 0.2, on: 4 });
 
+    round.push([roundFrom, root.children.length]);
+
     // Field projectors in the corners: a squat base, a coiled column, and an emitter crystal.
     for (const [sx, sz] of DIAGONALS) {
       const x = sx * PROJECTOR;
@@ -315,9 +349,12 @@ export default {
       const d = [sx / Math.SQRT2, sz / Math.SQRT2];
       const at = (r, y) => [d[0] * r, y, d[1] * r];
       const corner = PROJECTOR * Math.SQRT2;
+      // Each conduit leaves the squashed core and ends at an unsquashed projector, so its points
+      // ease from ROUND_DEPTH to full depth along the way.
+      const ease = (points) => points.map(([x, y, z], i) => [x, y, z * (ROUND_DEPTH + (1 - ROUND_DEPTH) * (i / (points.length - 1)))]);
       const paths = [
-        [at(CAP_RADIUS + 0.02, TUBE_TOP + 0.45), at(2.55, TUBE_TOP + 0.35), at(3.55, TUBE_TOP - 0.7), at(corner - 0.05, BASE + 2.15)],
-        [at(CAP_RADIUS + 0.12, DAIS + 0.4), at(2.5, DAIS + 0.32), at(3.35, DAIS + 0.3), at(corner - 0.45, BASE + 0.6)]
+        ease([at(CAP_RADIUS + 0.02, TUBE_TOP + 0.45), at(2.55, TUBE_TOP + 0.35), at(3.55, TUBE_TOP - 0.7), at(corner - 0.05, BASE + 2.15)]),
+        ease([at(CAP_RADIUS + 0.12, DAIS + 0.4), at(2.5, DAIS + 0.32), at(3.35, DAIS + 0.3), at(corner - 0.45, BASE + 0.6)])
       ];
       for (const [k, points] of paths.entries()) {
         const radius = k === 0 ? 0.16 : 0.14;
@@ -331,6 +368,7 @@ export default {
     }
     state.conduitEnergy = conduitEnergy;
 
+    roundFrom = root.children.length;
     // Liquid-helium cooling: a ring main around the dais, four manifold pumps, and feeds into the
     // lower cap.
     part(root, new THREE.TorusGeometry(3.32, 0.07, 8, 96).rotateX(Math.PI / 2), m.frost, [0, BASE + 0.3, 0]);
@@ -353,6 +391,8 @@ export default {
       ], 0.07, m.frost, 24);
     }
 
+    round.push([roundFrom, root.children.length]);
+
     // Circuit terminal south-west of the dais; its insulator tips carry the circuit wires
     // (red east, green west: warp-drive/prototypes/entities.lua).
     part(root, new THREE.BoxGeometry(0.5, 0.5, 0.34), m.dark, [-1.55, BASE + 0.25, 3.75]);
@@ -363,6 +403,7 @@ export default {
     }
     lamp(root, new THREE.BoxGeometry(0.08, 0.05, 0.03), 0xffb020, [-1.55, BASE + 0.3, 3.93], { cycles: 3, duty: 0.4 });
 
+    roundFrom = root.children.length;
     // Overlay contents. The quartz tube with glare streaks.
     const quartz = interior(glass(0xcfe8ff, 0.2, 4));
     part(root, new THREE.CylinderGeometry(TUBE_RADIUS, TUBE_RADIUS, TUBE_TOP - TUBE_BOTTOM, 64, 1, true), quartz, [0, (TUBE_BOTTOM + TUBE_TOP) / 2, 0]);
@@ -400,7 +441,8 @@ export default {
         const end = SEGMENT * 0.93;
         part(holder, new THREE.BoxGeometry(0.05, 0.12, 0.2), node, [Math.cos(end) * RING_RADIUS, 0, -Math.sin(end) * RING_RADIUS]).rotation.y = end;
       }
-      // Alternate rings counter-rotate while charging; offsets spread their snap at activation.
+      // Alternate rings counter-rotate while charging and in warp; offsets spread their snap at
+      // activation.
       state.rings.push({ ring, direction: k % 2 ? -1 : 1, y: ring.position.y, scatter: (rand() - 0.5) * 3 });
     }
 
@@ -435,6 +477,14 @@ export default {
     pool(4.3, BASE + 0.01);
     pool(2.6, DAIS + 0.025);
     pool(CAP_RADIUS, CAP_BOTTOM + 0.01);
+    round.push([roundFrom, root.children.length]);
+
+    // Move the round core into a squashed group; rings keep turning inside it, so they sweep ovals.
+    const core = new THREE.Group();
+    core.scale.z = ROUND_DEPTH;
+    const children = [...root.children];
+    for (const [from, to] of round) for (const child of children.slice(from, to)) core.add(child);
+    root.add(core);
 
     root.traverse((object) => {
       if (!object.isMesh) return;
@@ -468,7 +518,11 @@ export default {
     for (const lamp of lamps) {
       lamp.material.emissiveIntensity = ((t / 2) * lamp.cycles + lamp.phase) % 1 < lamp.duty ? lamp.on : lamp.off;
     }
-    if (!variant || variant === "shadow") return;
+    if (!variant || variant === "shadow") {
+      // The shadow shows the rings aligned, however the last rendered state left them.
+      for (const ring of rings) ring.ring.rotation.y = 0;
+      return;
+    }
 
     const set = (mesh, color, intensity, opacity = mesh.material.opacity) => {
       mesh.visible = intensity > 0.002;
@@ -489,9 +543,9 @@ export default {
     let projector = { color: COLORS.icy, level: 0.12 };
     let poolLevel = { color: COLORS.icy, level: 0.12 };
 
-    const plasma = (scale, intensity, white = 0) => fx.plasma.forEach(({ mesh, r }, k) => {
+    const plasma = (scale, intensity, white = 0, palette = PALETTES.charging) => fx.plasma.forEach(({ mesh, r }, k) => {
       mesh.scale.set(scale, 1, scale);
-      const color = new THREE.Color([COLORS.white, COLORS.cobalt, COLORS.deep, COLORS.deep][k]).lerp(new THREE.Color(0xffffff), white);
+      const color = new THREE.Color([palette.core, palette.mid, palette.deep, palette.deep][k]).lerp(new THREE.Color(0xffffff), white);
       set(mesh, color, intensity * [1.6, 0.9, 0.5, 0.25][k]);
     });
     const cascade = (level, speed = 2) => fx.cascade.forEach(({ mesh, map, intensity }, k) => {
@@ -524,32 +578,36 @@ export default {
       nodeLevel = () => 0.35;
       projector = { color: COLORS.icy, level: 0.18 * breath };
       poolLevel = { color: COLORS.icy, level: 0.18 * breath };
-    } else if (variant === "charging") {
-      // Two segments per loop: alternate rings counter-rotate, faster as the game speeds this up.
-      ringAngle = (ring) => ring.direction * t * 2 * SEGMENT;
+    } else if (variant === "charging" || variant === "detecting") {
+      // Alternate rings counter-rotate, faster as the game speeds this up.
+      const palette = PALETTES[variant];
+      ringAngle = (ring) => ring.direction * t * CHARGING_TURN * SEGMENT;
       const beat = 0.5 + 0.5 * Math.sin(TAU * 2 * t);
-      plasma(1 + 0.18 * beat, 0.8 + 0.4 * beat);
+      plasma(1 + 0.18 * beat, 0.8 + 0.4 * beat, 0, palette);
       fx.jets.forEach(({ mesh }, k) => {
         mesh.scale.set(1, 0.45 + 0.2 * Math.sin(TAU * (4 * t + k * 0.5)) ** 2, 1);
-        set(mesh, COLORS.white, 1.4, 0.7);
+        set(mesh, palette.core, 1.4, 0.7);
       });
-      fx.jetHalos.forEach((mesh) => set(mesh, COLORS.cobalt, 0.9 + 0.4 * beat, 0.9));
+      fx.jetHalos.forEach((mesh) => set(mesh, palette.accent, 0.9 + 0.4 * beat, 0.9));
       // Infinite depth: each ring halves in size per loop and the next takes its place.
       fx.tunnel.forEach((mesh, k) => {
         const depth = k + t;
         const size = 1.0 * Math.pow(0.55, depth);
         mesh.scale.set(size, size * 1.45, size);
-        set(mesh, COLORS.violet, 0.9 * smoothstep(0, 0.6, depth) * (1 - smoothstep(4, 5.5, depth)));
+        set(mesh, palette.tunnel, 0.9 * smoothstep(0, 0.6, depth) * (1 - smoothstep(4, 5.5, depth)));
       });
-      nodeColor = COLORS.cobalt;
+      nodeColor = palette.accent;
       nodeLevel = (ring) => 1.1 + 0.6 * Math.max(0, Math.sin(TAU * (2 * t + ring.y * 0.35)));
-      conduit = { color: COLORS.cobalt, level: 0.35, cycles: 1 };
-      projector = { color: COLORS.cobalt, level: 0.45 + 0.15 * beat };
-      poolLevel = { color: COLORS.cobalt, level: 0.45 + 0.15 * beat };
+      conduit = { color: palette.accent, level: 0.35, cycles: 1 };
+      projector = { color: palette.accent, level: 0.45 + 0.15 * beat };
+      poolLevel = { color: palette.accent, level: 0.45 + 0.15 * beat };
     } else if (variant === "activation") {
       const p = t / ACTIVATION_SPAN;
-      // Harmonic locking: the rings snap into alignment in the first tenth of a second.
-      ringAngle = (ring) => ring.scatter * SEGMENT * (1 - smoothstep(0, 0.07, p));
+      // Harmonic locking: the rings snap into alignment in the first tenth of a second, then, from
+      // the flare on, spin up evenly to their warp speed (WARP_TURN segments per loop).
+      const spin = Math.max(0, t - SPIN_UP_FROM * ACTIVATION_SPAN);
+      const spinUp = (WARP_TURN * spin * spin) / (2 * (1 - SPIN_UP_FROM) * ACTIVATION_SPAN);
+      ringAngle = (ring) => ring.scatter * SEGMENT * (1 - smoothstep(0, 0.07, p)) + ring.direction * spinUp * SEGMENT;
       // The core draws in (the sound's suction at 0.54 s), then flashes and settles into warp.
       const flash = pulse(0.33, 0.37, 0.4, 0.62, p);
       const draw = smoothstep(0.1, 0.33, p) * (1 - smoothstep(0.33, 0.36, p));
@@ -570,7 +628,9 @@ export default {
       projector = { color: COLORS.azure, level: 0.5 + 2.5 * pulse(0.4, 0.46, 0.5, 0.9, p) + 0.8 * smoothstep(0.6, 1, p) };
       poolLevel = { color: COLORS.azure, level: 0.45 + 1.4 * flash + 0.3 * smoothstep(0.6, 1, p) };
     } else if (variant === "warp") {
-      // Cascading waves run down the column twice per loop around flickering filaments.
+      // Alternate rings counter-rotate at the speed of a full charge; cascading waves run down the
+      // column twice per loop around flickering filaments.
+      ringAngle = (ring) => ring.direction * t * WARP_TURN * SEGMENT;
       state.thread.visible = false;
       cascade(1);
       set(fx.column, COLORS.white, 1.6 + 0.3 * Math.sin(TAU * 4 * t));

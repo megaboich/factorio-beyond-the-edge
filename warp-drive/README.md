@@ -2,11 +2,11 @@
 
 Warp Drive is a standalone Factorio: Space Age post-game mod. It adds one platform-only building and two technologies. The experimental drive detects tachyons to accelerate its own final research; the completed drive emulates subspace travel with a speed boost derived from active engine thrust.
 
-| Standby | Charging |
-| --- | --- |
-| ![Warp Drive on standby](docs/warp-drive-standby.gif) | ![Warp Drive charging](docs/warp-drive-charging.gif) |
-| **Activation** | **Warp** |
-| ![Warp Drive entering warp](docs/warp-drive-activation.gif) | ![Warp Drive at warp](docs/warp-drive-warp.gif) |
+| Standby | Detecting tachyons | Charging |
+| --- | --- | --- |
+| ![Warp Drive on standby](docs/warp-drive-standby.gif) | ![Warp Drive detecting tachyons](docs/warp-drive-detecting.gif) | ![Warp Drive charging](docs/warp-drive-charging.gif) |
+| **Activation** | **Warp** | |
+| ![Warp Drive entering warp](docs/warp-drive-activation.gif) | ![Warp Drive at warp](docs/warp-drive-warp.gif) | |
 
 The mod requires `base >= 2.1.0` and `space-age >= 2.1.0`. SPACELAB is optional.
 
@@ -130,8 +130,8 @@ After Practical Warp Drive is researched:
 - Warp level has no scripted maximum; Factorio's platform physics and the increasing power demand provide the limits.
 - The drive compares delivered power with the next fractional level's support demand before accelerating into it.
 - Lost engine speed lowers sustainable warp levels immediately. Falling below the minimum `50 km/s` starts a prominent 5-second exit warning; restoring speed during that grace period keeps Warp-1 engaged. If power falls below the current level's support demand, the drive holds that level and drains its warp support reserve in proportion to the shortfall. A complete outage lasts 1 second immediately after entry or 10 seconds after the reserve replenishes to full.
-- When entry conditions become ready, a synthesized "Engage warp drive!" command plays once before charging rises through a 20-step machinery hum. Warp activation hands off to a continuous two-part subspace ambience, and exit plays a distinct deactivation implosion.
-- Warp removes asteroid chunks and large asteroids while active and renders cyan subspace streaks plus harmless Fulgora-style lightning at randomized positions and times across the platform and 64 tiles into nearby space.
+- Charging rises through a 20-step machinery hum and climbing capacitor whine. Warp activation is a 5-second breach of the dimensional edge: the whine screams upward, the air is drawn in, and at the core's flash a vortex tears across the ship, a jet-like phasing roar and howling wind over a deep, shimmering hum, before it settles into a continuous two-part subspace ambience. Exit pulls the vortex back in, lands with a thump, and spins the drive down. These sounds play at full volume across the whole platform, on the game-effects volume slider. While warp holds, the building itself keeps humming with the field it maintains, audible nearby like other machines.
+- Warp removes asteroid chunks and large asteroids while active and fills the space around the ship, 128 tiles out on every side, with subspace phenomena. Glowing streaks in shades of electric blue rush past. Harmless Fulgora-style lightning storms at randomized positions and times, every bolt keeping at least 7.5 tiles clear of the platform. Strikes thin out towards the ship: at 7.5 tiles they come at a quarter of the open-space rate, rising linearly to the full rate from 20 tiles out. The ship itself stays clear apart from occasional strikes that land within 10 tiles of the Warp Drive. Behind it all, large pastel anomalies, 30 to 60 tiles across, drift slowly beneath the ship, swelling, turning, changing shape and hue, and fading in and out over 30 to 60 seconds each, independent of the lightning. They fade in with warp and away after it.
 - Warp exits immediately if its selected control mode is disabled, its circuit condition becomes false, or route eligibility is lost. Minimum engine speed has the 5-second grace period above; support failure exits when the warp support reserve is depleted.
 - Every active-warp exit starts a 10-second charge and re-entry lockout; interrupted activation uses the same lockout mechanism for 5 seconds.
 - The first and final `1,000 km` of each connection use conventional travel. Connections no longer than `2,000 km` cannot use warp.
@@ -203,9 +203,10 @@ All circuit outputs are independently enabled and can use any signal. `W` and `S
 <img src="docs/icons/bte-warp-drive.png" width="24" height="24" alt=""> **Warp Drive:** A `9x9` platform-only drive core. Five magnetic rings float in a quartz glass column between two injector caps, caged by dark structural ribs; glass conduits arc from both caps to field projectors in the four corners, and liquid-helium lines feed the column from four manifold pumps. The core shows what the drive is doing:
 
 - **Standby:** The rings hang motionless in alignment around a needle-thin black core in a faint icy halo. The drive looks like this while idle, cooling down, or switched off.
-- **Charging:** Alternate rings counter-rotate, injectors at both caps fire into a pulsing cobalt-white plasma column, and the inside of the tube seems to stretch into endless depth. The rings spin faster and the plasma brightens as the warp reserve fills. Before Practical Warp Drive, detecting tachyons looks the same, scaled by detector power.
-- **Activation:** On warp entry, the rings snap into alignment, the core draws in and flashes, a shockwave leaves the column, and the conduits flare azure, in time with the activation sound.
-- **Warp:** Blue and violet waves cascade down the column around flickering filaments, and the conduits carry azure plasma to the projectors.
+- **Detecting tachyons:** Before Practical Warp Drive, the drive runs its charging animation in neon green: counter-rotating rings, a pulsing green plasma column, and green conduits and projectors. The rings spin faster and the plasma brightens with detector power.
+- **Charging:** Alternate rings counter-rotate, injectors at both caps fire into a pulsing cobalt-white plasma column, and the inside of the tube seems to stretch into endless depth. The rings spin faster and the plasma brightens as the warp reserve fills.
+- **Activation:** On warp entry, the rings snap into alignment, the core draws in and flashes, a shockwave leaves the column, and the conduits flare azure, in time with the activation sound. The rings then spin back up. With the flash, an azure ring of light, followed by a violet one, sweeps out from the drive across the whole platform.
+- **Warp:** Alternate rings keep counter-rotating at full-charge speed while blue and violet waves cascade down the column around flickering filaments, and the conduits carry azure plasma to the projectors.
 
 The Warp Drive takes 120 seconds to craft from:
 
@@ -230,6 +231,6 @@ SPACELAB is never required or detected by name. Its orbital science recipes make
 
 ## Asset Attribution
 
-The Warp Drive building graphics (hull, shadow, status lamps, and the per-state core overlays), its item icon, and its technology icon are original art, rendered from Three.js models in this repository (`tools/sprites/models/warp-drive.js`, `warp-drive-icon.js`, and `warp-drive-technology.js`). The sounds are synthesized or recorded locally; see [`AUDIO.md`](AUDIO.md).
+The Warp Drive building graphics (hull, shadow, status lamps, and the per-state core overlays), its item icon, and its technology icon are original art, rendered from Three.js models in this repository (`tools/sprites/models/warp-drive.js`, `warp-drive-icon.js`, and `warp-drive-technology.js`). The warp effects (the activation shockwave, the lightning's cloud, the background anomalies, and the subspace streaks) are original art from `tools/sprites/models/warp-field.js`. The lightning bolts themselves are drawn by the game from a harmless copy of Space Age's Fulgora lightning prototype, without copying its graphics. The sounds are synthesized locally; see [`AUDIO.md`](AUDIO.md). README GIFs and icons are generated too; `AGENTS.md` lists every generator.
 
 The item and technology icons in this README are extracted from Factorio and this mod by `tools/readme-icons.py` and are not part of the mod package.

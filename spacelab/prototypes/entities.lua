@@ -40,19 +40,32 @@ local no_recipe_tint = {
   primary = {0, 0, 0, 0}, secondary = {0, 0, 0, 0}, tertiary = {0, 0, 0, 0}, quaternary = {0, 0, 0, 0}
 }
 
--- Specimens first, then the translucent fluid over them, matching the rendered layer order.
+-- The fluid, then the light from each tank's base and surface (neutral additive glows tinted with
+-- the fluid colour), then the specimens over them as soft silhouettes, so the glow does not wash
+-- them out. This matches the order the model renders and previews them in.
 local working_visualisations = {}
-for _, recipe in pairs(recipe_channels) do
-  local specimens = sprite_layer("specimens-" .. recipe.name, {frame_count = specimen_frames, draw_as_glow = true})
-  specimens.animation_speed = specimen_speed
-  table.insert(working_visualisations, {apply_recipe_tint = recipe.channel, always_draw = true, animation = specimens})
-end
 for _, recipe in pairs(recipe_channels) do
   table.insert(working_visualisations, {
     apply_recipe_tint = recipe.channel,
     always_draw = true,
     animation = sprite_layer("fluid", {tint = recipe.fluid, draw_as_glow = true})
   })
+end
+for _, glow in pairs({"bottom", "top"}) do
+  for _, recipe in pairs(recipe_channels) do
+    table.insert(working_visualisations, {
+      apply_recipe_tint = recipe.channel,
+      always_draw = true,
+      animation = sprite_layer("glow-vat-" .. glow, {
+        frame_count = 1, tint = recipe.fluid, blend_mode = "additive", draw_as_glow = true
+      })
+    })
+  end
+end
+for _, recipe in pairs(recipe_channels) do
+  local specimens = sprite_layer("specimens-" .. recipe.name, {frame_count = specimen_frames, draw_as_glow = true})
+  specimens.animation_speed = specimen_speed
+  table.insert(working_visualisations, {apply_recipe_tint = recipe.channel, always_draw = true, animation = specimens})
 end
 table.insert(working_visualisations, {
   -- Status lamps, consoles, grow lights, and the roof beacon.

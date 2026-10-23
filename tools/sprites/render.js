@@ -24,7 +24,9 @@
 //   is rendered with `setVariant(root, null)`. `preview` is passed through to the preview page, and
 //   `mute` (0–1) reduces the layer's saturation and contrast by that fraction; a material's
 //   `userData.mute` overrides it for that part. Parts with different amounts are rendered in
-//   separate passes (the others hiding them by depth only), muted, and composited.
+//   separate passes (the others hiding them by depth only), muted, and composited. `blur` (pixels
+//   of the sheet), `alpha` (opacity factor), and `shade` (brightness factor) then soften the
+//   result, for contents seen through a glowing liquid.
 //   Meshes whose material has `userData.cutsLayers` hide these layers wherever they are drawn,
 //   regardless of depth, for parts such as lids that tagged contents must never overlap.
 //   With `glow: true` the layer instead captures the tagged meshes' emitted light like a glow-*
@@ -280,6 +282,7 @@ window.renderSprite = async function (name, options = {}) {
           : m.userData.cutsLayers ? stencilMask : m.transparent ? null : occluder), captureAlpha));
         image = image ? over(pass, image) : pass;
       }
+      if (image && (layer.blur || layer.alpha !== undefined || layer.shade !== undefined)) image = soften(image, layer);
       layers[layer.name].push(image ? crop(image, W, H) : null);
     }
   }
@@ -311,8 +314,8 @@ window.renderSprite = async function (name, options = {}) {
     if (result) sheets[layer] = result;
   }
   renderer.dispose();
-  const { tiles, references = [], export: exportPath = null, fps = 12, variants = [], variantColors = {}, loop = frameCount, labels = {} } = model;
-  return { sheets, model: { tiles, references, variants, variantColors, exportPath, fps, loop, labels } };
+  const { tiles, references = [], export: exportPath = null, fps = 12, variants = [], variantColors = {}, loop = frameCount, labels = {}, night = true } = model;
+  return { sheets, model: { tiles, references, variants, variantColors, exportPath, fps, loop, labels, night } };
 };
 
 /**
@@ -331,6 +334,27 @@ function mute(amount, image) {
     }
   }
   return image;
+}
+
+/** Blurs an image by `blur` pixels, then scales its colour by `shade` and its opacity by `alpha`. */
+function soften(image, { blur = 0, alpha = 1, shade = 1 }) {
+  const source = document.createElement("canvas");
+  source.width = image.width;
+  source.height = image.height;
+  source.getContext("2d").putImageData(image, 0, 0);
+  const target = document.createElement("canvas");
+  target.width = image.width;
+  target.height = image.height;
+  const ctx = target.getContext("2d", { willReadFrequently: true });
+  ctx.filter = blur ? `blur(${blur}px)` : "none";
+  ctx.drawImage(source, 0, 0);
+  const out = ctx.getImageData(0, 0, image.width, image.height);
+  const d = out.data;
+  for (let i = 0; i < d.length; i += 4) {
+    for (let k = 0; k < 3; k++) d[i + k] = Math.round(d[i + k] * shade);
+    d[i + 3] = Math.round(d[i + 3] * alpha);
+  }
+  return out;
 }
 
 /** Composites `top` over `bottom` (straight alpha) into a new image. */

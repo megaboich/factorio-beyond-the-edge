@@ -3,3 +3,4 @@
 __pycache__/
 tools/sprites/node_modules
 tools/sprites/out/
+tmp/

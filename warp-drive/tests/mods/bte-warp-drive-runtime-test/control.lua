@@ -75,6 +75,33 @@ local function overlay_names(entity)
   return table.concat(names, ",")
 end
 
+-- Every warp strike either keeps its whole strike (cloud at the entity, bolt tip 25 tiles south)
+-- 7.5 tiles from the platform, or lands its bolt within 10 tiles of the drive. Returns the number
+-- of strikes in open space.
+local function check_lightning_placement(platform)
+  local surface = platform.surface
+  local in_space = 0
+  local drive = storage.drive.position
+  for _, lightning in pairs(surface.find_entities_filtered({type = "lightning"})) do
+    local p = lightning.position
+    local dx, dy = p.x - drive.x, p.y + 25 - drive.y
+    if lightning.name ~= "bte-warp-drive-lightning" then
+      fail("unexpected lightning during warp: " .. lightning.name)
+    elseif surface.count_tiles_filtered({
+          area = {{p.x - 7.4, p.y - 7.4}, {p.x + 7.4, p.y + 25 + 7.4}},
+          name = "space-platform-foundation", limit = 1}) == 0 then
+      in_space = in_space + 1
+    elseif dx * dx + dy * dy > 10.01 * 10.01 then
+      fail(string.format("warp lightning landed on the platform away from the drive: x=%s y=%s", p.x, p.y))
+    end
+  end
+  return in_space
+end
+
+local function field_hums(platform)
+  return #platform.surface.find_entities_filtered({name = "bte-warp-drive-field-hum"})
+end
+
 local function sound_state(platform)
   return remote.call("bte-warp-drive-runtime-test", "sound_state", platform.index)
 end
@@ -699,6 +726,10 @@ script.on_nth_tick(10, function()
         "experimental detector did not converge on spare generation: request=%s ship=%s",
         requested, ship_watts))
     end
+    local overlays = overlay_names(drive)
+    if overlays ~= "bte-warp-drive-detecting-glow,bte-warp-drive-detecting-interior" then
+      fail("powered tachyon detection did not show the detecting overlays: " .. overlays)
+    end
     storage.power_source.power_production = 900e6 / 60
     storage.power_source.output_flow_limit = 900e6 / 60
   elseif phase == "detector_gui" and elapsed == 160 then
@@ -782,23 +813,8 @@ script.on_nth_tick(10, function()
       or #platform.find_asteroid_chunks_filtered({}) ~= 0 then
       fail("warp entry did not remove asteroid entities and chunks")
     end
-    local streaks = 0
-    for _, object in pairs(rendering.get_all_objects("bte-warp-drive")) do
-      if object.type == "line" then
-        streaks = streaks + 1
-        local position = object.from.position
-        if position.x < -80 or position.x > 81 or position.y < -80 or position.y > 81 then
-          fail(string.format(
-            "subspace streak escaped 64-tile platform field: x=%s y=%s",
-            position.x, position.y))
-        end
-      end
-    end
-    if streaks < 48 then
-      fail("warp entry did not create the subspace streak field")
-    end
-    if #platform.surface.find_entities_filtered({name = "bte-warp-drive-lightning"}) < 1 then
-      fail("warp entry did not create full procedural Fulgora lightning")
+    if check_lightning_placement(platform) < 1 then
+      fail("warp entry did not create full procedural Fulgora lightning in open space")
     end
     local overlays = overlay_names(storage.drive)
     if overlays ~= "bte-warp-drive-activation-glow,bte-warp-drive-activation-interior" then
@@ -817,16 +833,30 @@ script.on_nth_tick(10, function()
       if overlays ~= "bte-warp-drive-warp-glow,bte-warp-drive-warp-interior" then
         fail("activation overlays did not hand off to the warp overlays: " .. overlays)
       end
+      if field_hums(platform) ~= 1 then
+        fail("warp did not create exactly one positional field hum companion")
+      end
+      if sound_state(platform).shockwaves_sent ~= 2 then
+        fail("warp activation did not send both ship-wide shockwaves")
+      end
+      -- The small test platform's field, 128 tiles beyond it on every side, holds about 64.
+      if sound_state(platform).anomalies < 50 then
+        fail("warp did not fill the field with background anomalies: "
+          .. sound_state(platform).anomalies)
+      end
+      if check_lightning_placement(platform) < 1 then
+        fail("sustained warp stopped striking open space")
+      end
       local sound = sound_state(platform)
-      if sound.background_index ~= 2
-          or sound.warp_next_tick ~= storage.runtime_test.started_at + 460 then
-        fail("activation did not hand off to warp background segment 01 after 1.5 seconds")
+      if sound.background_index ~= 1
+          or sound.warp_next_tick ~= storage.runtime_test.started_at + 310 then
+        fail("warp background segment 01 was not scheduled for the end of the 5-second activation")
       end
     elseif elapsed == 560 then
       local sound = sound_state(platform)
-      if sound.background_index ~= 1
-          or sound.warp_next_tick ~= storage.runtime_test.started_at + 820 then
-        fail("warp background did not alternate to segment 02 after six seconds")
+      if sound.background_index ~= 2
+          or sound.warp_next_tick ~= storage.runtime_test.started_at + 670 then
+        fail("activation did not hand off to background segment 01, then schedule segment 02")
       end
     end
     if elapsed == 30 then
@@ -1303,9 +1333,14 @@ script.on_nth_tick(10, function()
       fail("charging did not begin before the speed interruption")
     end
     local sound = sound_state(platform)
-    if not sound.charge_step or not sound.readiness_announced
-        or sound.readiness_sound_tick ~= game.tick then
-      fail("ready preparation did not announce once before beginning its audible hum")
+    if not sound.charge_step then
+      fail("ready preparation did not begin its audible hum")
+    end
+    if field_hums(platform) ~= 0 then
+      fail("the field hum outlived warp")
+    end
+    if sound_state(platform).anomalies ~= 0 then
+      fail("background anomalies outlived warp")
     end
   elseif phase == "post_warp_lockout" and elapsed == 610 then
     local charge = charge_buffers(platform)
@@ -1317,7 +1352,6 @@ script.on_nth_tick(10, function()
     if sound.state ~= "cooldown"
         or sound.cooldown_until ~= game.tick + 300
         or sound.last_exit_reason ~= "charging-speed-interrupted"
-        or sound.readiness_announced or sound.readiness_sound_tick ~= nil
         or sound.charge_step ~= nil or sound.charge_next_tick ~= nil then
       fail(string.format(
         "failed activation lockout mismatch: state=%s deadline=%s expected=%s reason=%s step=%s next=%s",
@@ -1347,19 +1381,13 @@ script.on_nth_tick(10, function()
       fail("charging did not begin after the final non-reserve requirement was met")
     end
     local sound = sound_state(platform)
-    if not sound.readiness_announced or sound.readiness_sound_tick ~= game.tick
-        or sound.charge_step ~= 1
+    if sound.charge_step ~= 1
         or not sound.charge_next_tick
         or sound.charge_next_tick <= game.tick
         or sound.charge_next_tick > game.tick + 30 then
       fail("charging did not start its half-second progress hum scheduler")
     end
   elseif phase == "post_warp_lockout" and elapsed == 920 then
-    local sound = sound_state(platform)
-    if not sound.readiness_announced
-        or sound.readiness_sound_tick ~= storage.runtime_test.started_at + 910 then
-      fail("continuous readiness replayed or cleared the one-shot warp command")
-    end
     local player = game.players[1]
     if player and player.gui.screen.bte_warp_drive_window then
       local content = find_gui_element(player.gui.screen.bte_warp_drive_window,
@@ -1423,7 +1451,7 @@ script.on_nth_tick(10, function()
         or sound.background_index ~= 1
         or not sound.warp_next_tick
         or sound.warp_next_tick <= game.tick
-        or sound.warp_next_tick > game.tick + 90 then
+        or sound.warp_next_tick > game.tick + 300 then
       fail("warp activation did not replace charging audio and schedule its background handoff")
     end
     game.forces.player.technologies["bte-practical-warp-drive"].researched = false

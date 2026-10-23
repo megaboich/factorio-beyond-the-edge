@@ -1,9 +1,5 @@
 # Factorio SPACELAB Mod
 
-<p align="center">
-  <img src="thumbnail.png" alt="SPACELAB mod thumbnail" width="128">
-</p>
-
 **SPACELAB** stands for **Space Platform Asteroid Complete Extraction: Laboratories with Advanced Biotech**.
 
 An end-game extension mod for **Factorio: Space Age** that prolongs the endgame with complete asteroid extraction, orbital laboratories, and advanced biotech challenges once the Solar System Edge is behind you.

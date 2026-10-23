@@ -13,16 +13,18 @@ local Visuals = {}
 local PREFIX = "bte-warp-drive-"
 local RENDER_LAYER = "higher-object-under"
 local LOOP_SPEED = 0.5
--- Frames and base speed of each state's overlays; a single-frame interior holds still.
+-- Frames and base speed of each state's overlays; a single-frame interior holds still. Tachyon
+-- detection is the charging animation in green.
 local STATES = {
   standby = {frames = 32, speed = LOOP_SPEED / 2},
+  detecting = {frames = 32, speed = LOOP_SPEED},
   charging = {frames = 32, speed = LOOP_SPEED},
   -- The one-shot pulse matches warp-activation.ogg: 30 frames over 90 ticks.
   activation = {frames = 30, speed = 30 / 90},
   warp = {frames = 32, speed = LOOP_SPEED}
 }
 local ACTIVATION_TICKS = 90
--- Charging runs from half to double its base speed and brightens as the level rises.
+-- Charging and detecting run from half to double their base speed and brighten as the level rises.
 local CHARGING_MIN_SPEED = 0.5
 local CHARGING_MAX_SPEED = 2
 local CHARGING_MIN_GLOW = 0.45
@@ -59,7 +61,7 @@ local function wanted_state(record)
     end
     return "warp"
   elseif record.state == "charging" or record.state == "detecting" then
-    return "charging"
+    return record.state
   end
   return "standby"
 end
@@ -88,7 +90,7 @@ local function glow_tint(level)
 end
 
 --- Brings the overlays in line with the record's state. `level` (0 to 1) is charging progress,
---- or detector power while researching; it speeds up and brightens the charging overlay.
+--- or detector power while researching; it speeds up and brightens the charging or detecting overlay.
 function Visuals.update(record, level)
   local entity = record.entity
   if not entity or not entity.valid then
@@ -104,7 +106,7 @@ function Visuals.update(record, level)
   local config = STATES[state]
   local speed = config.speed
   local glow_level = 1
-  if state == "charging" then
+  if state == "charging" or state == "detecting" then
     level = math.max(0, math.min(1, level or 0))
     speed = config.speed * (CHARGING_MIN_SPEED + (CHARGING_MAX_SPEED - CHARGING_MIN_SPEED) * level)
     glow_level = CHARGING_MIN_GLOW + (1 - CHARGING_MIN_GLOW) * level

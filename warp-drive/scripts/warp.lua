@@ -1,3 +1,4 @@
+local Anomalies = require("scripts.anomalies")
 local Drive = require("scripts.drive")
 local Visuals = require("scripts.visuals")
 
@@ -10,18 +11,47 @@ local SUPPORT_POWER_TOLERANCE = 0.999
 local WARP_RESERVE_SECONDS = 10
 local ENTRY_RESERVE_RATIO = 0.1
 local SPEED_EXIT_GRACE_TICKS = 5 * 60
-local WARP_STREAK_COUNT = 48
+-- Streaks on screen: one per this many tiles of effect field, at least 48, at most 900.
+local WARP_STREAK_TILES = 512
+local WARP_STREAK_MIN = 48
+local WARP_STREAK_MAX = 900
+-- Streak particles (prototypes/entities.lua): their life in ticks, and their speed south in tiles
+-- per tick, 50% faster than the earlier 3.7 tiles per 10 ticks.
+local WARP_STREAK_NAME = "bte-warp-drive-streak"
+local WARP_STREAK_LIFE = 120
+local WARP_STREAK_SPEED = 0.555
 local LIGHTNING_NAME = "bte-warp-drive-lightning"
+-- A strike draws its cloud at the entity position and its bolt this many tiles south of it,
+-- the length of the prototypes' source_offset.
+local LIGHTNING_BOLT_LENGTH = 25
+-- Ship-wide activation shockwaves, sent this many ticks after warp entry: the first with the
+-- core's flash at 0.54 s (scripts/visuals.lua), a fainter violet one just behind it. Each uses
+-- the smallest prototype reach, in tiles, that covers the platform.
+local SHOCKWAVES = {{delay = 30, tint = "azure"}, {delay = 40, tint = "violet"}}
+local SHOCKWAVE_REACHES = {32, 64, 128, 256}
 local LIGHTNING_DURATION_TICKS = 36
-local LIGHTNING_DENSITY_TILES = 32 * 32
-local WARP_EFFECT_FIELD_MARGIN = 64
+-- One active strike per 16x32 tiles of open space, twice the earlier field density.
+local LIGHTNING_DENSITY_TILES = 16 * 32
+-- Whole bolts keep at least LIGHTNING_SHIP_CLEARANCE from every platform tile, except occasional
+-- ones near the drive, whose bolt lands within LIGHTNING_DRIVE_RADIUS of it. Strikes are thinner
+-- close to the ship: LIGHTNING_NEAR_SHARE of the full rate at the clearance, rising linearly to
+-- the full rate at LIGHTNING_FULL_DISTANCE and beyond.
+local LIGHTNING_SHIP_CLEARANCE = 7.5
+local LIGHTNING_FULL_DISTANCE = 20
+local LIGHTNING_NEAR_SHARE = 0.25
+local LIGHTNING_DRIVE_RADIUS = 10
+-- Chance per 10-tick update of a strike near the drive: about one every 1.7 seconds.
+local LIGHTNING_DRIVE_STRIKE_CHANCE = 0.1
+-- Effects fill this far around the platform, beyond what the most zoomed-out game view shows of
+-- open space around a ship.
+local WARP_EFFECT_FIELD_MARGIN = 128
 local CHARGE_SOUND_COUNT = 20
 local CHARGE_SOUND_TICKS = 30
-local WARP_COMMAND_SOUND = "bte-warp-drive-command"
 local WARP_ACTIVATION_SOUND = "bte-warp-drive-activation"
 local WARP_DEACTIVATION_SOUND = "bte-warp-drive-deactivation"
 local FAILED_ACTIVATION_COOLDOWN_TICKS = 5 * 60
-local WARP_ACTIVATION_TICKS = 90
+-- Length of warp-activation.ogg; the background loop starts where its tail hands off.
+local WARP_ACTIVATION_SOUND_TICKS = 5 * 60
 local WARP_BACKGROUND_TICKS = 6 * 60
 local POWER_NAME = "bte-warp-drive-power-interface"
 local DETECTOR_REFERENCE_POWER_WATTS = 200000000
@@ -171,24 +201,6 @@ local function reset_charge_sound(record)
   record.charge_sound_step = nil
 end
 
-local function reset_readiness_sound(record)
-  record.readiness_announced = false
-  record.readiness_sound_tick = nil
-end
-
-local function announce_readiness(record)
-  if record.readiness_announced then
-    return
-  end
-  -- Saves already charging before this sound existed must not announce midway through buildup.
-  if record.readiness_announced == nil and record.state == "charging" then
-    record.readiness_announced = true
-    return
-  end
-  play_global_sound(record, WARP_COMMAND_SOUND)
-  record.readiness_announced = true
-  record.readiness_sound_tick = game.tick
-end
 
 -- Factorio cannot stop or retain runtime sounds. Half-second one-shots therefore emulate a
 -- loop and only select a new charge step at a file boundary, avoiding mid-waveform clicks.
@@ -211,15 +223,16 @@ end
 local function reset_warp_background_sound(record)
   record.warp_sound_next_tick = nil
   record.warp_background_sound_index = nil
+  Drive.destroy_field_hum(record)
 end
 
--- The activation tail contains the final quarter of the synthesized background loop. Segment
--- 01 begins exactly 1.5 seconds later, then the two six-second phase-contiguous files alternate.
+-- The activation's last seconds fade in the end of the synthesized background loop. Segment
+-- 01 begins exactly when activation ends, then the two six-second phase-contiguous files alternate.
 local function start_warp_sound(record)
   reset_charge_sound(record)
   play_global_sound(record, WARP_ACTIVATION_SOUND)
   record.warp_background_sound_index = 1
-  record.warp_sound_next_tick = game.tick + WARP_ACTIVATION_TICKS
+  record.warp_sound_next_tick = game.tick + WARP_ACTIVATION_SOUND_TICKS
 end
 
 local function update_warp_background_sound(record)
@@ -227,6 +240,8 @@ local function update_warp_background_sound(record)
     reset_warp_background_sound(record)
     return
   end
+  -- Fades in under the activation; also restores the hum after a rebuild or in older saves.
+  Drive.ensure_field_hum(record)
   if not record.warp_sound_next_tick then
     -- An active save from before custom audio has no recoverable playback phase. Start its
     -- background at a segment boundary rather than guessing partway through a sound.
@@ -279,7 +294,6 @@ local function exit_warp(record, reason)
     start_failed_activation(record, reason)
   end
   reset_charge_sound(record)
-  reset_readiness_sound(record)
   reset_warp_background_sound(record)
   Drive.destroy_support(record)
   record.warp_level = nil
@@ -291,6 +305,8 @@ local function exit_warp(record, reason)
   record.speed_exit_at = nil
   record.warp_warning = nil
   record.lightning_bounds = nil
+  record.shockwave_tick = nil
+  record.shockwaves_sent = nil
   record.reserve_energy = was_warp and 0 or (record.reserve_energy or 0)
   if record.power and record.power.valid then
     -- Keep the mandatory 1 J working buffer stable. Emptying a larger previous buffer here
@@ -453,48 +469,106 @@ local function update_warp_effect_bounds(record, platform)
   }
 end
 
+-- Rounds an expected number of starts per update up or down at random, keeping its average.
+local function random_count(expected)
+  local count = math.floor(expected)
+  if math.random() < expected - count then
+    count = count + 1
+  end
+  return count
+end
+
+-- Streaks are particles the engine moves every tick, so they glide smoothly; each update only
+-- spawns enough at random places to keep about `count` alive. They always head south, the way
+-- the starfield streams past a travelling platform, whichever way it is going. Spawn points
+-- reach one particle's travel north of the field, so streaks are as dense at its north edge as
+-- anywhere, and new streaks fade in (prototypes/entities.lua) rather than pop up.
 local function render_warp_streaks(record, platform)
   local bounds = record.lightning_bounds
   if not bounds then
     update_warp_effect_bounds(record, platform)
     bounds = record.lightning_bounds
   end
-  local phase = math.floor(game.tick / UPDATE_TICKS)
-  local sign = record.direction < 0 and 1 or -1
   local width = bounds.right - bounds.left
   local height = bounds.bottom - bounds.top
-  for index = 1, WARP_STREAK_COUNT do
-    local x = bounds.left + ((index * 73 + platform.index * 29) % 997) / 996 * width
-    local y = bounds.top + ((index * 97 + phase * 23) % 991) / 990 * height
-    local length = 8 + index % 8 * 3
-    rendering.draw_line({
-      color = {r = 0.15, g = 0.65 + index % 3 * 0.08, b = 1, a = 0.35 + index % 4 * 0.1},
-      width = 1.5 + index % 3,
-      from = {x, y},
-      to = {x + (index % 3 - 1) * 0.35, y + sign * length},
-      surface = platform.surface,
-      time_to_live = UPDATE_TICKS + 1,
-      draw_on_ground = false
-    })
-  end
-end
-
-local function spawn_lightning(platform, bounds, count)
-  for _ = 1, count do
-    -- execute_lightning rejects space-platform surfaces because their planet has no lightning
-    -- generator. Direct creation is the engine-supported path also used by menu simulations.
-    platform.surface.create_entity({
-      name = LIGHTNING_NAME,
+  local count = math.floor(width * height / WARP_STREAK_TILES)
+  count = math.max(WARP_STREAK_MIN, math.min(WARP_STREAK_MAX, count))
+  local travel = WARP_STREAK_LIFE * WARP_STREAK_SPEED
+  local spawns = random_count(count * UPDATE_TICKS / WARP_STREAK_LIFE * (height + travel) / height)
+  local surface = platform.surface
+  for _ = 1, spawns do
+    surface.create_particle({
+      name = WARP_STREAK_NAME,
       position = {
-        x = bounds.left + math.random() * (bounds.right - bounds.left),
-        y = bounds.top + math.random() * (bounds.bottom - bounds.top)
+        x = bounds.left + math.random() * width,
+        y = bounds.top - travel + math.random() * (height + travel)
       },
-      force = "neutral"
+      movement = {0, WARP_STREAK_SPEED},
+      height = 0,
+      vertical_speed = 0,
+      frame_speed = 1
     })
   end
 end
 
--- Starts are derived from the 36-tick lifetime to average one playing animation per 32x32 tiles.
+local function strike(surface, position)
+  -- execute_lightning rejects space-platform surfaces because their planet has no lightning
+  -- generator. Direct creation is the engine-supported path also used by menu simulations.
+  surface.create_entity({name = LIGHTNING_NAME, position = position, force = "neutral"})
+end
+
+local function random_position(bounds)
+  return {
+    x = bounds.left + math.random() * (bounds.right - bounds.left),
+    y = bounds.top + math.random() * (bounds.bottom - bounds.top)
+  }
+end
+
+-- Whether to keep a strike at `position`: true when the whole strike, from its cloud down to the
+-- bolt's tip, keeps a random margin from every platform tile. Checking only the entity position
+-- would let bolts from clouds north of the ship reach down across it.
+--
+-- The margin is LIGHTNING_SHIP_CLEARANCE with probability LIGHTNING_NEAR_SHARE and otherwise
+-- uniform up to LIGHTNING_FULL_DISTANCE. A strike d tiles from the ship is kept when the margin is
+-- at most d, which happens with probability rising linearly from LIGHTNING_NEAR_SHARE at the
+-- clearance to 1 at LIGHTNING_FULL_DISTANCE: the linear falloff for one tile count, without
+-- measuring d.
+-- Names of the platform foundation tiles. Matching "not empty-space" instead would also match
+-- out-of-map tiles in chunks not generated yet and keep strikes away from their edges. Prototypes
+-- cannot change while scripts run, so this is the same on every peer.
+local foundation_tiles
+local function foundation_tile_names()
+  if not foundation_tiles then
+    foundation_tiles = {}
+    for name, tile in pairs(prototypes.tile) do
+      if tile.is_foundation then
+        foundation_tiles[#foundation_tiles + 1] = name
+      end
+    end
+  end
+  return foundation_tiles
+end
+
+local function keep_strike(surface, position)
+  local share = (math.random() - LIGHTNING_NEAR_SHARE) / (1 - LIGHTNING_NEAR_SHARE)
+  local margin = LIGHTNING_SHIP_CLEARANCE
+    + (LIGHTNING_FULL_DISTANCE - LIGHTNING_SHIP_CLEARANCE) * math.max(0, share)
+  return surface.count_tiles_filtered({
+    area = {
+      {position.x - margin, position.y - margin},
+      {position.x + margin, position.y + LIGHTNING_BOLT_LENGTH + margin}
+    },
+    name = foundation_tile_names(),
+    limit = 1
+  }) == 0
+end
+
+-- Lightning fills open space around the ship, thinning towards it, and leaves the ship itself
+-- clear apart from occasional strikes near the drive. Candidate starts are spread over the whole
+-- effect field, derived from the 36-tick lifetime to average one playing strike per
+-- LIGHTNING_DENSITY_TILES. Candidates are dropped rather than moved (`keep_strike`), so open
+-- space keeps that density beyond LIGHTNING_FULL_DISTANCE without measuring its area. Each check
+-- is one rectangle count with a limit of one, not a scan.
 -- Platform bounds work in freely panned remote view, whose camera position is not exposed.
 local function render_warp_lightning(record, platform)
   local bounds = record.lightning_bounds
@@ -502,19 +576,71 @@ local function render_warp_lightning(record, platform)
     update_warp_effect_bounds(record, platform)
     bounds = record.lightning_bounds
   end
+  local surface = platform.surface
   local target_count = (bounds.right - bounds.left) * (bounds.bottom - bounds.top)
     / LIGHTNING_DENSITY_TILES
-  local expected_starts = target_count * UPDATE_TICKS / LIGHTNING_DURATION_TICKS
-  local count = math.floor(expected_starts)
-  if math.random() < expected_starts - count then
-    count = count + 1
+  for _ = 1, random_count(target_count * UPDATE_TICKS / LIGHTNING_DURATION_TICKS) do
+    local position = random_position(bounds)
+    if keep_strike(surface, position) then
+      strike(surface, position)
+    end
   end
-  spawn_lightning(platform, bounds, count)
+  local entity = record.entity
+  if entity and entity.valid and math.random() < LIGHTNING_DRIVE_STRIKE_CHANCE then
+    -- The same full strike, landing anywhere within the radius: its cloud is drawn at the
+    -- entity position and its bolt lands LIGHTNING_BOLT_LENGTH tiles south, so the cloud goes
+    -- that far north of the landing point. The square root spreads landings evenly over the
+    -- disc instead of crowding its centre.
+    local angle = math.random() * 2 * math.pi
+    local distance = LIGHTNING_DRIVE_RADIUS * math.sqrt(math.random())
+    strike(surface, {
+      x = entity.position.x + distance * math.cos(angle),
+      y = entity.position.y + distance * math.sin(angle) - LIGHTNING_BOLT_LENGTH
+    })
+  end
+end
+
+-- The smallest shockwave reach that covers the platform's foundation from the drive.
+local function shockwave_reach(record)
+  local bounds = record.lightning_bounds
+  local center = record.entity.position
+  local margin = WARP_EFFECT_FIELD_MARGIN
+  local dx = math.max(center.x - bounds.left, bounds.right - center.x) - margin
+  local dy = math.max(center.y - bounds.top, bounds.bottom - center.y) - margin
+  local reach = math.sqrt(dx * dx + dy * dy)
+  for _, candidate in ipairs(SHOCKWAVE_REACHES) do
+    if candidate >= reach then
+      return candidate
+    end
+  end
+  return SHOCKWAVE_REACHES[#SHOCKWAVE_REACHES]
+end
+
+-- Sends each activation shockwave once its delay has passed; the engine grows and fades them.
+local function render_shockwaves(record, platform)
+  local started = record.shockwave_tick
+  local entity = record.entity
+  if not started or not (entity and entity.valid) then
+    return
+  end
+  local sent = record.shockwaves_sent or 0
+  while SHOCKWAVES[sent + 1] and game.tick - started >= SHOCKWAVES[sent + 1].delay do
+    sent = sent + 1
+    platform.surface.create_trivial_smoke({
+      name = "bte-warp-drive-shockwave-" .. SHOCKWAVES[sent].tint .. "-" .. shockwave_reach(record),
+      position = entity.position
+    })
+  end
+  record.shockwaves_sent = sent
+  if not SHOCKWAVES[sent + 1] then
+    record.shockwave_tick = nil
+  end
 end
 
 local function render_warp_effect(record, platform)
   render_warp_streaks(record, platform)
   render_warp_lightning(record, platform)
+  render_shockwaves(record, platform)
 end
 
 -- Entry retains ten percent of the activation charge as support reserve. A new electric sink needs
@@ -544,12 +670,13 @@ local function enter_warp(record, platform)
   start_warp_sound(record)
   clear_warp_asteroids(platform)
   update_warp_effect_bounds(record, platform)
+  record.shockwave_tick = game.tick
+  record.shockwaves_sent = 0
   render_warp_effect(record, platform)
   return true
 end
 
 local function update_experimental(record)
-  reset_readiness_sound(record)
   start_failed_activation(record, "research-revoked")
   if record.state == "warp" then
     exit_warp(record, "research-revoked")
@@ -671,7 +798,6 @@ local function update_active_warp(record, platform, direction, charge_buffer)
 end
 
 local function update_cooldown(record, charge_buffer)
-  reset_readiness_sound(record)
   Drive.destroy_support(record)
   disable_power(record, charge_buffer, true)
   record.reserve_energy = 0
@@ -681,7 +807,6 @@ end
 local function reset_preparation(record, charge_buffer, reason)
   local failed_activation = start_failed_activation(record, reason)
   reset_charge_sound(record)
-  reset_readiness_sound(record)
   Drive.destroy_support(record)
   disable_power(record, charge_buffer, true)
   record.reserve_energy = 0
@@ -710,7 +835,6 @@ local function update_idle_or_charging(record, platform, direction, charge_buffe
     reset_preparation(record, charge_buffer, reason)
     return
   end
-  announce_readiness(record)
   -- Charging requests Warp-1 support power. Since reserve capacity is ten seconds of that
   -- mass-scaled demand, adequate generation fills an empty reserve in exactly ten seconds.
   charge_buffer.disabled_by_script = false
@@ -786,6 +910,7 @@ function Warp.update(record)
     update_warp_background_sound(record)
   end
   Visuals.update(record, visual_level(record, platform))
+  Anomalies.update(record, platform.surface, record.lightning_bounds, record.state == "warp")
   return true
 end
 

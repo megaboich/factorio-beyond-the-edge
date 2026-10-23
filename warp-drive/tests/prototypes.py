@@ -33,9 +33,61 @@ def check(t):
     t.check("Warp Drive laboratories", t.names("lab", "bte-"), [])
     t.check("Warp Drive science packs", t.names("tool", "bte-"), [])
 
+    # Drive audio plays ship-wide on the game-effects slider, never the music ("ambient") slider.
+    sounds = t.raw.get("sound", {})
+    drive_sounds = t.names("sound", "bte-warp-drive-")
+    t.check("Warp Drive sound count", len(drive_sounds), 44)
+    t.check("Warp Drive sounds use the game-effects mixer",
+            sorted({sounds[name].get("category") for name in drive_sounds}), ["game-effect"])
+
+    # Warp lightning bolts strike 25 tiles south of their cloud, near the drive too.
+    lightning = t.prototype("lightning", "bte-warp-drive-lightning")
+    if lightning is not None:
+        t.check("Warp lightning bolt height", lightning.get("source_offset"), [0, -25])
+        t.check("Warp lightning is harmless", [lightning.get("damage"), lightning.get("energy")], [None, "0J"])
+        t.check("Warp lightning cloud is the warp-field nebula",
+                lightning["graphics_set"]["cloud_background"].get("filename"),
+                "__bte-warp-drive__/graphics/entity/warp-field/warp-field-nebula.png")
+    t.absent("lightning", "bte-warp-drive-local-lightning")
+
+    # Subspace streaks are particles gliding at deck level: four shapes, five tints, three lengths,
+    # each fading in over its first frames and playing its row once over a 120-tick life.
+    streak = t.prototype("optimized-particle", "bte-warp-drive-streak")
+    if streak is not None:
+        pictures = streak.get("pictures", [])
+        t.check("Warp streak variations", len(pictures), 60)
+        height = pictures[0].get("height", 0) if pictures else 0
+        t.check("Warp streak rows", sorted({p.get("y") for p in pictures}), [0, height, 2 * height, 3 * height])
+        t.check("Warp streak flight", [streak.get("life_time"), streak.get("vertical_acceleration")], [120, 0])
+
+    # Background anomalies pick one of six shapes per layer.
+    anomaly = t.prototype("animation", "bte-warp-drive-anomaly")
+    if anomaly is not None:
+        t.check("Warp anomaly shapes", anomaly["layers"][0].get("frame_count"), 6)
+
+    # Activation shockwaves grow from the building's edge (4.5 tiles) to their reach; the ring is
+    # 7 tiles in radius at scale 1.
+    for tint in ("azure", "violet"):
+        for reach in (32, 64, 128, 256):
+            wave = t.prototype("trivial-smoke", f"bte-warp-drive-shockwave-{tint}-{reach}")
+            if wave is not None:
+                t.check(f"{tint} shockwave {reach} reach",
+                        [round(wave.get("start_scale") * 7, 3), round(wave.get("end_scale") * 7, 3)],
+                        [4.5, reach])
+
+    # While warp holds, a hidden companion makes the building itself hum.
+    hum = t.prototype("simple-entity-with-owner", "bte-warp-drive-field-hum")
+    if hum is not None:
+        sound = hum.get("working_sound", {}).get("sound", {})
+        t.check("Warp field hum sound", [sound.get("filename"), sound.get("category")],
+                ["__bte-warp-drive__/resources/audio/warp-field-hum.ogg", "game-effect"])
+        t.check("Warp field hum is hidden and unselectable",
+                [hum.get("hidden"), hum.get("selectable_in_game"), hum.get("collision_mask")],
+                [True, False, {"layers": {}}])
+
 
 # Core overlays scripts/visuals.lua draws for each drive state.
-OVERLAY_STATES = ["standby", "charging", "activation", "warp"]
+OVERLAY_STATES = ["standby", "detecting", "charging", "activation", "warp"]
 
 
 def check_graphics(t, controller):

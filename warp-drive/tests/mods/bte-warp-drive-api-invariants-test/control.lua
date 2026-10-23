@@ -32,7 +32,6 @@ local PLANETARY_PACK_RECIPES = {
 local ORBITAL_ORDER = {"nauvis", "aquilo", "solar-system-edge", "shattered-planet"}
 local ROUTE = "nauvis-vulcanus"
 local WARP_SOUNDS = {
-  "bte-warp-drive-command",
   "bte-warp-drive-activation",
   "bte-warp-drive-deactivation",
   "bte-warp-drive-background-01",

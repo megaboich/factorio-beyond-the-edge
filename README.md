@@ -13,10 +13,6 @@ Both mods require Factorio 2.1 with the Space Age expansion.
 
 ## SPACELAB
 
-<p align="center">
-  <img src="spacelab/thumbnail.png" alt="SPACELAB mod thumbnail" width="128">
-</p>
-
 **Space Platform Asteroid Complete Extraction: Laboratories with Advanced Biotech.**
 
 SPACELAB extends the endgame into orbit. Asteroid chunks become broad chemical feedstock, a rare new mineral unlocks high-tier chemistry, and a new Growth Facility cultivates Gleba crops and incubates eggs on the platform. The planetary science packs can be crafted in space with their standard machines, so a platform can run a complete late-game science chain on its own.

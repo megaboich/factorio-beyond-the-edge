@@ -5,8 +5,10 @@
 // main sheet's frame count unless the model sets `loop` (for a static main sheet under animated
 // layers). A layer's `preview.variant` shows it only for that variant (as the running recipe does
 // in game), `preview.tint: "variant"` multiplies it by the variant's colour, and
-// `preview.blend: "additive"` draws it as light. The model's `labels` rename the variant picker
-// ({variant, idle}).
+// `preview.blend: "additive"` draws it as light. `preview.slider: "Label"` adds a slider that scales
+// the layer's strength from 0 to 3, starting at `preview.gain` (default 1), for tuning glows. The
+// model's `labels` rename the variant picker ({variant, idle}), and `night: false` drops the night
+// panel for buildings that are only ever seen in daylight.
 // "Use real background" (on by default) lays space platform floor tiles under every panel instead
 // of the plain tile grid and footprint outline.
 // "No recipe" shows the idle building as the game does with no recipe set: no variant layers, no
@@ -37,7 +39,8 @@
 
   // Draw order as in game: shadow, building, model layers (in model order), then light glows.
   const names = Object.keys(meta.sheets);
-  const order = (layer) => (layer === "shadow" ? -2 : layer === "main" ? -1 : layer.startsWith("glow-") ? 1000 : names.indexOf(layer));
+  // A layer's `preview.order` overrides its place, for layers the game draws over its glows.
+  const order = (layer) => meta.sheets[layer].preview?.order ?? (layer === "shadow" ? -2 : layer === "main" ? -1 : layer.startsWith("glow-") ? 1000 : names.indexOf(layer));
   const loop = meta.loop || meta.sheets.main.frame_count;
   const generated = names
     .sort((a, b) => order(a) - order(b))
@@ -48,6 +51,8 @@
       blend: layer === "shadow" ? "shadow" : layer.startsWith("glow-") || meta.sheets[layer].preview?.blend === "additive" ? "additive" : "normal",
       variant: meta.sheets[layer].preview?.variant,
       tintByVariant: meta.sheets[layer].preview?.tint === "variant",
+      slider: meta.sheets[layer].preview?.slider,
+      gain: meta.sheets[layer].preview?.gain ?? 1,
       // Model layers are drawn with draw_as_glow in game, so they stay fully lit at night.
       glow: Boolean(meta.sheets[layer].preview),
       // Drawn only while a recipe runs: recipe layers and working lights.
@@ -64,7 +69,7 @@
   const labels = { variant: "Recipe", idle: "No recipe", ...meta.labels };
   const panels = [
     { label: "Generated, day", night: false, tiles: meta.tiles, layers: generated },
-    { label: "Generated, night", night: true, tiles: meta.tiles, layers: generated },
+    ...(meta.night === false ? [] : [{ label: "Generated, night", night: true, tiles: meta.tiles, layers: generated }]),
     ...meta.references.map((ref) => ({ label: ref.label, night: false, tiles: ref.tiles, layers: ref.layers }))
   ];
 
@@ -87,6 +92,7 @@
       <label><input id="real" type="checkbox" ${realBackground ? "checked" : ""} ${meta.background ? "" : "disabled"}> Use real background</label>
       <button id="play">${playing ? "Pause" : "Play"}</button>
       <span id="frame"></span>
+      ${generated.filter((l) => l.slider).map((l) => `<label>${l.slider} <input id="gain-${l.layer}" type="range" min="0" max="3" step="0.05" value="${l.gain}"> <span id="gain-${l.layer}-value">${l.gain.toFixed(2)}</span></label>`).join("")}
     </header>
     <main>${panels.map((p, i) => `<figure><canvas id="panel-${i}" width="${W}" height="${H}"></canvas><figcaption>${p.label}</figcaption></figure>`).join("")}</main>`;
   const $ = (id) => document.getElementById(id);
@@ -98,6 +104,13 @@
     fps = Number(e.target.value);
     $("fps-value").textContent = fps;
   };
+  for (const layer of generated.filter((l) => l.slider)) {
+    $(`gain-${layer.layer}`).oninput = (e) => {
+      layer.gain = Number(e.target.value);
+      $(`gain-${layer.layer}-value`).textContent = layer.gain.toFixed(2);
+      draw();
+    };
+  }
   $("real").onchange = (e) => {
     realBackground = e.target.checked;
     draw();
@@ -181,9 +194,15 @@
       [image, sx, sy] = [scratch, 0, 0];
     }
     ctx.globalCompositeOperation = layer.blend === "additive" ? "lighter" : "source-over";
-    ctx.drawImage(image, sx, sy, layer.width, layer.height,
-      W / 2 + layer.shift[0] * TILE - layer.width / 2, H / 2 + layer.shift[1] * TILE - layer.height / 2,
-      layer.width, layer.height);
+    // A slider's gain above 1 adds the light again; the remainder is drawn at partial strength.
+    const gain = layer.slider ? layer.gain : 1;
+    for (let pass = 0; pass < Math.ceil(gain); pass++) {
+      ctx.globalAlpha = Math.min(1, gain - pass);
+      ctx.drawImage(image, sx, sy, layer.width, layer.height,
+        W / 2 + layer.shift[0] * TILE - layer.width / 2, H / 2 + layer.shift[1] * TILE - layer.height / 2,
+        layer.width, layer.height);
+    }
+    ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "source-over";
   }
 

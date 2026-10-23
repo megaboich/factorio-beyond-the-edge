@@ -2,7 +2,7 @@
 return
 {
   width = 158,
-  height = 249,
-  shift = {0, -1.7109375},
-  line_length = 1,
+  height = 248,
+  shift = {0, -1.96875},
+  line_length = 8,
 }

@@ -9,7 +9,7 @@ This repository holds independent Factorio: Space Age post-game mods. They share
 - `make.sh`: packages and installs one or more mods.
 - `tests/`: cross-mod test tooling. `run-prototype-tests.sh` loads vanilla Space Age, each mod alone, and all mods together, then runs every mod's `tests/prototypes.py` through the shared `prototype_checks.py` helpers.
 - `tools/readme-icons.py`: extracts the item, fluid, and technology icons each mod README references (`docs/icons/<prototype-name>.png`, `docs/icons/technology/<prototype-name>.png`) from the game and the mods into that mod's `docs/icons/`, and removes unreferenced ones. Run `python3 tools/readme-icons.py` after changing README icon references.
-- `tools/sprites/`: experimental building-sprite renderer. Three.js models in `models/` (shared helpers in `lib/`) are rendered by headless Chrome (`node render.mjs`, after `npm install`) into Factorio sheets under the git-ignored `out/`: main, shadow, model-defined extra layers (such as per-variant specimens with their own frame count and speed), and additive `glow-*` layers with their `shift` metadata, plus an animated day/night preview (`<name>-preview.html`, with a no-recipe mode) beside the current and vanilla art. `gif.mjs` records README GIFs from that preview (needs `ffmpeg` and `gifsicle`). Lives outside every mod root, so it is never packaged.
+- `tools/sprites/`: sprite renderer for buildings, icons, and effects. Three.js models in `models/` (shared helpers in `lib/`) are rendered by headless Chrome (`node render.mjs`, after `npm install`) into Factorio sheets under the git-ignored `out/`: main, shadow, model-defined extra layers (such as per-variant specimens with their own frame count and speed), and additive `glow-*` layers with their `shift` metadata, plus an animated day/night preview (`<name>-preview.html`, with a no-recipe mode) beside the current and vanilla art. `gif.mjs` records README GIFs from that preview (needs `ffmpeg` and `gifsicle`). Lives outside every mod root, so it is never packaged.
 - `spacelab/`: SPACELAB mod root (`info.json` name `bte-spacelab`).
 - `warp-drive/`: Warp Drive mod root (`info.json` name `bte-warp-drive`).
 
@@ -27,7 +27,7 @@ Each mod directory is a complete Factorio mod root. Directory names are reposito
 ### Warp Drive
 
 - `control.lua`: runtime composition root.
-- `scripts/`: feature-owned runtime modules (`drive.lua`, `warp.lua`, `research.lua`, `gui.lua`, `visuals.lua`).
+- `scripts/`: feature-owned runtime modules (`drive.lua`, `warp.lua`, `research.lua`, `gui.lua`, `visuals.lua`, `anomalies.lua`).
 - `prototypes/`: feature-sized prototype files.
 - `graphics/`: generated building sheets, item icon, and technology icon.
 - `resources/audio/`: committed sound bank and its generator.
@@ -43,15 +43,14 @@ Each mod directory is a complete Factorio mod root. Directory names are reposito
 - Warp Drive also keeps maintainer references with fixed roles:
   - `BUILDING.md`: composite-entity composition, ownership, electrical lifecycle, wiring, and rendering only.
   - `AUDIO.md`: sound assets, synthesis, runtime playback, scheduling state, and regeneration.
-  - `PLAN.md`: unresolved decisions, validation, and deferred work only.
-- Do not keep speculative design proposals once they are implemented or superseded; implemented behavior belongs in the README, unfinished work in a `PLAN.md`.
+- Do not keep speculative design proposals or planning documents in the repository; implemented behavior belongs in the README.
 
 ## Naming
 
 Factorio shares one namespace per prototype type, mod setting, locale section, and top-level GUI element across every installed mod, and a later `data:extend` with the same name silently replaces the earlier prototype. Every name these mods introduce therefore carries the `bte-` (Beyond the Edge) prefix:
 
 - Mod names: `bte-<mod>`, such as `bte-spacelab` and `bte-warp-drive`. Graphics and sound paths use the matching `__bte-<mod>__/` root.
-- Prototypes, mod settings, and custom locale sections: `bte-<name>`. SPACELAB uses `bte-<thing>` for gameplay prototypes, such as `bte-growth-facility`, and `bte-spacelab-*` for its item group, subgroups, and recipe category. Warp Drive uses `bte-warp-drive*`, `bte-theoretical-warp-drive`, and `bte-practical-warp-drive`.
+- Prototypes, mod settings, and custom locale sections: `bte-<name>`. SPACELAB uses `bte-<thing>` for gameplay prototypes, such as `bte-growth-facility`, and `bte-spacelab-growth` for its recipe category; its items and recipes use Space Age's own item subgroups. Warp Drive uses `bte-warp-drive*`, `bte-theoretical-warp-drive`, and `bte-practical-warp-drive`.
 - GUI element names: `bte_<name>`, such as `bte_warp_drive_window`.
 - Test helper mods: `bte-<mod>-*-test`; load-order helpers keep a leading `aaa-`.
 
@@ -89,15 +88,36 @@ All mods in this repository share the prefix, so a new name must also be unique 
 - Load science-pack surface overrides through `data-final-fixes.lua` so they run after other data-stage changes.
 - Overrides must mutate existing vanilla recipes rather than add duplicate recipes or crafting machines.
 - Growth Facility circuit connector data and wire distance are copied from the Space Age Cryogenic Plant.
-- Each growth recipe owns one `crafting_machine_tint` channel (Yumako primary, Jellynut secondary, Biter egg tertiary, Pentapod egg quaternary), set opaque white while the other three are transparent. The Growth Facility's matching `specimens-<recipe>` overlay, its tinted copy of the shared `fluid` overlay, and its recipe light use that channel, so one building shows only the running recipe's specimens. A new growth recipe needs a free channel; there are only four. Fluid colours are duplicated between `spacelab/prototypes/entities.lua` and the model's `VARIANT_COLORS`.
+- Each growth recipe owns one `crafting_machine_tint` channel (Yumako primary, Jellynut secondary, Biter egg tertiary, Pentapod egg quaternary), set opaque white while the other three are transparent. The Growth Facility's matching `specimens-<recipe>` overlay, its tinted copies of the shared `fluid`, `glow-vat-bottom`, and `glow-vat-top` overlays, and its recipe light use that channel, so one building shows only the running recipe's contents. The vat glows are drawn before the specimens, so the light shows them as silhouettes instead of washing them out. A new growth recipe needs a free channel; there are only four. Fluid colours are duplicated between `spacelab/prototypes/entities.lua` and the model's `VARIANT_COLORS`.
 - The Growth Facility item icon `graphics/icons/growth-facility.png` (a 120x64 strip with custom mipmaps) is generated from the simplified `tools/sprites/models/growth-facility-icon.js`; re-export with `node render.mjs growth-facility-icon --export`. The main layer of the Growth Facility technology icon, `graphics/technology/growth-facility.png` (256 px), renders the same model through `growth-facility-technology.js`; re-export with `node render.mjs growth-facility-technology --export`.
 - Growth Facility building sheets in `graphics/entity/growth-facility/` are generated; change `tools/sprites/models/growth-facility.js` and re-export with `node render.mjs growth-facility --export` instead of editing the PNG or `.lua` files.
 
 ## Warp Drive Constraints
 
 - Building sheets in `graphics/entity/warp-drive/` are generated; change `tools/sprites/models/warp-drive.js` and re-export with `node render.mjs warp-drive --export` instead of editing the PNG or `.lua` files. The item icon `graphics/icons/warp-drive.png` and technology icon `graphics/technology/warp-drive.png` come from `warp-drive-icon.js` and `warp-drive-technology.js`; re-export with `node render.mjs warp-drive-icon warp-drive-technology --export`.
+- Warp field effects in `graphics/entity/warp-field/` (the activation shockwave ring, the lightning cloud, the background anomaly shapes, and the subspace streaks) are generated from `tools/sprites/models/warp-field.js`, which draws only additive layers; re-export with `node render.mjs warp-field --export`.
 - The model's state layers (`interior-<state>`, `glow-<state>`) map one-to-one to the `bte-warp-drive-<state>-interior` and `-glow` animation prototypes. Frame counts are duplicated in `prototypes/entities.lua` (`overlay_frames`) and `scripts/visuals.lua` (`STATES`), and playback speeds assume the model's 32-frame loop lasts 64 ticks.
 - The circuit wire points in `prototypes/entities.lua` are the model's terminal insulator tips; move them with the terminal.
+
+Round parts of both buildings (tanks, dais, caps, rings, and the activation shockwave) are squashed front to back by `ROUND_DEPTH` (0.78), duplicated in `growth-facility.js`, `warp-drive.js`, and `warp-field.js`: the renderer keeps ground tiles square to match the game grid, which would otherwise draw flat circles as circles rather than the ovals vanilla art shows.
+
+## Generated Assets
+
+Every image and sound the mods ship, and every README image, is generated by a script in this repository; edit the generator, never the output. Generators are deterministic, so rerunning one over unchanged sources leaves `git status` clean, and any difference means the committed output is stale.
+
+| Output | Generator | Regenerate |
+| --- | --- | --- |
+| `spacelab/graphics/entity/growth-facility/` | `tools/sprites/models/growth-facility.js` | `node render.mjs growth-facility --export` |
+| `spacelab/graphics/icons/growth-facility.png` | `tools/sprites/models/growth-facility-icon.js` | `node render.mjs growth-facility-icon --export` |
+| `spacelab/graphics/technology/growth-facility.png` (main layer) | `tools/sprites/models/growth-facility-technology.js` | `node render.mjs growth-facility-technology --export` |
+| `warp-drive/graphics/entity/warp-drive/` | `tools/sprites/models/warp-drive.js` | `node render.mjs warp-drive --export` |
+| `warp-drive/graphics/entity/warp-field/` (shockwave, lightning cloud, anomalies, streaks) | `tools/sprites/models/warp-field.js` | `node render.mjs warp-field --export` |
+| `warp-drive/graphics/icons/warp-drive.png`, `warp-drive/graphics/technology/warp-drive.png` | `tools/sprites/models/warp-drive-icon.js`, `warp-drive-technology.js` | `node render.mjs warp-drive-icon warp-drive-technology --export` |
+| `warp-drive/resources/audio/*.ogg` | `warp-drive/resources/audio/generate.py` (see `warp-drive/AUDIO.md`) | `python3 warp-drive/resources/audio/generate.py [--only NAME...]` |
+| `<mod>/docs/*.gif` | `tools/sprites/gif.mjs`, from the model's preview | `node render.mjs <model> && node gif.mjs <model> --out=../../<mod>/docs` |
+| `<mod>/docs/icons/` | `tools/readme-icons.py`, from the game and the mods | `python3 tools/readme-icons.py` |
+
+`node` commands run from `tools/sprites/` after `npm install`; `node render.mjs --export` alone re-exports every model. Sprite rendering needs Chrome, GIFs need `ffmpeg` and `gifsicle`, audio needs `ffmpeg`, and README icons need Factorio.
 
 ## Runtime Architecture
 

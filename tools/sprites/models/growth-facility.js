@@ -51,6 +51,31 @@ const BUBBLES_PER_CAPSULE = 4;
 // A specimen's life cycle spans SLOW building loops, rendered in SPECIMEN_FRAMES frames.
 const SLOW = 8;
 const SPECIMEN_FRAMES = 64;
+// Each tank is lit from a source in its base: `gradient` makes the tinted fluid glow brightest at the
+// bottom and darken towards the surface and the glass, and `underlight` lights the specimens from
+// below in the recipe's colour. Three additive glow layers, which the game tints per recipe, add
+// light, each rendered at its VAT_GLOWS strength (tuned with the preview's sliders, which then
+// start at 1):
+// - glow-vat-bottom: the source, a disc on the tank floor, and a beam fading up the near glass.
+// - glow-vat-top: the fluid surface around the lid, and a band fading down the near glass.
+// A third glow, the far inside wall lit from below, was tried and dropped: it showed as a bright
+// patch behind every specimen.
+const LIGHTING = { gradient: true, underlight: true };
+const VAT_GLOWS = { bottom: 1.4, top: 0.4 };
+// Specimens are drawn after the fluid and the vat glows, so the light does not wash them out, as
+// soft silhouettes: blurred by SILHOUETTE.blur sheet pixels, darkened to SILHOUETTE.shade, and at
+// SILHOUETTE.alpha opacity, as if seen through the glowing liquid.
+const SILHOUETTE = { blur: 1.5, shade: 0.55, alpha: 0.8 };
+// Round parts (tanks, corner tanks, fans) are squashed front to back to this fraction. The
+// renderer keeps ground tiles square so the footprint and pipes match the game's grid, which would
+// otherwise draw every flat circle as a circle; vanilla art draws them as ovals about this tall.
+const ROUND_DEPTH = 0.78;
+const FLUID_GLOW_BOTTOM = 4.5;
+const FLUID_GLOW_TOP = 0.2;
+const FLUID_GLOW_EDGE = 0.45;
+// Lit (non-glowing) fluid colour at the surface, relative to the floor.
+const FLUID_SHADE_TOP = 0.3;
+const UNDERLIGHT_INTENSITY = 1.6;
 
 const VARIANTS = ["yumako", "jellynut", "biter-egg", "pentapod-egg"];
 // Fluid tints, duplicated in spacelab/prototypes/entities.lua (recipe_channels).
@@ -92,6 +117,49 @@ const scaleTo = (object, value) => object.scale.setScalar(Math.max(0.001, value)
 /** A specimen's presence over its life `s`: it appears from nothing, then dissolves at harvest. */
 const presence = (s) => (s < 0.9 ? smoothstep(0, 0.06, s) : 1 - smoothstep(0.9, 0.98, s));
 
+/** Squashes a round part's geometry front to back (ROUND_DEPTH), so it reads as an oval. */
+const oval = (geometry) => geometry.scale(1, 1, ROUND_DEPTH);
+
+/** A canvas texture of `fn(u, v)` (0–1 each, v up) as grey brightness. */
+function gradientTexture(fn, size = 128) {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const image = new ImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const value = Math.round(Math.min(1, Math.max(0, fn((x + 0.5) / size, 1 - (y + 0.5) / size))) * 255);
+      image.data.set([value, value, value, 255], (y * size + x) * 4);
+    }
+  }
+  canvas.getContext("2d").putImageData(image, 0, 0);
+  return new THREE.CanvasTexture(canvas);
+}
+
+/**
+ * Makes a fluid column look lit from a source in the tank floor: its glow fades from
+ * FLUID_GLOW_BOTTOM at the floor to FLUID_GLOW_TOP at the surface, and to FLUID_GLOW_EDGE of that
+ * where the column turns away from the camera, as light scattered through more liquid would.
+ * `height` is the column's geometry height, centred on its origin.
+ */
+function litFromBelow(material, height) {
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying float vRise;")
+      .replace("#include <begin_vertex>", `#include <begin_vertex>\nvRise = position.y / ${height.toFixed(4)} + 0.5;`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nvarying float vRise;")
+      .replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
+        float rise = clamp(vRise, 0.0, 1.0);
+        float facing = abs(dot(normalize(normal), normalize(vViewPosition)));
+        totalEmissiveRadiance *= mix(${FLUID_GLOW_BOTTOM.toFixed(3)}, ${FLUID_GLOW_TOP.toFixed(3)}, pow(rise, 0.7))
+          * mix(${FLUID_GLOW_EDGE.toFixed(3)}, 1.0, facing);
+        diffuseColor.rgb *= mix(1.0, ${FLUID_SHADE_TOP.toFixed(3)}, smoothstep(0.0, 1.0, rise));
+        // Denser near the light, thinner near the surface.
+        diffuseColor.a = clamp(diffuseColor.a * mix(1.6, 0.75, rise), 0.0, 1.0);`);
+  };
+  material.customProgramCacheKey = () => "lit-from-below";
+}
+
 export default {
   tiles: [9, 9],
   height: 3.7,
@@ -104,9 +172,18 @@ export default {
   variantColors: VARIANT_COLORS,
   layers: [
     // Specimens are muted (30% less saturation and contrast) so they sit calmly in the fluid.
-    ...VARIANTS.map((v) => ({ name: `specimens-${v}`, tag: "specimen", variant: v, frames: SPECIMEN_FRAMES, span: SLOW, mute: 0.3, preview: { variant: v } })),
-    { name: "fluid", tag: "fluid", variant: "fluid", frames: FRAMES, span: 1, preview: { tint: "variant" } }
+    ...VARIANTS.map((v) => ({
+      name: `specimens-${v}`, tag: "specimen", variant: v, frames: SPECIMEN_FRAMES, span: SLOW, mute: 0.3, ...SILHOUETTE,
+      preview: { variant: v, order: 1500 }
+    })),
+    { name: "fluid", tag: "fluid", variant: "fluid", frames: FRAMES, span: 1, preview: { tint: "variant" } },
+    ...Object.keys(VAT_GLOWS).map((part) => ({
+      name: `glow-vat-${part}`, tag: "vatglow", glow: true, variant: `vat-${part}`, frames: 1,
+      preview: { blend: "additive", tint: "variant", slider: `${part[0].toUpperCase()}${part.slice(1)} glow`, gain: 1 }
+    }))
   ],
+  // Space platforms are always in daylight.
+  night: false,
   references: [
     {
       label: "Vanilla Biolab (5x5), for style",
@@ -121,7 +198,7 @@ export default {
 
   build() {
     const root = new THREE.Group();
-    const state = { variant: null, lamps: [], bubbles: [], capsules: [], fluidMeshes: [], fluids: {}, clouds: [], fans: [] };
+    const state = { variant: null, lamps: [], bubbles: [], capsules: [], fluidMeshes: [], fluids: {}, clouds: [], fans: [], underlights: [], vatGlows: [] };
     root.userData = state;
     const rand = random(42);
 
@@ -166,7 +243,32 @@ export default {
     };
     // Murky water in idle capsules, part of the building itself; the tinted fluid layer covers it.
     state.fluids.idle = fluidMaterial(0x8a9a94, 0.3, 0.05, null);
-    state.fluids.fluid = fluidMaterial(0xf2f2f2, 0.45, 0.4, "fluid");
+    // With the lit-from-below gradient the fluid starts mid-grey, so its bright floor has room to
+    // glow without clipping to white.
+    state.fluids.fluid = LIGHTING.gradient ? fluidMaterial(0x8c8c8c, 0.5, 0.45, "fluid") : fluidMaterial(0xf2f2f2, 0.45, 0.4, "fluid");
+    if (LIGHTING.gradient) litFromBelow(state.fluids.fluid, FLUID_TOP - FLUID_BOTTOM);
+    // The vat glow layers, all drawn at full strength in neutral white. `rising` fades out upwards,
+    // `falling` downwards; `ring` is brightest at the rim, around the lid.
+    const glowMaterial = (map, strength) => {
+      const material = new THREE.MeshStandardMaterial({
+        color: 0x000000, emissive: 0xffffff, emissiveIntensity: strength, emissiveMap: map, alphaMap: map,
+        transparent: true, depthWrite: false
+      });
+      material.userData.tag = "vatglow";
+      return material;
+    };
+    const rising = gradientTexture((u, v) => (1 - v) ** 2.2);
+    const falling = gradientTexture((u, v) => v ** 3);
+    const vatGlow = {
+      bottom: {
+        disc: glowMaterial(gradientTexture((u, v) => Math.max(0, 1 - Math.hypot(u - 0.5, v - 0.5) * 2) ** 1.5), VAT_GLOWS.bottom),
+        wall: glowMaterial(rising, VAT_GLOWS.bottom)
+      },
+      top: {
+        disc: glowMaterial(gradientTexture((u, v) => smoothstep(0.2, 0.48, Math.hypot(u - 0.5, v - 0.5)) * (1 - smoothstep(0.48, 0.5, Math.hypot(u - 0.5, v - 0.5)))), VAT_GLOWS.top),
+        wall: glowMaterial(falling, VAT_GLOWS.top)
+      }
+    };
     const bubble = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.4, roughness: 0.1 });
     bubble.userData.tag = "fluid";
     const glare = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide });
@@ -286,13 +388,13 @@ export default {
     for (const side of [-1, 1]) {
       const x = side * 3.5;
       const z = -3.5;
-      part(root, new THREE.CylinderGeometry(0.62, 0.66, 0.12, 32), m.dark, [x, BASE + 0.06, z]);
-      part(root, new THREE.CylinderGeometry(0.5, 0.5, 1.2, 32), m.light, [x, BASE + 0.6, z]);
-      part(root, new THREE.SphereGeometry(0.5, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2), m.light, [x, BASE + 1.2, z]);
-      part(root, new THREE.CylinderGeometry(0.515, 0.515, 0.14, 32), m.hazard, [x, BASE + 0.3, z]);
-      part(root, new THREE.CylinderGeometry(0.52, 0.52, 0.06, 32), m.dark, [x, BASE + 1.15, z]);
-      part(root, new THREE.CylinderGeometry(0.1, 0.1, 0.16, 12), m.pipe, [x, BASE + 1.72, z]);
-      lamp(root, new THREE.BoxGeometry(0.1, 0.55, 0.04), 0x7dff9a, [x - side * 0.12, BASE + 0.75, z + 0.48],
+      part(root, oval(new THREE.CylinderGeometry(0.62, 0.66, 0.12, 32)), m.dark, [x, BASE + 0.06, z]);
+      part(root, oval(new THREE.CylinderGeometry(0.5, 0.5, 1.2, 32)), m.light, [x, BASE + 0.6, z]);
+      part(root, oval(new THREE.SphereGeometry(0.5, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2)), m.light, [x, BASE + 1.2, z]);
+      part(root, oval(new THREE.CylinderGeometry(0.515, 0.515, 0.14, 32)), m.hazard, [x, BASE + 0.3, z]);
+      part(root, oval(new THREE.CylinderGeometry(0.52, 0.52, 0.06, 32)), m.dark, [x, BASE + 1.15, z]);
+      part(root, oval(new THREE.CylinderGeometry(0.1, 0.1, 0.16, 12)), m.pipe, [x, BASE + 1.72, z]);
+      lamp(root, new THREE.BoxGeometry(0.1, 0.55, 0.04), 0x7dff9a, [x - side * 0.12, BASE + 0.75, z + 0.48 * ROUND_DEPTH],
         { cycles: 1, phase: side > 0 ? 0.5 : 0, duty: 0.85, on: 1.6, off: 0.8, scale: 0.6 });
       beam(root, new THREE.Vector3(x * 0.9, 0.45, z * 0.9), new THREE.Vector3(side * 2.78, 0.45, -2.78), 0.08, m.pipe);
       tube(root, [[x, BASE + 1.78, z], [x * 0.88, BASE + 1.9, z * 0.88], [side * 2.84, 0.5, -2.84]], 0.05, m.pipe, 20);
@@ -302,17 +404,21 @@ export default {
       const z = 3.5;
       part(root, new THREE.BoxGeometry(0.85, 0.5, 0.85), m.dark, [x, BASE + 0.25, z]);
       part(root, new THREE.BoxGeometry(0.9, 0.06, 0.9), m.frame, [x, BASE + 0.52, z]);
-      part(root, new THREE.CylinderGeometry(0.36, 0.36, 0.03, 24), m.grating, [x, BASE + 0.56, z]);
+      part(root, oval(new THREE.CylinderGeometry(0.36, 0.36, 0.03, 24)), m.grating, [x, BASE + 0.56, z]);
+      // The fan turns inside a squashed holder, so its blades sweep an oval like the ring.
+      const holder = new THREE.Group();
+      holder.position.set(x, BASE + 0.6, z);
+      holder.scale.z = ROUND_DEPTH;
+      root.add(holder);
       const fan = new THREE.Group();
-      fan.position.set(x, BASE + 0.6, z);
-      root.add(fan);
+      holder.add(fan);
       part(fan, new THREE.CylinderGeometry(0.07, 0.07, 0.05, 12), m.pipe);
       for (let b = 0; b < 4; b++) {
         const blade = part(fan, new THREE.BoxGeometry(0.3, 0.015, 0.09), m.frame, [Math.cos((b * Math.PI) / 2) * 0.17, 0, Math.sin((b * Math.PI) / 2) * 0.17]);
         blade.rotation.set(0.35, -(b * Math.PI) / 2, 0);
       }
       state.fans.push({ fan, base: side * 0.4 });
-      part(root, new THREE.TorusGeometry(0.38, 0.025, 6, 32), m.frame, [x, BASE + 0.6, z], [Math.PI / 2, 0, 0]);
+      part(root, oval(new THREE.TorusGeometry(0.38, 0.025, 6, 32).rotateX(Math.PI / 2)), m.frame, [x, BASE + 0.6, z]);
       lamp(root, new THREE.BoxGeometry(0.1, 0.06, 0.03), 0xffb020, [x, BASE + 0.32, z + 0.44], { cycles: 4, phase: side > 0 ? 0.25 : 0, duty: 0.5 });
       beam(root, new THREE.Vector3(x * 0.88, 0.32, z * 0.88), new THREE.Vector3(side * 2.78, 0.32, 2.78), 0.08, m.pipe);
     }
@@ -335,7 +441,7 @@ export default {
     function capsule(x, z, phase) {
       const g = new THREE.Group();
       g.position.set(x, DECK, z);
-      g.scale.setScalar(CAPSULE_SIZE);
+      g.scale.set(CAPSULE_SIZE, CAPSULE_SIZE, CAPSULE_SIZE * ROUND_DEPTH);
       root.add(g);
       const glassHeight = GLASS_TOP - GLASS_BOTTOM;
       const glassMid = (GLASS_TOP + GLASS_BOTTOM) / 2;
@@ -359,6 +465,22 @@ export default {
       }
       for (const y of [GLASS_BOTTOM + 0.03, GLASS_TOP - 0.03]) {
         part(g, new THREE.TorusGeometry(0.48, 0.022, 8, 32), m.frame, [0, y, 0], [Math.PI / 2, 0, 0]);
+      }
+      const column = () => new THREE.CylinderGeometry(0.46, 0.46, FLUID_TOP - FLUID_BOTTOM, 32, 1, true);
+      const columnY = (FLUID_TOP + FLUID_BOTTOM) / 2;
+      const flat = [-Math.PI / 2, 0, 0];
+      state.vatGlows.push(
+        { part: "bottom", mesh: part(g, new THREE.CircleGeometry(0.46, 32), vatGlow.bottom.disc, [0, FLUID_BOTTOM + 0.005, 0], flat) },
+        { part: "bottom", mesh: part(g, column(), vatGlow.bottom.wall, [0, columnY, 0]) },
+        { part: "top", mesh: part(g, new THREE.CircleGeometry(0.46, 32), vatGlow.top.disc, [0, FLUID_TOP - 0.005, 0], flat) },
+        { part: "top", mesh: part(g, column(), vatGlow.top.wall, [0, columnY, 0]) }
+      );
+      if (LIGHTING.underlight) {
+        const light = new THREE.PointLight(0xffffff, UNDERLIGHT_INTENSITY, 1.4, 2);
+        light.position.set(0, FLUID_BOTTOM + 0.06, 0);
+        light.visible = false;
+        g.add(light);
+        state.underlights.push(light);
       }
 
       // Struts and side cables between base and cap.
@@ -412,6 +534,13 @@ export default {
       for (const [variant, specimen] of Object.entries(capsule.specimens)) specimen.group.visible = variant === name;
     }
     for (const bubble of state.bubbles) bubble.mesh.visible = name === "fluid";
+    for (const { part: glow, mesh } of state.vatGlows) mesh.visible = name === `vat-${glow}`;
+    // Specimens are lit from the tank floor in a pale version of their recipe's fluid colour.
+    const color = VARIANT_COLORS[name];
+    for (const light of state.underlights) {
+      light.visible = Boolean(color);
+      if (color) light.color.setRGB(...color.map((c) => mix(1, c, 0.6)));
+    }
   },
 
   // `t` counts building loops (0 to 1 for the building, up to SLOW for specimen layers). Every
@@ -430,7 +559,7 @@ export default {
       bubble.mesh.position.set(bubble.x + wobble, FLUID_BOTTOM + 0.05 + rise * (FLUID_TOP - FLUID_BOTTOM - 0.08), bubble.z);
       bubble.mesh.scale.setScalar(rise > 0.92 ? Math.max(0.001, 1 - (rise - 0.92) / 0.08) : 1);
     }
-    if (variant && variant !== "fluid") {
+    if (VARIANTS.includes(variant)) {
       const slow = t / SLOW;
       for (const capsule of capsules) capsule.specimens[variant].update((slow + capsule.phase) % 1, slow, capsule.phase);
     }

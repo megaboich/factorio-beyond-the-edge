@@ -1,7 +1,9 @@
-// Renders building sprites from the Three.js models in models/ with headless Chrome.
+// Renders building, icon, and effect sprites from the Three.js models in models/ with headless
+// Chrome. AGENTS.md (Generated Assets) lists every model, its output, and its command.
 //
 //   cd tools/sprites && npm install
 //   node render.mjs                     every model
+//   node render.mjs --export            every model, exported into the mods
 //   node render.mjs growth-facility     just these
 //     [--out=dir] (default: out/) [--elevation=60] (camera degrees above the ground)
 //     [--frames=n] (override the model's frame count) [--channel=chrome]
@@ -158,7 +160,7 @@ try {
     }
     const { sheets, model } = await page.evaluate(([model, options]) => window.renderSprite(model, options),
       [name, { elevation: number(opt.elevation), frames: number(opt.frames) }]);
-    const meta = { name, scale: 0.5, tiles: model.tiles, fps: model.fps, loop: model.loop, labels: model.labels, variants: model.variants, variantColors: model.variantColors, sheets: {} };
+    const meta = { name, scale: 0.5, tiles: model.tiles, fps: model.fps, loop: model.loop, labels: model.labels, variants: model.variants, variantColors: model.variantColors, night: model.night, sheets: {} };
     for (const [layer, { dataURL, ...fields }] of Object.entries(sheets)) {
       writeFileSync(join(out, `${name}-${layer}.png`), Buffer.from(dataURL.split(",")[1], "base64"));
       meta.sheets[layer] = fields;
@@ -200,7 +202,8 @@ try {
     await preview.screenshot({ path: join(out, `${name}-preview.png`), fullPage: true });
     await preview.close();
 
-    const { width, height, frame_count, line_length } = meta.sheets.main;
+    // Effect models draw only extra layers and have no main sheet.
+    const { width, height, frame_count, line_length } = meta.sheets.main ?? Object.values(meta.sheets)[0];
     console.log(`${name}: ${frame_count} frame(s) ${width}x${height}, ${line_length} per row, layers ${Object.keys(meta.sheets).join(", ")} ` +
       `(${((Date.now() - started) / 1000).toFixed(1)} s)`);
   }
