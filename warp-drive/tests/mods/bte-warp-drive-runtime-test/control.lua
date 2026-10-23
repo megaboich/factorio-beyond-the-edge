@@ -75,27 +75,19 @@ local function overlay_names(entity)
   return table.concat(names, ",")
 end
 
--- Every warp strike either keeps its whole strike (cloud at the entity, bolt tip 25 tiles south)
--- 7.5 tiles from the platform, or lands its bolt within 10 tiles of the drive. Returns the number
--- of strikes in open space.
+-- Warp lightning strikes only around the drive: every bolt (25 tiles south of its cloud at the
+-- entity position) lands within 10 tiles of it, never in open space.
 local function check_lightning_placement(platform)
-  local surface = platform.surface
-  local in_space = 0
   local drive = storage.drive.position
-  for _, lightning in pairs(surface.find_entities_filtered({type = "lightning"})) do
+  for _, lightning in pairs(platform.surface.find_entities_filtered({type = "lightning"})) do
     local p = lightning.position
     local dx, dy = p.x - drive.x, p.y + 25 - drive.y
     if lightning.name ~= "bte-warp-drive-lightning" then
       fail("unexpected lightning during warp: " .. lightning.name)
-    elseif surface.count_tiles_filtered({
-          area = {{p.x - 7.4, p.y - 7.4}, {p.x + 7.4, p.y + 25 + 7.4}},
-          name = "space-platform-foundation", limit = 1}) == 0 then
-      in_space = in_space + 1
     elseif dx * dx + dy * dy > 10.01 * 10.01 then
-      fail(string.format("warp lightning landed on the platform away from the drive: x=%s y=%s", p.x, p.y))
+      fail(string.format("warp lightning struck away from the drive: x=%s y=%s", p.x, p.y))
     end
   end
-  return in_space
 end
 
 local function field_hums(platform)
@@ -118,14 +110,6 @@ local function find_gui_element(parent, name)
   end
 end
 
-local function child_index(parent, child)
-  for index, candidate in pairs(parent.children) do
-    if candidate == child then
-      return index
-    end
-  end
-end
-
 local function assert_research_gui_snapshot(frame, record)
   local snapshot = Research.snapshot(record)
   local branch = frame and find_gui_element(frame, "bte_warp_drive_research_branch")
@@ -141,10 +125,18 @@ local function assert_research_gui_snapshot(frame, record)
   end
 end
 
-local function drive_tags(enabled, circuit_enabled)
+local A_SIGNAL = {type = "virtual", name = "signal-A"}
+local B_SIGNAL = {type = "virtual", name = "signal-B"}
+
+-- Drive tags with the default outputs and the given conditions, keyed activate, deactivate,
+-- detector_start, and detector_stop; omitted conditions are disabled.
+local function drive_tags(conditions)
+  conditions = conditions or {}
   return {
-    bte_warp_drive_enabled = enabled,
-    bte_warp_drive_circuit_enabled = circuit_enabled,
+    bte_warp_drive_activate = conditions.activate or {enabled = false},
+    bte_warp_drive_deactivate = conditions.deactivate or {enabled = false},
+    bte_warp_drive_detector_start = conditions.detector_start or {enabled = false},
+    bte_warp_drive_detector_stop = conditions.detector_stop or {enabled = false},
     bte_warp_drive_output_warp_enabled = true,
     bte_warp_drive_output_warp_signal = {type = "virtual", name = "signal-W"},
     bte_warp_drive_output_distance_enabled = true,
@@ -160,12 +152,10 @@ end
 
 local function settings_test_tags()
   return {
-    bte_warp_drive_enabled = true,
-    bte_warp_drive_circuit_enabled = true,
-    bte_warp_drive_circuit_first_signal = {type = "virtual", name = "signal-A"},
-    bte_warp_drive_circuit_comparator = "≤",
-    bte_warp_drive_circuit_second_signal = {type = "virtual", name = "signal-B"},
-    bte_warp_drive_circuit_constant = 73,
+    bte_warp_drive_activate = {enabled = true, first_signal = A_SIGNAL, comparator = "≤",
+      second_signal = B_SIGNAL, constant = 73},
+    bte_warp_drive_deactivate = {enabled = false, first_signal = B_SIGNAL, comparator = "=",
+      constant = -5},
     bte_warp_drive_output_warp_enabled = false,
     bte_warp_drive_output_warp_signal = {type = "virtual", name = "signal-Z"},
     bte_warp_drive_output_distance_enabled = true,
@@ -179,28 +169,23 @@ local function settings_test_tags()
   }
 end
 
-local function configure_circuit_condition(player, first_signal, comparator_index,
-    second_signal, constant)
-  local frame = player.gui.screen.bte_warp_drive_window
-  local first = frame and find_gui_element(frame, "bte_warp_drive_circuit_first_signal")
-  local comparator = frame and find_gui_element(frame, "bte_warp_drive_circuit_comparator")
-  local second = frame and find_gui_element(frame, "bte_warp_drive_circuit_second_signal")
-  local threshold = frame and find_gui_element(frame, "bte_warp_drive_circuit_constant")
-  local enabled = frame and find_gui_element(frame, "bte_warp_drive_circuit_enabled")
-  if not first or not comparator or not second or not threshold or not enabled then
-    fail("configurable circuit-condition controls were not created")
+-- Sets the drive's circuit conditions the way a blueprint or settings paste does.
+local function configure_conditions(conditions)
+  script.raise_script_revive({entity = storage.drive, tags = drive_tags(conditions)})
+end
+
+local function engage(platform)
+  if not remote.call("bte-warp-drive-runtime-test", "engage", platform.index) then
+    fail("the Engage button was refused although the drive was ready")
   end
-  script.raise_script_revive({
-    entity = storage.drive,
-    tags = {
-      bte_warp_drive_circuit_enabled = true,
-      bte_warp_drive_circuit_first_signal = first_signal,
-      bte_warp_drive_circuit_comparator = ({">", "<", "=", "≥", "≤", "≠"})[comparator_index],
-      bte_warp_drive_circuit_second_signal = second_signal,
-      bte_warp_drive_circuit_constant = constant
-    }
-  })
-  frame.destroy()
+end
+
+-- Reopens the drive window so it shows freshly configured conditions.
+local function reopen_gui(player)
+  local frame = player.gui.screen.bte_warp_drive_window
+  if frame then
+    frame.destroy()
+  end
   player.opened = storage.drive
 end
 
@@ -360,7 +345,11 @@ script.on_init(function()
   storage.drives[platform.index] = blueprint_record
   Drive.tag_blueprint(blueprint, mapping)
   local blueprint_tags = blueprint.get_blueprint_entity_tags(blueprint_entity)
-  if not blueprint_tags or blueprint_tags.bte_warp_drive_circuit_comparator ~= "≤"
+  if not blueprint_tags or not blueprint_tags.bte_warp_drive_activate
+      or blueprint_tags.bte_warp_drive_activate.comparator ~= "≤"
+      or blueprint_tags.bte_warp_drive_activate.constant ~= 73
+      or blueprint_tags.bte_warp_drive_deactivate.comparator ~= "="
+      or blueprint_tags.bte_warp_drive_deactivate.enabled ~= false
       or blueprint_tags.bte_warp_drive_output_warp_enabled ~= false
       or blueprint_tags.bte_warp_drive_output_tachyon_density_signal.name ~= "signal-T"
       or blueprint_tags.bte_warp_drive_output_detector_power_signal ~= nil then
@@ -411,7 +400,7 @@ script.on_nth_tick(10, function()
 
   if phase == "detector_gui" and elapsed == 10 then
     storage.settings_drive.copy_settings(drive, game.players[1])
-    script.raise_script_revive({entity = drive, tags = drive_tags(true, false)})
+    script.raise_script_revive({entity = drive, tags = drive_tags()})
     local detector = platform.surface.find_entities_filtered({name = POWER_INTERFACE_NAME})
     if #detector ~= 1 then
       fail("expected one experimental detector")
@@ -444,58 +433,60 @@ script.on_nth_tick(10, function()
     end
     if player then
       local frame = player.gui.screen.bte_warp_drive_window
-      local reserve = find_gui_element(frame, "bte_warp_drive_requirement_charge")
-      local reserve_icon = find_gui_element(frame, "bte_warp_drive_requirement_charge_icon")
-      local power = find_gui_element(frame, "bte_warp_drive_requirement_power")
-      local power_icon = find_gui_element(frame, "bte_warp_drive_requirement_power_icon")
-      local location_heading = find_gui_element(frame, "bte_warp_drive_location_heading")
-      local location_label = find_gui_element(frame, "bte_warp_drive_location_label")
-      local circuit_state = find_gui_element(frame, "bte_warp_drive_circuit_state")
-      local automatic = find_gui_element(frame, "bte_warp_drive_enabled")
-      local circuit = find_gui_element(frame, "bte_warp_drive_circuit_enabled")
+      local tabs = find_gui_element(frame, "bte_warp_drive_tabs")
+      local status_text = find_gui_element(frame, "bte_warp_drive_status_text")
+      local route = find_gui_element(frame, "bte_warp_drive_route")
+      local warp_locked = find_gui_element(frame, "bte_warp_drive_warp_locked")
+      local requirements = find_gui_element(frame, "bte_warp_drive_requirements")
+      local circuit_state = find_gui_element(frame, "bte_warp_drive_detector_start_state")
+      local activate = find_gui_element(frame, "bte_warp_drive_detector_start_enabled")
+      local deactivate = find_gui_element(frame, "bte_warp_drive_detector_stop_enabled")
+      local warp_activate = find_gui_element(frame, "bte_warp_drive_activate_header")
+      local start = find_gui_element(frame, "bte_warp_drive_engage")
+      local stop = find_gui_element(frame, "bte_warp_drive_disengage")
+      local boost_controls = find_gui_element(frame, "bte_warp_drive_boost_controls")
       local warp_output = find_gui_element(frame, "bte_warp_drive_output_warp_enabled")
+      local distance_output = find_gui_element(frame, "bte_warp_drive_output_distance_enabled")
       local charge_output = find_gui_element(frame, "bte_warp_drive_output_charge_enabled")
       local speed_output = find_gui_element(frame, "bte_warp_drive_output_speed_enabled")
       local density_output = find_gui_element(frame,
         "bte_warp_drive_output_tachyon_density_enabled")
-      local progress = find_gui_element(frame, "bte_warp_drive_progress")
-      if not reserve or reserve.style.name ~= "grey_label"
-        or not reserve_icon or reserve_icon.sprite ~= "utility/status_inactive"
-        or not power or power.style.name ~= "grey_label"
-        or not power_icon or power_icon.sprite ~= "utility/status_inactive" then
-        fail("disabled warp control did not grey out dependent checklist rows")
-      end
-      if not location_heading or type(location_heading.caption) ~= "table"
-        or location_heading.caption[1] ~= "bte-warp-drive.location-section"
-        or not location_label or not location_label.visible
-        or not circuit_state or circuit_state.visible
-        or not automatic or not automatic.enabled
-        or type(automatic.caption) ~= "table"
-        or automatic.caption[1] ~= "bte-warp-drive.research-enabled"
-        or not circuit or not circuit.enabled
-        or type(circuit.caption) ~= "table"
-         or circuit.caption[1] ~= "bte-warp-drive.research-circuit-enabled"
-         or not warp_output or warp_output.parent.visible
-         or not charge_output or charge_output.parent.visible
-         or not speed_output or speed_output.parent.visible
+      if not tabs or tabs.selected_tab_index ~= 2
+        or not status_text or (status_text.caption[1] ~= "bte-warp-drive.header-detecting"
+          and status_text.caption[1] ~= "bte-warp-drive.header-detector-no-power")
+        or not route or route.caption[1] ~= "bte-warp-drive.location-transit-distance"
+        or not warp_locked or not warp_locked.visible
+        or not requirements or requirements.visible
+        or not circuit_state or circuit_state.sprite ~= "utility/status_inactive"
+        or not activate or activate.state
+        or type(activate.caption) ~= "table"
+        or activate.caption[1] ~= "bte-warp-drive.research-detector-start-condition"
+        or not warp_activate or warp_activate.visible
+        or not deactivate or deactivate.state
+        or type(deactivate.caption) ~= "table"
+        or deactivate.caption[1] ~= "bte-warp-drive.research-detector-stop-condition"
+        or not start or start.enabled or start.caption[1] ~= "bte-warp-drive.start-detector"
+        or not stop or not stop.enabled or stop.caption[1] ~= "bte-warp-drive.stop-detector"
+        or not boost_controls or boost_controls.visible
+        or not warp_output or warp_output.parent.visible
+        or not distance_output or distance_output.parent.visible
+        or not charge_output or charge_output.parent.visible
+        or not speed_output or speed_output.parent.visible
         or not density_output or not density_output.parent.visible then
-        fail("research GUI did not retain its position-and-signal layout")
-      end
-      if progress then
-        fail("research GUI retained the redundant route-progress statistic")
+        fail("research GUI did not open on the detector tab with research-mode controls")
       end
       local platform_record = Drive.get(platform.index)
       assert_research_gui_snapshot(frame, platform_record)
-      local default_first = find_gui_element(frame, "bte_warp_drive_circuit_first_signal")
-      if platform_record.circuit_first_signal ~= nil
+      local default_first = find_gui_element(frame, "bte_warp_drive_activate_first_signal")
+      if platform_record.activate.first_signal ~= nil
           or not default_first or default_first.elem_value ~= nil then
         fail("new drive preselected a circuit engagement signal")
       end
       local requirement_rows = {
-        "bte_warp_drive_requirement_control", "bte_warp_drive_requirement_travel",
+        "bte_warp_drive_requirement_travel",
         "bte_warp_drive_requirement_clearance", "bte_warp_drive_requirement_cooldown",
-        "bte_warp_drive_requirement_charge", "bte_warp_drive_requirement_power",
-        "bte_warp_drive_requirement_speed", "bte_warp_drive_requirement_acceleration"
+        "bte_warp_drive_requirement_speed", "bte_warp_drive_requirement_power",
+        "bte_warp_drive_requirement_acceleration"
       }
       for _, requirement_name in pairs(requirement_rows) do
         local row = find_gui_element(frame, requirement_name .. "_row")
@@ -514,17 +505,18 @@ script.on_nth_tick(10, function()
       settings_platform.surface.ignore_surface_conditions = true
       player.opened = storage.settings_drive
       local settings_frame = player.gui.screen.bte_warp_drive_window
-      local automatic = settings_frame and find_gui_element(settings_frame, "bte_warp_drive_enabled")
-      local circuit = settings_frame and find_gui_element(settings_frame,
-        "bte_warp_drive_circuit_enabled")
+      local activate = settings_frame and find_gui_element(settings_frame,
+        "bte_warp_drive_activate_enabled")
+      local deactivate = settings_frame and find_gui_element(settings_frame,
+        "bte_warp_drive_deactivate_enabled")
       local first = settings_frame and find_gui_element(settings_frame,
-        "bte_warp_drive_circuit_first_signal")
+        "bte_warp_drive_activate_first_signal")
       local comparator = settings_frame and find_gui_element(settings_frame,
-        "bte_warp_drive_circuit_comparator")
+        "bte_warp_drive_activate_comparator")
       local second = settings_frame and find_gui_element(settings_frame,
-        "bte_warp_drive_circuit_second_signal")
+        "bte_warp_drive_activate_second_signal")
       local constant = settings_frame and find_gui_element(settings_frame,
-        "bte_warp_drive_circuit_constant")
+        "bte_warp_drive_activate_constant")
       local warp_toggle = settings_frame and find_gui_element(settings_frame,
         "bte_warp_drive_output_warp_enabled")
       local warp_signal = settings_frame and find_gui_element(settings_frame,
@@ -550,7 +542,7 @@ script.on_nth_tick(10, function()
       if Research.branch(platform.surface) == Research.branch(settings_platform.surface) then
         fail("differently configured platform surfaces selected the same research branch")
       end
-      if not automatic or automatic.state or not circuit or not circuit.state
+      if not activate or not activate.state or not deactivate or deactivate.state
         or not first or first.elem_value.name ~= "signal-A"
         or not comparator or comparator.selected_index ~= 5
         or not second or second.elem_value.name ~= "signal-B"
@@ -573,24 +565,16 @@ script.on_nth_tick(10, function()
         element = warp_toggle
       })
       if not settings_record.output_warp_enabled
-          or settings_record.enabled or not settings_record.circuit_enabled then
+          or not settings_record.activate.enabled or settings_record.deactivate.enabled then
         fail("output toggle changed drive engagement")
       end
-      automatic.state = true
+      deactivate.state = true
       Gui.handlers.on_gui_checked_state_changed({
         player_index = player.index,
-        element = automatic
+        element = deactivate
       })
-      if not settings_record.enabled or settings_record.circuit_enabled then
-        fail("automatic engagement did not disable circuit engagement")
-      end
-      circuit.state = true
-      Gui.handlers.on_gui_checked_state_changed({
-        player_index = player.index,
-        element = circuit
-      })
-      if settings_record.enabled or not settings_record.circuit_enabled then
-        fail("circuit engagement did not disable automatic engagement")
+      if not settings_record.deactivate.enabled or not settings_record.activate.enabled then
+        fail("enabling the deactivate condition changed the activate condition")
       end
       first.elem_value = nil
       Gui.handlers.on_gui_elem_changed({
@@ -602,7 +586,7 @@ script.on_nth_tick(10, function()
         player_index = player.index,
         element = warp_signal
       })
-      if settings_record.circuit_first_signal ~= nil
+      if settings_record.activate.first_signal ~= nil
           or first.elem_value ~= nil
           or settings_record.output_warp_signal.name ~= "signal-W"
           or warp_signal.elem_value.name ~= "signal-W" then
@@ -613,7 +597,7 @@ script.on_nth_tick(10, function()
         player_index = player.index,
         element = comparator
       })
-      if settings_record.circuit_comparator ~= "≠" then
+      if settings_record.activate.comparator ~= "≠" then
         fail("comparator selection did not map to the stored operator")
       end
       constant.text = "2147483648"
@@ -621,7 +605,7 @@ script.on_nth_tick(10, function()
         player_index = player.index,
         element = constant
       })
-      if settings_record.circuit_constant ~= 2147483647 then
+      if settings_record.activate.constant ~= 2147483647 then
         fail("circuit constant text was not clamped to int32")
       end
       constant.text = "-2147483649"
@@ -629,15 +613,15 @@ script.on_nth_tick(10, function()
         player_index = player.index,
         element = constant
       })
-      if settings_record.circuit_constant ~= -2147483648
+      if settings_record.activate.constant ~= -2147483648
           or constant.text ~= "-2147483648" then
         fail("confirmed circuit constant was not clamped and normalized")
       end
       Gui.handlers.on_display_changed({player_index = player.index})
-      local scroll = settings_frame.bte_warp_drive_body.bte_warp_drive_content_scroll
-      local expected_height = math.max(300,
-        player.display_resolution.height / player.display_scale - 100)
-      if scroll.style.maximal_height ~= expected_height then
+      local page = find_gui_element(settings_frame, "bte_warp_drive_warp_page")
+      local expected_height = math.max(240, math.min(440,
+        player.display_resolution.height / player.display_scale - 360))
+      if not page or page.style.maximal_height ~= expected_height then
         fail("display change did not update GUI height")
       end
       local close = find_gui_element(settings_frame, "bte_warp_drive_close")
@@ -653,27 +637,35 @@ script.on_nth_tick(10, function()
       end
       player.opened = drive
       local stale = player.gui.screen.bte_warp_drive_window
-      local stale_content = stale and stale.bte_warp_drive_body.bte_warp_drive_content_scroll
-        .bte_warp_drive_content
-      if not stale_content then
+      local stale_route = stale and find_gui_element(stale, "bte_warp_drive_route")
+      if not stale_route then
         fail("could not create the stale GUI fixture")
       end
-      stale_content.bte_warp_drive_mode_help.destroy()
+      stale_route.destroy()
     end
   elseif phase == "detector_gui" and elapsed == 30 then
-    remote.call("bte-warp-drive-runtime-test", "set_engagement", platform.index, false, false)
+    if circuit_signal("signal-D") ~= nil
+        or circuit_signal("signal-T") ~= math.floor(Research.tachyon_density(platform)) then
+      fail("research mode did not suppress distance while reading tachyon density")
+    end
+    if not remote.call("bte-warp-drive-runtime-test", "disengage", platform.index)
+        or remote.call("bte-warp-drive-runtime-test", "disengage", platform.index) then
+      fail("Stop did not switch the running detector off exactly once")
+    end
   elseif phase == "detector_gui" and elapsed == 40 then
     local detector = charge_buffer(platform)
     if not detector or detector.power_usage ~= 0 then
-      fail("manual research control did not disable detector demand")
+      fail("Stop did not disable detector demand")
     end
-    remote.call("bte-warp-drive-runtime-test", "set_engagement", platform.index, false, true)
+    -- A start condition without a signal is incomplete and never true.
+    configure_conditions({detector_start = {enabled = true, comparator = ">", constant = 0}})
   elseif phase == "detector_gui" and elapsed == 50 then
     local detector = charge_buffer(platform)
     if not detector or detector.power_usage ~= 0 then
-      fail("unsatisfied research circuit condition did not keep detection disabled")
+      fail("an incomplete start condition did not keep detection off")
     end
-    remote.call("bte-warp-drive-runtime-test", "set_engagement", platform.index, true, false)
+    configure_conditions()
+    engage(platform)
   elseif phase == "detector_gui" and elapsed == 60 then
     local detector = charge_buffers(platform)
     if #detector ~= 1 or detector[1].power_usage * 60 ~= 1e9
@@ -748,7 +740,7 @@ script.on_nth_tick(10, function()
     storage.ship_load.input_flow_limit = 0
     storage.power_source.power_production = 60e9 / 60
     storage.power_source.output_flow_limit = 60e9 / 60
-    remote.call("bte-warp-drive-runtime-test", "set_engagement", platform.index, false, true)
+    remote.call("bte-warp-drive-runtime-test", "disengage", platform.index)
     game.forces.player.technologies["bte-practical-warp-drive"].researched = true
     set_phase("practical_transition")
   elseif phase == "practical_transition" and elapsed == 10 then
@@ -773,8 +765,7 @@ script.on_nth_tick(10, function()
     if #animation ~= 1 then
       fail("expected one animation companion")
     end
-    script.raise_script_revive({entity = drive, tags = drive_tags(true, false)})
-    set_reserve_energy(platform, required_charge)
+    script.raise_script_revive({entity = drive, tags = drive_tags()})
     -- Keep unrelated platform accumulators from affecting the controlled generation used by
     -- acceleration assertions. A later test adds an explicit ordinary secondary-input load.
     for _, accumulator in pairs(platform.surface.find_entities_filtered({type = "accumulator"})) do
@@ -796,6 +787,12 @@ script.on_nth_tick(10, function()
     platform.distance = 0.51
     platform.speed = 50 / 60
     platform.paused = false
+    -- Engage starts charging at once; a full reserve then enters warp at the next update.
+    engage(platform)
+    if sound_state(platform).state ~= "charging" then
+      fail("Engage did not start charging immediately")
+    end
+    set_reserve_energy(platform, required_charge)
     set_phase("warp_ramp")
   elseif phase == "warp_ramp" and elapsed == 10 then
     local support = charge_buffer(platform)
@@ -813,9 +810,7 @@ script.on_nth_tick(10, function()
       or #platform.find_asteroid_chunks_filtered({}) ~= 0 then
       fail("warp entry did not remove asteroid entities and chunks")
     end
-    if check_lightning_placement(platform) < 1 then
-      fail("warp entry did not create full procedural Fulgora lightning in open space")
-    end
+    check_lightning_placement(platform)
     local overlays = overlay_names(storage.drive)
     if overlays ~= "bte-warp-drive-activation-glow,bte-warp-drive-activation-interior" then
       fail("warp entry did not start the activation pulse overlays: " .. overlays)
@@ -844,9 +839,7 @@ script.on_nth_tick(10, function()
         fail("warp did not fill the field with background anomalies: "
           .. sound_state(platform).anomalies)
       end
-      if check_lightning_placement(platform) < 1 then
-        fail("sustained warp stopped striking open space")
-      end
+      check_lightning_placement(platform)
       local sound = sound_state(platform)
       if sound.background_index ~= 1
           or sound.warp_next_tick ~= storage.runtime_test.started_at + 310 then
@@ -863,184 +856,47 @@ script.on_nth_tick(10, function()
       local player = game.players[1]
       if player then
         local frame = player.gui.screen.bte_warp_drive_window
-        local panel = find_gui_element(frame, "bte_warp_drive_circuit_panel")
-        local networks = find_gui_element(frame, "bte_warp_drive_circuit_networks")
-        local main = find_gui_element(frame, "bte_warp_drive_content_scroll")
-        local body = find_gui_element(frame, "bte_warp_drive_body")
-        local red_network = find_gui_element(frame, "bte_warp_drive_circuit_red_network")
-        local green_network = find_gui_element(frame, "bte_warp_drive_circuit_green_network")
-        local distance_toggle = find_gui_element(frame, "bte_warp_drive_output_distance_enabled")
-        local automatic_toggle = find_gui_element(frame, "bte_warp_drive_enabled")
-        local circuit_toggle = find_gui_element(frame, "bte_warp_drive_circuit_enabled")
-        local warp_signal = find_gui_element(frame, "bte_warp_drive_output_warp_signal")
-        local charge_signal = find_gui_element(frame, "bte_warp_drive_output_charge_signal")
-        local speed_signal = find_gui_element(frame, "bte_warp_drive_output_speed_signal")
+        local function caption(name)
+          local element = find_gui_element(frame, name)
+          return element and type(element.caption) == "table" and element.caption[1]
+        end
+        local function visible(name)
+          local element = find_gui_element(frame, name)
+          return element and element.visible
+        end
+        local engage_button = find_gui_element(frame, "bte_warp_drive_engage")
+        local disengage_button = find_gui_element(frame, "bte_warp_drive_disengage")
+        local destination = find_gui_element(frame, "bte_warp_drive_requirement_travel")
+        local acceleration_icon = find_gui_element(frame, "bte_warp_drive_requirement_acceleration_icon")
         local density_signal = find_gui_element(frame, "bte_warp_drive_output_tachyon_density_signal")
-        local requirement_control_icon = find_gui_element(frame,
-          "bte_warp_drive_requirement_control_icon")
-        local requirement_control_label = find_gui_element(frame,
-          "bte_warp_drive_requirement_control_label")
-        local requirement_control = find_gui_element(frame, "bte_warp_drive_requirement_control")
-        local requirement_charge = find_gui_element(frame, "bte_warp_drive_requirement_charge")
-        local requirement_speed = find_gui_element(frame, "bte_warp_drive_requirement_speed")
-        local requirement_speed_label = find_gui_element(frame,
-          "bte_warp_drive_requirement_speed_label")
-        local requirement_power = find_gui_element(frame, "bte_warp_drive_requirement_power")
-        local requirement_acceleration = find_gui_element(frame,
-          "bte_warp_drive_requirement_acceleration")
-        local requirement_acceleration_icon = find_gui_element(frame,
-          "bte_warp_drive_requirement_acceleration_icon")
-        local requirement_clearance = find_gui_element(frame, "bte_warp_drive_requirement_clearance")
-        local requirement_destination = find_gui_element(frame, "bte_warp_drive_requirement_travel")
-        local requirement_cooldown_label = find_gui_element(frame,
-          "bte_warp_drive_requirement_cooldown_label")
-        local requirement_cooldown = find_gui_element(frame, "bte_warp_drive_requirement_cooldown")
-        local location = find_gui_element(frame, "bte_warp_drive_location")
-        local location_heading = find_gui_element(frame, "bte_warp_drive_location_heading")
-        local location_label = find_gui_element(frame, "bte_warp_drive_location_label")
-        local research_section = find_gui_element(frame, "bte_warp_drive_research_section")
-        local warp_section = find_gui_element(frame, "bte_warp_drive_warp_section")
-        if not panel or panel.style.width ~= 272 or not main or main.style.width ~= 544
-          or not body or body.style.horizontal_spacing ~= 4 or body.style.width ~= 820
-          or not networks or panel.children[2] ~= networks
-          or not red_network or not green_network
-          or type(red_network.caption) ~= "table"
-          or red_network.caption[1] ~= "bte-warp-drive.circuit-network-disconnected"
-          or type(green_network.caption) ~= "table"
-          or green_network.caption[1] ~= "bte-warp-drive.circuit-network-disconnected"
-          or not automatic_toggle or automatic_toggle.type ~= "checkbox"
-          or type(automatic_toggle.caption) ~= "table"
-          or automatic_toggle.caption[1] ~= "bte-warp-drive.enabled"
-          or not circuit_toggle or circuit_toggle.type ~= "checkbox"
-          or type(circuit_toggle.caption) ~= "table"
-          or circuit_toggle.caption[1] ~= "bte-warp-drive.circuit-enabled"
-          or not distance_toggle or not distance_toggle.state
-          or type(distance_toggle.caption) ~= "table"
-          or distance_toggle.caption[1] ~= "bte-warp-drive.output-distance"
-          or warp_signal.elem_value.name ~= "signal-W"
-          or charge_signal.elem_value.name ~= "signal-C"
-          or speed_signal.elem_value.name ~= "signal-S"
-          or density_signal.elem_value.name ~= "signal-T"
-          or density_signal.parent.visible
-          or not requirement_control_icon
-          or requirement_control_icon.sprite ~= "utility/check_mark_green"
-          or not requirement_control_label
-          or requirement_control_label.style.name ~= "green_label"
-          or type(requirement_control_label.caption) ~= "table"
-          or requirement_control_label.caption[1] ~= "bte-warp-drive.requirement-control-label"
-          or not requirement_control or requirement_control.style.name ~= "label"
-          or type(requirement_control.caption) ~= "table"
-          or requirement_control.caption[1] ~= "bte-warp-drive.requirement-control-automatic"
-          or not requirement_charge or type(requirement_charge.caption) ~= "table"
-          or requirement_charge.caption[1] ~= "bte-warp-drive.charge-value"
-          or not requirement_speed or type(requirement_speed.caption) ~= "table"
-          or requirement_speed.caption[1] ~= "bte-warp-drive.requirement-speed-value"
-          or not requirement_speed_label or type(requirement_speed_label.caption) ~= "table"
-          or requirement_speed_label.caption[1] ~= "bte-warp-drive.requirement-speed-label"
-          or not requirement_power or type(requirement_power.caption) ~= "table"
-          or requirement_power.caption[1] ~= "bte-warp-drive.requirement-power-value"
-          or type(requirement_power.caption[2]) ~= "string"
-          or requirement_power.caption[3] ~= nil
-          or not requirement_acceleration
-          or type(requirement_acceleration.caption) ~= "table"
-          or requirement_acceleration.caption[1] ~= "bte-warp-drive.ramp-accelerating"
-          or not requirement_acceleration_icon
-          or requirement_acceleration_icon.sprite ~= "utility/check_mark_green"
-          or not requirement_clearance or requirement_clearance.style.name ~= "label"
-          or type(requirement_clearance.caption) ~= "table"
-          or requirement_clearance.caption[1]
-            ~= "bte-warp-drive.requirement-clearance-clear"
-          or #requirement_clearance.caption ~= 1
-          or not requirement_destination or type(requirement_destination.caption) ~= "table"
-          or requirement_destination.caption[1] ~= ""
-          or not string.find(requirement_destination.caption[2],
+        if caption("bte_warp_drive_status_text") ~= "bte-warp-drive.active-warp-level"
+          or caption("bte_warp_drive_status_detail") ~= "bte-warp-drive.header-warp-detail"
+          or visible("bte_warp_drive_status_progress")
+          or caption("bte_warp_drive_route") ~= "bte-warp-drive.location-transit-distance"
+          or not engage_button or engage_button.enabled
+          or engage_button.caption[1] ~= "bte-warp-drive.engage"
+          or engage_button.tooltip[1] ~= "bte-warp-drive.engage-blocked-warp"
+          or not disengage_button or not disengage_button.enabled
+          or disengage_button.caption[1] ~= "bte-warp-drive.disengage"
+          or caption("bte_warp_drive_tab_detector") ~= "bte-warp-drive.tab-boost"
+          or visible("bte_warp_drive_warp_locked") or not visible("bte_warp_drive_requirements")
+          or not visible("bte_warp_drive_field") or visible("bte_warp_drive_field_idle")
+          or caption("bte_warp_drive_reserve") ~= "bte-warp-drive.charge-value"
+          or caption("bte_warp_drive_requirement_power") ~= "bte-warp-drive.requirement-power-value"
+          or caption("bte_warp_drive_requirement_acceleration") ~= "bte-warp-drive.ramp-accelerating"
+          or not acceleration_icon or acceleration_icon.sprite ~= "utility/check_mark_green"
+          or caption("bte_warp_drive_requirement_clearance") ~= "bte-warp-drive.requirement-clearance-clear"
+          or caption("bte_warp_drive_requirement_speed") ~= "bte-warp-drive.requirement-speed-value"
+          or not destination or not string.find(destination.caption[2],
             "[space-location=shattered-planet]", 1, true)
-          or not requirement_cooldown_label
-          or type(requirement_cooldown_label.caption) ~= "table"
-          or requirement_cooldown_label.caption[1] ~= "bte-warp-drive.requirement-cooldown-label"
-          or not requirement_cooldown or type(requirement_cooldown.caption) ~= "table"
-          or find_gui_element(frame, "bte_warp_drive_warp_status")
-          or find_gui_element(frame, "bte_warp_drive_warp_charge_progress")
-          or find_gui_element(frame, "bte_warp_drive_warp_boost")
-          or find_gui_element(frame, "bte_warp_drive_effective_speed")
-          or not location or type(location.caption) ~= "table"
-          or location.caption[1] ~= "bte-warp-drive.location-transit-distance"
-          or type(location.caption[4]) ~= "string"
-          or location.style.width ~= 480
-          or not location_heading or type(location_heading.caption) ~= "table"
-          or location_heading.caption[1] ~= "bte-warp-drive.current-position-section"
-          or not location_label or location_label.visible
-          or not research_section
-          or find_gui_element(frame, "bte_warp_drive_activation_charge")
-          or find_gui_element(frame, "bte_warp_drive_charge_bar")
-          or find_gui_element(frame, "bte_warp_drive_platform_speed")
-          or find_gui_element(frame, "bte_warp_drive_warp_level")
-          or find_gui_element(frame, "bte_warp_drive_route_clearance")
-          or find_gui_element(frame, "bte_warp_drive_cooldown")
-          or find_gui_element(frame, "bte_warp_drive_warp_ramp")
-          or find_gui_element(frame, "bte_warp_drive_support_demand")
-          or find_gui_element(frame, "bte_warp_drive_support_delivery")
-          or find_gui_element(frame, "bte_warp_drive_warp_target") then
-          fail("two-column circuit panel did not expose the default output controls")
-        end
-        local ordered_requirements = {
-          requirement_control.parent,
-          requirement_destination.parent,
-          requirement_clearance.parent,
-          requirement_cooldown.parent,
-          requirement_charge.parent,
-          requirement_power.parent,
-          requirement_speed.parent,
-          requirement_acceleration.parent
-        }
-        for index = 2, #ordered_requirements do
-          if not warp_section
-            or child_index(warp_section, ordered_requirements[index - 1])
-              >= child_index(warp_section, ordered_requirements[index]) then
-            fail("warp checklist rows were not grouped in operational order")
-          end
-        end
-        local content = find_gui_element(player.gui.screen.bte_warp_drive_window,
-          "bte_warp_drive_content")
-        if content.bte_warp_drive_detector_section.visible
-          or content.bte_warp_drive_research_section.visible
-          or content.bte_warp_drive_mode_help.visible then
-          fail("completed-research GUI retained experimental sections")
-        end
-        local alert = content.bte_warp_drive_alert
-        local alert_details = alert and alert.bte_warp_drive_alert_details
-        local alert_header = alert_details and alert_details.bte_warp_drive_alert_header
-        local alert_sprite = alert_header and alert_header.bte_warp_drive_alert_sprite
-        local alert_text = alert_header and alert_header.bte_warp_drive_alert_text
-        local alert_boost = alert_details and alert_details.bte_warp_drive_alert_boost
-        local alert_speed = alert_details and alert_details.bte_warp_drive_alert_speed
-        local charge_progress = alert_details
-          and alert_details.bte_warp_drive_alert_charge_progress
-        local snapshot = Warp.snapshot(platform_record)
-        if content.bte_warp_drive_mode_banner
-          or not alert or not alert.visible or alert.style.height ~= 76
-          or not alert_header or alert_header.style.vertical_align ~= "center"
-          or not alert_sprite or alert_sprite.parent ~= alert_header
-          or alert_sprite.sprite ~= "utility/status_working"
-          or alert_header.style.horizontal_spacing ~= 8
-          or alert_text.style.left_margin ~= 0
-          or alert_boost.style.left_margin ~= 26
-          or alert_speed.style.left_margin ~= 26
-          or not alert_text or alert_text.parent ~= alert_header
-          or alert_text.style.name ~= "label"
-          or type(alert_text.caption) ~= "table"
-          or alert_text.caption[1] ~= "bte-warp-drive.active-warp-level"
-          or alert_text.caption[2] ~= string.format("%.1f", platform_record.warp_level)
-          or not alert_boost or not alert_boost.visible
-          or type(alert_boost.caption) ~= "table"
-          or alert_boost.caption[1] ~= "bte-warp-drive.active-warp-boost"
-          or alert_boost.caption[2] ~= string.format("%.2f", snapshot.warp_boost)
-          or not alert_speed or not alert_speed.visible
-          or type(alert_speed.caption) ~= "table"
-          or alert_speed.caption[1] ~= "bte-warp-drive.active-warp-effective-speed"
-          or alert_speed.caption[2] ~= string.format("%.2f", snapshot.effective_speed)
-          or not charge_progress or charge_progress.visible then
-          fail("operational status did not replace the mode banner and bottom warp stats")
+          or caption("bte_warp_drive_activate_enabled") ~= "bte-warp-drive.activate-condition"
+          or caption("bte_warp_drive_deactivate_enabled") ~= "bte-warp-drive.deactivate-condition"
+          or caption("bte_warp_drive_detector_start_enabled") ~= "bte-warp-drive.detector-start-condition"
+          or not visible("bte_warp_drive_boost_controls")
+          or caption("bte_warp_drive_circuit_red_network") ~= "bte-warp-drive.circuit-network-disconnected"
+          or not visible("bte_warp_drive_output_distance_enabled_row")
+          or not density_signal or density_signal.elem_value.name ~= "signal-T" then
+          fail("practical GUI did not show warp in the header and the warp field on the Warp tab")
         end
       end
     end
@@ -1128,7 +984,8 @@ script.on_nth_tick(10, function()
     local detector = circuit_signal("signal-P")
     local density = circuit_signal("signal-T")
     local level = circuit_signal("signal-W")
-    if distance ~= expected_distance or detector ~= nil or density ~= nil or level ~= 2 then
+    if distance ~= expected_distance or detector ~= nil
+        or density ~= math.floor(Research.tachyon_density(platform)) or level ~= 2 then
       fail(string.format(
         "configurable outputs were incorrect: D=%s expected=%s P=%s T=%s W=%s",
         tostring(distance), tostring(expected_distance), tostring(detector), tostring(density),
@@ -1145,15 +1002,17 @@ script.on_nth_tick(10, function()
       local speed_icon = find_gui_element(frame, "bte_warp_drive_requirement_speed_icon")
       local speed_label = find_gui_element(frame, "bte_warp_drive_requirement_speed_label")
       local speed = find_gui_element(frame, "bte_warp_drive_requirement_speed")
-      local alert = find_gui_element(frame, "bte_warp_drive_alert")
-      local alert_text = find_gui_element(frame, "bte_warp_drive_alert_text")
+      local status_icon = find_gui_element(frame, "bte_warp_drive_status_icon")
+      local status_text = find_gui_element(frame, "bte_warp_drive_status_text")
+      local status_detail = find_gui_element(frame, "bte_warp_drive_status_detail")
       if not speed_icon or speed_icon.sprite ~= "utility/status_yellow"
         or not speed_label or speed_label.style.name ~= "orange_label"
         or not speed or type(speed.caption) ~= "table"
         or speed.caption[1] ~= "bte-warp-drive.requirement-speed-warning"
-        or not alert or not alert.visible or alert.style.height ~= 76
-        or not alert_text or type(alert_text.caption) ~= "table"
-        or alert_text.caption[1] ~= "bte-warp-drive.active-warp-level" then
+        or not status_icon or status_icon.sprite ~= "utility/status_yellow"
+        or not status_text or status_text.caption[1] ~= "bte-warp-drive.active-warp-level"
+        or not status_detail
+        or status_detail.caption[1] ~= "bte-warp-drive.requirement-speed-warning" then
         fail("speed-exit grace period was not contained in the orange checklist state")
       end
     end
@@ -1173,17 +1032,11 @@ script.on_nth_tick(10, function()
     local player = game.players[1]
     if player and player.gui.screen.bte_warp_drive_window then
       local frame = player.gui.screen.bte_warp_drive_window
-      local alert_header = find_gui_element(frame, "bte_warp_drive_alert_header")
-      local alert_sprite = find_gui_element(frame, "bte_warp_drive_alert_sprite")
-      local alert_text = find_gui_element(frame, "bte_warp_drive_alert_text")
-      local reason = find_gui_element(frame, "bte_warp_drive_alert_boost")
-      if not alert_header or alert_header.style.vertical_align ~= "center"
-        or not alert_sprite or alert_sprite.parent ~= alert_header
-        or alert_sprite.sprite ~= "utility/status_not_working"
-        or not alert_text or alert_text.parent ~= alert_header
-        or type(alert_text.caption) ~= "table"
-        or alert_text.caption[1] ~= "bte-warp-drive.inactive-status"
-        or not reason or not reason.visible or type(reason.caption) ~= "table"
+      local status_text = find_gui_element(frame, "bte_warp_drive_status_text")
+      local reason = find_gui_element(frame, "bte_warp_drive_status_detail")
+      if not status_text or type(status_text.caption) ~= "table"
+        or status_text.caption[1] ~= "bte-warp-drive.header-lockout"
+        or not reason or type(reason.caption) ~= "table"
         or reason.caption[1] ~= "bte-warp-drive.last-deactivation-reason"
         or type(reason.caption[2]) ~= "table"
         or reason.caption[2][1] ~= "bte-warp-drive.deactivation-reason-insufficient-speed" then
@@ -1201,6 +1054,10 @@ script.on_nth_tick(10, function()
     end
     storage.runtime_test.inactive_power_input = statistics
       and statistics.get_input_count(POWER_INTERFACE_NAME) or 0
+    -- The Tachyon Science Boost may be switched on at any time, but it waits out the lockout.
+    if not remote.call("bte-warp-drive-runtime-test", "start_detector", platform.index) then
+      fail("Start boost was refused")
+    end
     local player = game.players[1]
     if player then
       local frame = player.gui.screen.bte_warp_drive_window
@@ -1226,17 +1083,35 @@ script.on_nth_tick(10, function()
     local statistics = network and network.parent_network.statistics
     local input = statistics and statistics.get_input_count(POWER_INTERFACE_NAME) or 0
     if input - (storage.runtime_test.inactive_power_input or input) > 1 then
-      fail("inactive drive periodically consumed electrical energy")
+      fail("the drive consumed electrical energy during its re-entry lockout")
     end
-    set_reserve_energy(platform, platform.weight * 100)
+    if remote.call("bte-warp-drive-runtime-test", "engage", platform.index) then
+      fail("Engage was accepted during the re-entry lockout")
+    end
     storage.power_source.power_production = 60e9 / 60
     storage.power_source.output_flow_limit = 60e9 / 60
+  elseif phase == "exit_lockout" and elapsed == 600 then
+    -- A warp exit does not re-engage by itself: the next jump needs Engage again, and with a
+    -- full reserve Engage enters warp at once.
+    local detector = charge_buffer(platform)
+    if sound_state(platform).state ~= "idle" or not detector
+        or detector.power_usage * 60 ~= 1e9 then
+      fail("the Tachyon Science Boost did not resume demand once the lockout ended")
+    end
+    if not remote.call("bte-warp-drive-runtime-test", "stop_detector", platform.index) then
+      fail("Stop boost was refused")
+    end
+    set_reserve_energy(platform, platform.weight * 100)
+    engage(platform)
+    if sound_state(platform).state ~= "warp" then
+      fail("Engage with a full reserve did not enter warp immediately")
+    end
   elseif phase == "exit_lockout" and elapsed == 610 then
     local support = charge_buffer(platform)
     local charge = charge_buffer(platform)
     local required_charge = platform.weight * 100
     if not support or circuit_signal("signal-W") ~= 1 or not charge then
-      fail("drive did not re-enter warp after the low-speed exit lockout")
+      fail("Engage did not re-enter warp after the low-speed exit lockout")
     end
     set_reserve_energy(platform, required_charge * 0.1)
     local warp_one_watts = platform.weight * 10
@@ -1319,7 +1194,6 @@ script.on_nth_tick(10, function()
     if #charge ~= 1 then
       fail("charge buffer disappeared during the post-warp lockout")
     end
-    set_reserve_energy(platform, platform.weight * 50)
     local charging_watts = platform.weight * 10 * 0.5
     storage.power_source.power_production = charging_watts / 60
     storage.power_source.output_flow_limit = charging_watts / 60
@@ -1327,6 +1201,8 @@ script.on_nth_tick(10, function()
     platform.speed = 49 / 60
     platform.paused = false
   elseif phase == "post_warp_lockout" and elapsed == 600 then
+    engage(platform)
+    set_reserve_energy(platform, platform.weight * 50)
     local charge = charge_buffers(platform)
     local support = charge_buffer(platform)
     if #charge ~= 1 or reserve_energy(platform) < platform.weight * 50 or not support then
@@ -1372,13 +1248,33 @@ script.on_nth_tick(10, function()
     if sound.state ~= "cooldown" or sound.cooldown_until ~= game.tick + 10 then
       fail("failed-activation lockout ended before its existing cooldown deadline")
     end
+    -- From here the engage condition, not the button, starts the next jump.
+    local input = platform.surface.create_entity({
+      name = "constant-combinator",
+      position = {7, 8},
+      force = game.forces.player
+    })
+    local drive_connector = drive.get_wire_connector(
+      defines.wire_connector_id.circuit_green, true)
+    local input_connector = input
+      and input.get_wire_connector(defines.wire_connector_id.circuit_green, true)
+    if not input or not drive_connector or not input_connector
+      or not drive_connector.connect_to(input_connector, false) then
+      fail("could not create the circuit-condition input")
+    end
+    local section = input.get_or_create_control_behavior().add_section()
+    section.set_slot(1, {value = {type = "virtual", name = "signal-A", quality = "normal"}, min = 1})
+    storage.circuit_input = input
+    storage.circuit_section = section
+    configure_conditions({activate = {enabled = true, first_signal = A_SIGNAL, comparator = ">",
+      constant = 0}})
   elseif phase == "post_warp_lockout" and elapsed == 910 then
     local charge = charge_buffers(platform)
     local support = charge_buffer(platform)
     local expected_watts = platform.weight * 10
     if #charge ~= 1 or reserve_energy(platform) ~= 0 or not support
       or math.abs(support.power_usage * 60 - expected_watts) > expected_watts * 0.001 then
-      fail("charging did not begin after the final non-reserve requirement was met")
+      fail("a true engage condition did not begin charging once the lockout ended")
     end
     local sound = sound_state(platform)
     if sound.charge_step ~= 1
@@ -1390,46 +1286,27 @@ script.on_nth_tick(10, function()
   elseif phase == "post_warp_lockout" and elapsed == 920 then
     local player = game.players[1]
     if player and player.gui.screen.bte_warp_drive_window then
-      local content = find_gui_element(player.gui.screen.bte_warp_drive_window,
-        "bte_warp_drive_content")
-      local power = find_gui_element(content, "bte_warp_drive_requirement_power")
-      local power_icon = find_gui_element(content, "bte_warp_drive_requirement_power_icon")
-      local reserve_icon = find_gui_element(content, "bte_warp_drive_requirement_charge_icon")
-      local alert = find_gui_element(content, "bte_warp_drive_alert")
-      local alert_header = find_gui_element(content, "bte_warp_drive_alert_header")
-      local alert_sprite = find_gui_element(content, "bte_warp_drive_alert_sprite")
-      local alert_text = find_gui_element(content, "bte_warp_drive_alert_text")
-      local alert_boost = find_gui_element(content, "bte_warp_drive_alert_boost")
-      local alert_speed = find_gui_element(content, "bte_warp_drive_alert_speed")
-      local charge_progress = find_gui_element(content, "bte_warp_drive_alert_charge_progress")
-      local charge = charge_buffer(platform)
+      local frame = player.gui.screen.bte_warp_drive_window
+      local power = find_gui_element(frame, "bte_warp_drive_requirement_power")
+      local power_icon = find_gui_element(frame, "bte_warp_drive_requirement_power_icon")
+      local acceleration_row = find_gui_element(frame, "bte_warp_drive_requirement_acceleration_row")
+      local status_icon = find_gui_element(frame, "bte_warp_drive_status_icon")
+      local status_text = find_gui_element(frame, "bte_warp_drive_status_text")
+      local status_detail = find_gui_element(frame, "bte_warp_drive_status_detail")
+      local charge_progress = find_gui_element(frame, "bte_warp_drive_status_progress")
       local required_charge = platform.weight * 100
-      local charge_ratio = charge and reserve_energy(platform) / required_charge or 0
-      if find_gui_element(content, "bte_warp_drive_mode_banner")
-        or not power or type(power.caption) ~= "table"
+      local charge_ratio = reserve_energy(platform) / required_charge
+      if not power or type(power.caption) ~= "table"
         or power.caption[1] ~= "bte-warp-drive.requirement-power-value"
-        or power.style.name ~= "label"
         or not power_icon or power_icon.sprite ~= "utility/status_yellow"
-        or not reserve_icon or reserve_icon.sprite ~= "utility/status_yellow"
-        or find_gui_element(content, "bte_warp_drive_warp_status")
-        or find_gui_element(content, "bte_warp_drive_warp_charge_progress")
-        or not alert or alert.style.height ~= 76
-        or not alert_header or alert_header.style.vertical_align ~= "center"
-        or not alert_sprite or alert_sprite.parent ~= alert_header
-        or alert_sprite.sprite ~= "utility/status_yellow"
-        or not alert_text or alert_text.parent ~= alert_header
-        or type(alert_text.caption) ~= "table"
-        or alert_text.style.name ~= "orange_label"
-        or alert_text.caption[1] ~= "bte-warp-drive.charging-status"
-        or not alert_boost or alert_boost.visible
+        or not acceleration_row or acceleration_row.visible
+        or not status_icon or status_icon.sprite ~= "utility/status_yellow"
+        or not status_text or status_text.caption[1] ~= "bte-warp-drive.charging-status"
+        or not status_detail or status_detail.caption[1] ~= "bte-warp-drive.charging-remaining"
         or not charge_progress or not charge_progress.visible
         or math.abs(charge_progress.value - charge_ratio) > 0.001
         or type(charge_progress.caption) ~= "table"
-        or charge_progress.caption[1] ~= "bte-warp-drive.percent-value"
-        or charge_progress.caption[2] ~= math.floor(charge_ratio * 100)
-        or not alert_speed or not alert_speed.visible
-        or type(alert_speed.caption) ~= "table"
-        or alert_speed.caption[1] ~= "bte-warp-drive.charging-remaining" then
+        or charge_progress.caption[1] ~= "bte-warp-drive.percent-value" then
         fail("GUI did not report charging progress in the top status")
       end
     end
@@ -1454,6 +1331,19 @@ script.on_nth_tick(10, function()
         or sound.warp_next_tick > game.tick + 300 then
       fail("warp activation did not replace charging audio and schedule its background handoff")
     end
+    -- The disengage condition wins over the still-true engage condition.
+    configure_conditions({
+      activate = {enabled = true, first_signal = A_SIGNAL, comparator = ">", constant = 0},
+      deactivate = {enabled = true, first_signal = A_SIGNAL, comparator = "=", constant = 1}
+    })
+  elseif phase == "post_warp_lockout" and elapsed == 940 then
+    local sound = sound_state(platform)
+    if sound.state == "warp" or circuit_signal("signal-W") ~= 0
+        or sound.last_exit_reason ~= "circuit-deactivate" then
+      fail("a true disengage condition did not drop out of warp: state=" .. tostring(sound.state)
+        .. " reason=" .. tostring(sound.last_exit_reason))
+    end
+    configure_conditions()
     game.forces.player.technologies["bte-practical-warp-drive"].researched = false
     set_phase("circuit_and_revocation")
   elseif phase == "circuit_and_revocation" and elapsed == 10 then
@@ -1462,22 +1352,10 @@ script.on_nth_tick(10, function()
     if #support ~= 1 or #charge ~= 1 or reserve_energy(platform) ~= 0 then
       fail("power interface was not reconfigured for experimental research")
     end
-    local input = platform.surface.create_entity({
-      name = "constant-combinator",
-      position = {7, 8},
-      force = game.forces.player
-    })
-    local drive_connector = drive.get_wire_connector(
-      defines.wire_connector_id.circuit_green, true)
-    local input_connector = input
-      and input.get_wire_connector(defines.wire_connector_id.circuit_green, true)
-    if not input or not drive_connector or not input_connector
-      or not drive_connector.connect_to(input_connector, false) then
-      fail("could not create the circuit-condition input")
+    if sound_state(platform).detector_on then
+      fail("the detector was running before its start condition was set")
     end
-    local section = input.get_or_create_control_behavior().add_section()
-    storage.circuit_input = input
-    storage.circuit_section = section
+    storage.circuit_section.clear_slot(1)
     local player = game.players[1]
     if player then
       player.opened = drive
@@ -1496,45 +1374,35 @@ script.on_nth_tick(10, function()
         or tooltip[2][1] ~= "bte-warp-drive.circuit-network-tooltip-heading" then
         fail("empty circuit network reported a signal count")
       end
-      storage.circuit_section.set_slot(1, {
-        value = {type = "virtual", name = "signal-A", quality = "normal"},
-        min = 7
-      })
-      storage.circuit_section.set_slot(2, {
-        value = {type = "virtual", name = "signal-B", quality = "normal"},
-        min = 5
-      })
-      platform.distance = 0.01
-      configure_circuit_condition(player,
-        {type = "virtual", name = "signal-A"}, 1,
-        {type = "virtual", name = "signal-B"}, 0)
+    end
+    storage.circuit_section.set_slot(1, {
+      value = {type = "virtual", name = "signal-A", quality = "normal"},
+      min = 7
+    })
+    storage.circuit_section.set_slot(2, {
+      value = {type = "virtual", name = "signal-B", quality = "normal"},
+      min = 5
+    })
+    platform.distance = 0.01
+    configure_conditions({detector_start = {enabled = true, first_signal = A_SIGNAL,
+      comparator = ">", second_signal = B_SIGNAL}})
+    if player then
+      reopen_gui(player)
     end
   elseif phase == "circuit_and_revocation" and elapsed == 30 then
+    if not sound_state(platform).detector_on then
+      fail("signal-to-signal start condition A > B did not start the detector")
+    end
     local player = game.players[1]
     if player then
       local state = find_gui_element(player.gui.screen.bte_warp_drive_window,
-        "bte_warp_drive_circuit_state")
-      local state_icon = find_gui_element(state, "bte_warp_drive_circuit_state_icon")
-      local state_label = find_gui_element(state, "bte_warp_drive_circuit_state_label")
-      local control = find_gui_element(player.gui.screen.bte_warp_drive_window,
-        "bte_warp_drive_requirement_control").caption
-      local clearance = find_gui_element(player.gui.screen.bte_warp_drive_window,
-        "bte_warp_drive_requirement_clearance").caption
+        "bte_warp_drive_detector_start_state")
       local green_network = find_gui_element(player.gui.screen.bte_warp_drive_window,
         "bte_warp_drive_circuit_green_network")
       local tooltip = green_network and green_network.tooltip
       local signal_text = tooltip and tooltip[#tooltip]
-      if not state or not state.visible
-        or not state_icon or state_icon.sprite ~= "utility/status_working"
-        or not state_label or type(state_label.caption) ~= "table"
-        or state_label.caption[1] ~= "bte-warp-drive.circuit-condition-active"
-        or state_label.style.name ~= "green_label"
-        or type(control) ~= "table"
-        or control[1] ~= "bte-warp-drive.requirement-control-circuit-active"
-        or type(clearance) ~= "table"
-        or clearance[1] ~= "bte-warp-drive.requirement-clearance-blocked"
-        or type(clearance[3]) ~= "table"
-        or not string.find(clearance[3][2], "[planet=nauvis]", 1, true)
+      if not state or state.sprite ~= "utility/status_working"
+        or type(state.tooltip) ~= "table" or state.tooltip[1] ~= "bte-warp-drive.condition-true"
         or type(green_network.caption) ~= "table"
         or green_network.caption[1] ~= "bte-warp-drive.circuit-network-connected-signals"
         or green_network.caption[4] ~= 1 or green_network.caption[5] < 2
@@ -1544,27 +1412,38 @@ script.on_nth_tick(10, function()
         or tooltip[2][5] < 2
         or type(signal_text) ~= "string"
         or not string.find(signal_text, "[virtual-signal=signal-A]", 1, true) then
-        fail("signal-to-signal circuit condition A > B was not satisfied")
+        fail("signal-to-signal circuit condition A > B was not shown as satisfied")
       end
-      platform.distance = 0.51
-      configure_circuit_condition(player,
-        {type = "virtual", name = "signal-A"}, 2, nil, 8)
+    end
+    platform.distance = 0.51
+    -- The still-true start condition loses to the stop condition.
+    configure_conditions({
+      detector_start = {enabled = true, first_signal = A_SIGNAL, comparator = ">",
+        second_signal = B_SIGNAL},
+      detector_stop = {enabled = true, first_signal = A_SIGNAL, comparator = "<", constant = 8}
+    })
+    if player then
+      reopen_gui(player)
     end
     set_phase("relocation")
   elseif phase == "relocation" and elapsed == 10 then
+    if sound_state(platform).detector_on then
+      fail("signal-to-constant stop condition A < 8 did not stop the detector")
+    end
     local player = game.players[1]
     if player then
       local frame = player.gui.screen.bte_warp_drive_window
-      local first = find_gui_element(frame, "bte_warp_drive_circuit_first_signal")
-      local comparator = find_gui_element(frame, "bte_warp_drive_circuit_comparator")
-      local second = find_gui_element(frame, "bte_warp_drive_circuit_second_signal")
-      local threshold = find_gui_element(frame, "bte_warp_drive_circuit_constant")
-      local state = find_gui_element(player.gui.screen.bte_warp_drive_window,
-        "bte_warp_drive_circuit_state")
+      local first = find_gui_element(frame, "bte_warp_drive_detector_stop_first_signal")
+      local comparator = find_gui_element(frame, "bte_warp_drive_detector_stop_comparator")
+      local second = find_gui_element(frame, "bte_warp_drive_detector_stop_second_signal")
+      local threshold = find_gui_element(frame, "bte_warp_drive_detector_stop_constant")
+      local state = find_gui_element(frame, "bte_warp_drive_detector_stop_state")
+      local start = find_gui_element(frame, "bte_warp_drive_engage")
       if first.elem_value.name ~= "signal-A" or comparator.selected_index ~= 2
         or second.elem_value ~= nil or not threshold.visible or threshold.text ~= "8"
-        or not state or not state.visible then
-        fail("signal-to-constant circuit condition A < 8 was not satisfied")
+        or not state or state.sprite ~= "utility/status_working"
+        or start.enabled or start.tooltip[1] ~= "bte-warp-drive.start-detector-blocked-deactivate" then
+        fail("signal-to-constant circuit condition A < 8 was not shown as satisfied")
       end
     end
     drive.destroy()

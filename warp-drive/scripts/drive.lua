@@ -41,6 +41,17 @@ local CIRCUIT_COMPARATOR_INDEX = {
   ["≠"] = 6,
   ["!="] = 6
 }
+-- The comparator that is true exactly when the keyed one is false.
+local INVERSE_COMPARATORS = {
+  [">"] = "≤",
+  ["<"] = "≥",
+  ["="] = "≠",
+  ["≥"] = "<",
+  ["≤"] = ">",
+  ["≠"] = "="
+}
+-- Warp engagement conditions, then Tachyon Science Boost detector conditions.
+local CONDITION_KEYS = {"activate", "deactivate", "detector_start", "detector_stop"}
 local COMPANION_FIELDS = {
   [POWER_NAME] = "power",
   [CIRCUIT_OUTPUT_NAME] = "circuit_output",
@@ -61,30 +72,69 @@ function Drive.get(platform_index)
   return Drive.records()[platform_index]
 end
 
-function Drive.normalize_engagement(record)
-  record.enabled = record.enabled ~= false
-  record.circuit_enabled = record.circuit_enabled == true
-  if record.circuit_enabled then
-    record.enabled = false
+--- A copy of an activate or deactivate circuit condition with every field normalized.
+function Drive.normalize_condition(condition)
+  condition = type(condition) == "table" and condition or {}
+  return {
+    enabled = condition.enabled == true,
+    first_signal = condition.first_signal,
+    comparator = CIRCUIT_COMPARATORS[CIRCUIT_COMPARATOR_INDEX[condition.comparator] or 1],
+    second_signal = condition.second_signal,
+    constant = math.floor(tonumber(condition.constant) or 0)
+  }
+end
+
+-- Earlier versions had one mutually exclusive choice between automatic control and a single
+-- level-triggered circuit condition, which gated detection before Practical research and exited
+-- warp as soon as it turned false after it. Convert that condition into start/activate conditions
+-- plus their exact inverse as stop/deactivate conditions, so migrated circuits keep their
+-- behaviour; automatic warp control has no equivalent and becomes manual.
+local function migrate_legacy_engagement(record)
+  local first = record.circuit_first_signal
+  -- Older versions also silently supplied signal E; that default is cleared, not migrated.
+  if first and first.type == "virtual" and first.name == "signal-E"
+      and not record.empty_engage_signal_migrated then
+    first = nil
   end
+  local circuit = record.circuit_enabled == true
+  local comparator = CIRCUIT_COMPARATORS[CIRCUIT_COMPARATOR_INDEX[record.circuit_comparator] or 1]
+  local condition = {
+    enabled = circuit,
+    first_signal = first,
+    comparator = comparator,
+    second_signal = record.circuit_second_signal,
+    constant = record.circuit_constant
+  }
+  record.activate = Drive.normalize_condition(condition)
+  record.detector_start = Drive.normalize_condition(condition)
+  condition.comparator = INVERSE_COMPARATORS[comparator]
+  record.deactivate = Drive.normalize_condition(condition)
+  record.detector_stop = Drive.normalize_condition(condition)
+  record.detector_on = record.enabled ~= false and not circuit
+  if record.last_exit_reason == "control-disabled" then
+    record.last_exit_reason = "manual"
+  elseif record.last_exit_reason == "circuit-condition" then
+    record.last_exit_reason = "circuit-deactivate"
+  end
+  record.enabled = nil
+  record.circuit_enabled = nil
+  record.circuit_first_signal = nil
+  record.circuit_comparator = nil
+  record.circuit_second_signal = nil
+  record.circuit_constant = nil
+  record.empty_engage_signal_migrated = nil
 end
 
 function Drive.normalize_record(record, entity, platform)
   record.entity = entity
   record.platform_index = platform.index
-  Drive.normalize_engagement(record)
-  -- Older versions silently supplied signal E. Clear that legacy default once; subsequent
-  -- selections, including an explicit E, remain user-owned settings.
-  if not record.empty_engage_signal_migrated then
-    if record.circuit_first_signal and record.circuit_first_signal.type == "virtual"
-        and record.circuit_first_signal.name == "signal-E" then
-      record.circuit_first_signal = nil
-    end
-    record.empty_engage_signal_migrated = true
+  if record.activate == nil then
+    migrate_legacy_engagement(record)
   end
-  record.circuit_comparator = CIRCUIT_COMPARATORS[
-    CIRCUIT_COMPARATOR_INDEX[record.circuit_comparator] or 1]
-  record.circuit_constant = record.circuit_constant or 0
+  for _, key in ipairs(CONDITION_KEYS) do
+    record[key] = Drive.normalize_condition(record[key])
+  end
+  record.detector_on = record.detector_on ~= false
   record.output_warp_enabled = record.output_warp_enabled ~= false
   record.output_warp_signal = record.output_warp_signal or WARP_LEVEL_SIGNAL
   record.output_distance_enabled = record.output_distance_enabled == true
@@ -320,12 +370,10 @@ end
 
 function Drive.serialize_settings(record)
   return {
-    bte_warp_drive_enabled = record.enabled,
-    bte_warp_drive_circuit_enabled = record.circuit_enabled,
-    bte_warp_drive_circuit_first_signal = record.circuit_first_signal,
-    bte_warp_drive_circuit_comparator = record.circuit_comparator,
-    bte_warp_drive_circuit_second_signal = record.circuit_second_signal,
-    bte_warp_drive_circuit_constant = record.circuit_constant,
+    bte_warp_drive_activate = Drive.normalize_condition(record.activate),
+    bte_warp_drive_deactivate = Drive.normalize_condition(record.deactivate),
+    bte_warp_drive_detector_start = Drive.normalize_condition(record.detector_start),
+    bte_warp_drive_detector_stop = Drive.normalize_condition(record.detector_stop),
     bte_warp_drive_output_warp_enabled = record.output_warp_enabled,
     bte_warp_drive_output_warp_signal = record.output_warp_signal,
     bte_warp_drive_output_distance_enabled = record.output_distance_enabled,
@@ -366,17 +414,12 @@ function Drive.tag_blueprint(blueprint, mapping)
 end
 
 function Drive.apply_settings(record, tags)
-  if not record or not tags or tags.bte_warp_drive_circuit_enabled == nil then
+  if not record or not tags or tags.bte_warp_drive_activate == nil then
     return false
   end
-  record.enabled = tags.bte_warp_drive_enabled ~= false
-  record.circuit_enabled = tags.bte_warp_drive_circuit_enabled == true
-  Drive.normalize_engagement(record)
-  record.circuit_first_signal = tags.bte_warp_drive_circuit_first_signal
-  record.circuit_comparator = CIRCUIT_COMPARATORS[
-    CIRCUIT_COMPARATOR_INDEX[tags.bte_warp_drive_circuit_comparator] or 1]
-  record.circuit_second_signal = tags.bte_warp_drive_circuit_second_signal
-  record.circuit_constant = tags.bte_warp_drive_circuit_constant or 0
+  for _, key in ipairs(CONDITION_KEYS) do
+    record[key] = Drive.normalize_condition(tags["bte_warp_drive_" .. key])
+  end
   record.output_warp_enabled = tags.bte_warp_drive_output_warp_enabled ~= false
   record.output_warp_signal = tags.bte_warp_drive_output_warp_signal or WARP_LEVEL_SIGNAL
   record.output_distance_enabled = tags.bte_warp_drive_output_distance_enabled == true
@@ -513,7 +556,7 @@ function Drive.update_output_signals(record, platform, tachyon_density)
       value = record.state == "warp" and math.floor(record.warp_level or 1) or 0
     }
   end
-  if record.output_distance_enabled then
+  if practical and record.output_distance_enabled then
     slots[#slots + 1] = {
       signal = record.output_distance_signal or DISTANCE_SIGNAL,
       value = math.max(0, math.min(2147483647, math.ceil(remaining_distance)))
@@ -535,7 +578,7 @@ function Drive.update_output_signals(record, platform, tachyon_density)
       value = math.floor(speed)
     }
   end
-  if not practical and record.output_tachyon_density_enabled then
+  if record.output_tachyon_density_enabled then
     slots[#slots + 1] = {
       signal = record.output_tachyon_density_signal or TACHYON_DENSITY_SIGNAL,
       value = math.max(0, math.min(2147483647, math.floor(tachyon_density or 0)))

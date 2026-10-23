@@ -29,16 +29,7 @@ local LIGHTNING_BOLT_LENGTH = 25
 -- the smallest prototype reach, in tiles, that covers the platform.
 local SHOCKWAVES = {{delay = 30, tint = "azure"}, {delay = 40, tint = "violet"}}
 local SHOCKWAVE_REACHES = {32, 64, 128, 256}
-local LIGHTNING_DURATION_TICKS = 36
--- One active strike per 16x32 tiles of open space, twice the earlier field density.
-local LIGHTNING_DENSITY_TILES = 16 * 32
--- Whole bolts keep at least LIGHTNING_SHIP_CLEARANCE from every platform tile, except occasional
--- ones near the drive, whose bolt lands within LIGHTNING_DRIVE_RADIUS of it. Strikes are thinner
--- close to the ship: LIGHTNING_NEAR_SHARE of the full rate at the clearance, rising linearly to
--- the full rate at LIGHTNING_FULL_DISTANCE and beyond.
-local LIGHTNING_SHIP_CLEARANCE = 7.5
-local LIGHTNING_FULL_DISTANCE = 20
-local LIGHTNING_NEAR_SHARE = 0.25
+-- Lightning strikes only around the drive: each bolt lands within LIGHTNING_DRIVE_RADIUS of it.
 local LIGHTNING_DRIVE_RADIUS = 10
 -- Chance per 10-tick update of a strike near the drive: about one every 1.7 seconds.
 local LIGHTNING_DRIVE_STRIKE_CHANCE = 0.1
@@ -147,28 +138,27 @@ local function practical_researched(force)
   return technology ~= nil and technology.researched
 end
 
-local function circuit_engagement_satisfied(record)
-  if not record.circuit_enabled then
-    return true
+-- True when a condition is enabled, has a first signal, and holds on the summed red and green
+-- networks. A disabled or incomplete condition is never true.
+local function condition_true(record, condition)
+  if not condition or not condition.enabled or not condition.first_signal then
+    return false
   end
   local entity = record.entity
   if not entity or not entity.valid then
     return false
   end
-  if not record.circuit_first_signal then
-    return false
-  end
   local first = entity.get_signal(
-    record.circuit_first_signal,
+    condition.first_signal,
     defines.wire_connector_id.circuit_red,
     defines.wire_connector_id.circuit_green
   )
-  local second = record.circuit_second_signal and entity.get_signal(
-    record.circuit_second_signal,
+  local second = condition.second_signal and entity.get_signal(
+    condition.second_signal,
     defines.wire_connector_id.circuit_red,
     defines.wire_connector_id.circuit_green
-  ) or math.floor(record.circuit_constant or 0)
-  local comparator = record.circuit_comparator or ">"
+  ) or math.floor(condition.constant or 0)
+  local comparator = condition.comparator or ">"
   if comparator == ">" then
     return first > second
   elseif comparator == "<" then
@@ -183,8 +173,13 @@ local function circuit_engagement_satisfied(record)
   return first ~= second
 end
 
-local function engagement_satisfied(record)
-  return record.enabled or (record.circuit_enabled and circuit_engagement_satisfied(record))
+local function activate_requested(record)
+  return condition_true(record, record.activate)
+end
+
+-- The deactivate condition wins over the activate condition and the Engage button.
+local function deactivate_requested(record)
+  return condition_true(record, record.deactivate)
 end
 
 local function play_global_sound(record, path)
@@ -315,9 +310,10 @@ local function exit_warp(record, reason)
   end
 end
 
-local function can_prepare(record, platform, direction)
-  return engagement_satisfied(record)
-    and practical_researched(platform.force)
+-- Every entry requirement except the reserve itself: charging may begin, or continue, only
+-- while these all hold.
+local function prerequisites_met(record, platform, direction)
+  return practical_researched(platform.force)
     and platform.space_connection ~= nil
     and platform.distance ~= nil
     and not platform.paused
@@ -327,12 +323,8 @@ local function can_prepare(record, platform, direction)
 end
 
 local function immediate_exit_reason(record, platform, direction)
-  if not record.enabled then
-    if not record.circuit_enabled then
-      return "control-disabled"
-    elseif not circuit_engagement_satisfied(record) then
-      return "circuit-condition"
-    end
+  if deactivate_requested(record) then
+    return "circuit-deactivate"
   end
   if not platform.space_connection or platform.distance == nil or platform.paused then
     return "travel-stopped"
@@ -405,13 +397,15 @@ local function initialize_detector_mode(record, power)
   end
 end
 
+-- Samples the adaptive detector demand and requests the next one. Both modes share it: before
+-- Practical research for the research acceleration, afterwards for the Tachyon Science Boost
+-- while the drive is idle.
 local function update_detector(record, power)
   if not power then
     record.detector_power_ratio = 0
     record.detector_power = 0
     return
   end
-  initialize_detector_mode(record, power)
   local requested = record.detector_request_watts or DETECTOR_MAX_POWER_WATTS
   local delivered, _, sampled = sample_power(record, power)
   record.detector_power = math.min(DETECTOR_MAX_POWER_WATTS, delivered)
@@ -425,6 +419,25 @@ local function update_detector(record, power)
   end
   record.detector_request_watts = requested
   request_power(record, power, requested, 0)
+end
+
+local function stop_detector(record, power)
+  if power then
+    disable_power(record, power, true)
+  end
+  record.detector_request_watts = DETECTOR_MAX_POWER_WATTS
+  record.detector_power = 0
+  record.detector_power_ratio = 0
+end
+
+-- The Start and Stop buttons latch the detector; its conditions set and reset that latch while
+-- they hold, the stop condition taking precedence.
+local function update_detector_latch(record)
+  if condition_true(record, record.detector_stop) then
+    record.detector_on = false
+  elseif condition_true(record, record.detector_start) then
+    record.detector_on = true
+  end
 end
 
 -- Asteroid chunks and asteroid entities are separate runtime objects. Clearing both every
@@ -517,83 +530,16 @@ local function strike(surface, position)
   surface.create_entity({name = LIGHTNING_NAME, position = position, force = "neutral"})
 end
 
-local function random_position(bounds)
-  return {
-    x = bounds.left + math.random() * (bounds.right - bounds.left),
-    y = bounds.top + math.random() * (bounds.bottom - bounds.top)
-  }
-end
-
--- Whether to keep a strike at `position`: true when the whole strike, from its cloud down to the
--- bolt's tip, keeps a random margin from every platform tile. Checking only the entity position
--- would let bolts from clouds north of the ship reach down across it.
---
--- The margin is LIGHTNING_SHIP_CLEARANCE with probability LIGHTNING_NEAR_SHARE and otherwise
--- uniform up to LIGHTNING_FULL_DISTANCE. A strike d tiles from the ship is kept when the margin is
--- at most d, which happens with probability rising linearly from LIGHTNING_NEAR_SHARE at the
--- clearance to 1 at LIGHTNING_FULL_DISTANCE: the linear falloff for one tile count, without
--- measuring d.
--- Names of the platform foundation tiles. Matching "not empty-space" instead would also match
--- out-of-map tiles in chunks not generated yet and keep strikes away from their edges. Prototypes
--- cannot change while scripts run, so this is the same on every peer.
-local foundation_tiles
-local function foundation_tile_names()
-  if not foundation_tiles then
-    foundation_tiles = {}
-    for name, tile in pairs(prototypes.tile) do
-      if tile.is_foundation then
-        foundation_tiles[#foundation_tiles + 1] = name
-      end
-    end
-  end
-  return foundation_tiles
-end
-
-local function keep_strike(surface, position)
-  local share = (math.random() - LIGHTNING_NEAR_SHARE) / (1 - LIGHTNING_NEAR_SHARE)
-  local margin = LIGHTNING_SHIP_CLEARANCE
-    + (LIGHTNING_FULL_DISTANCE - LIGHTNING_SHIP_CLEARANCE) * math.max(0, share)
-  return surface.count_tiles_filtered({
-    area = {
-      {position.x - margin, position.y - margin},
-      {position.x + margin, position.y + LIGHTNING_BOLT_LENGTH + margin}
-    },
-    name = foundation_tile_names(),
-    limit = 1
-  }) == 0
-end
-
--- Lightning fills open space around the ship, thinning towards it, and leaves the ship itself
--- clear apart from occasional strikes near the drive. Candidate starts are spread over the whole
--- effect field, derived from the 36-tick lifetime to average one playing strike per
--- LIGHTNING_DENSITY_TILES. Candidates are dropped rather than moved (`keep_strike`), so open
--- space keeps that density beyond LIGHTNING_FULL_DISTANCE without measuring its area. Each check
--- is one rectangle count with a limit of one, not a scan.
--- Platform bounds work in freely panned remote view, whose camera position is not exposed.
+-- Occasional strikes around the drive, independent of the wider effect field. Each is a full
+-- strike whose cloud is drawn at the entity position and whose bolt lands LIGHTNING_BOLT_LENGTH
+-- tiles south, so the cloud goes that far north of the landing point. The square root spreads
+-- landings evenly over the disc instead of crowding its centre.
 local function render_warp_lightning(record, platform)
-  local bounds = record.lightning_bounds
-  if not bounds then
-    update_warp_effect_bounds(record, platform)
-    bounds = record.lightning_bounds
-  end
-  local surface = platform.surface
-  local target_count = (bounds.right - bounds.left) * (bounds.bottom - bounds.top)
-    / LIGHTNING_DENSITY_TILES
-  for _ = 1, random_count(target_count * UPDATE_TICKS / LIGHTNING_DURATION_TICKS) do
-    local position = random_position(bounds)
-    if keep_strike(surface, position) then
-      strike(surface, position)
-    end
-  end
   local entity = record.entity
   if entity and entity.valid and math.random() < LIGHTNING_DRIVE_STRIKE_CHANCE then
-    -- The same full strike, landing anywhere within the radius: its cloud is drawn at the
-    -- entity position and its bolt lands LIGHTNING_BOLT_LENGTH tiles south, so the cloud goes
-    -- that far north of the landing point. The square root spreads landings evenly over the
-    -- disc instead of crowding its centre.
     local angle = math.random() * 2 * math.pi
     local distance = LIGHTNING_DRIVE_RADIUS * math.sqrt(math.random())
-    strike(surface, {
+    strike(platform.surface, {
       x = entity.position.x + distance * math.cos(angle),
       y = entity.position.y + distance * math.sin(angle) - LIGHTNING_BOLT_LENGTH
     })
@@ -685,15 +631,11 @@ local function update_experimental(record)
   if power then
     initialize_detector_mode(record, power)
   end
-  if engagement_satisfied(record) then
+  update_detector_latch(record)
+  if record.detector_on then
     update_detector(record, power)
   else
-    if power then
-      disable_power(record, power, true)
-    end
-    record.detector_request_watts = DETECTOR_MAX_POWER_WATTS
-    record.detector_power = 0
-    record.detector_power_ratio = 0
+    stop_detector(record, power)
   end
   record.state = record.detector_power_ratio > 0.01 and "detecting" or "detector-offline"
 end
@@ -799,7 +741,7 @@ end
 
 local function update_cooldown(record, charge_buffer)
   Drive.destroy_support(record)
-  disable_power(record, charge_buffer, true)
+  stop_detector(record, charge_buffer)
   record.reserve_energy = 0
   record.state = "cooldown"
 end
@@ -818,23 +760,57 @@ local function reset_preparation(record, charge_buffer, reason)
   end
 end
 
-local function update_idle_or_charging(record, platform, direction, charge_buffer)
+-- Not engaged: the reserve stays empty, and the power interface serves the Tachyon Science Boost
+-- detector while it is switched on.
+local function update_idle(record, charge_buffer)
+  reset_charge_sound(record)
+  Drive.destroy_support(record)
+  record.reserve_energy = 0
+  record.support_power = 0
+  record.support_demand_watts = nil
+  update_detector_latch(record)
+  if record.detector_on then
+    update_detector(record, charge_buffer)
+    record.state = record.detector_power_ratio > 0.01 and "detecting" or "idle"
+  else
+    stop_detector(record, charge_buffer)
+    record.state = "idle"
+  end
+end
+
+-- Engaging pauses the detector. Its last sample is discarded, so detector energy delivered before
+-- this update is never credited to the warp reserve.
+local function begin_charging(record)
+  record.state = "charging"
+  record.power_sample_watts = nil
   record.detector_power = 0
   record.detector_power_ratio = 0
-  if not engagement_satisfied(record) then
-    -- Interrupted preparation loses its accumulated reserve; reaching full charge must be one
-    -- continuous final step after every other entry requirement is satisfied.
-    reset_preparation(record, charge_buffer)
+  record.detector_request_watts = DETECTOR_MAX_POWER_WATTS
+end
+
+-- Charging is the engaged state before warp: it begins from the Engage button or a true activate
+-- condition, then continues on its own until warp entry. Interrupted preparation loses its
+-- accumulated reserve; reaching full charge must be one continuous final step after every other
+-- entry requirement is satisfied.
+local function update_idle_or_charging(record, platform, direction, charge_buffer)
+  local deactivate = deactivate_requested(record)
+  if record.state ~= "charging" then
+    if deactivate or not activate_requested(record)
+        or not prerequisites_met(record, platform, direction) then
+      update_idle(record, charge_buffer)
+      return
+    end
+    begin_charging(record)
+  elseif deactivate then
+    reset_preparation(record, charge_buffer, "circuit-deactivate")
     return
-  end
-  local charge = required_charge(platform)
-  if not can_prepare(record, platform, direction) then
-    local reason = record.state == "charging"
-      and platform_speed_km_per_second(platform) < MINIMUM_SPEED
+  elseif not prerequisites_met(record, platform, direction) then
+    local reason = platform_speed_km_per_second(platform) < MINIMUM_SPEED
       and "charging-speed-interrupted" or nil
     reset_preparation(record, charge_buffer, reason)
     return
   end
+  local charge = required_charge(platform)
   -- Charging requests Warp-1 support power. Since reserve capacity is ten seconds of that
   -- mass-scaled demand, adequate generation fills an empty reserve in exactly ten seconds.
   charge_buffer.disabled_by_script = false
@@ -867,10 +843,8 @@ local function update_state(record, platform, direction)
     update_experimental(record)
     return true
   end
-  Drive.destroy_detector(record)
   local charge_buffer = Drive.ensure_power(record)
   if not charge_buffer then
-    record.state = "charging"
     return false
   end
   local charge = required_charge(platform)
@@ -879,6 +853,8 @@ local function update_state(record, platform, direction)
     record.migrated_reserve_energy = nil
     record.power_sample_watts = nil
     record.detector_request_watts = nil
+    record.detector_power = 0
+    record.detector_power_ratio = 0
     record.power_mode = "practical"
   end
   if record.state == "warp" then
@@ -951,8 +927,21 @@ function Warp.snapshot(record)
   local stored_charge = practical and math.min(record.reserve_energy or 0, charge) or 0
   local speed = platform_speed_km_per_second(platform)
   local support_required = support_watts(platform, math.max(1, record.warp_level or 1))
-  local circuit_active = circuit_engagement_satisfied(record)
-  local control_active = engagement_satisfied(record)
+  local activate_active = activate_requested(record)
+  local deactivate_active = deactivate_requested(record)
+  local prerequisites = prerequisites_met(record, platform, record.direction)
+  local detector_start_active = condition_true(record, record.detector_start)
+  local detector_stop_active = condition_true(record, record.detector_stop)
+  local detector_start_blocker = record.detector_on and "running"
+    or (detector_stop_active and "deactivate" or nil)
+  local detector_stop_blocker = not record.detector_on and "stopped"
+    or (detector_start_active and "activate" or nil)
+  local engage_blocker = detector_start_blocker
+  local disengage_blocker = detector_stop_blocker
+  if practical then
+    engage_blocker = Warp.engage_blocker(record, platform)
+    disengage_blocker = record.state ~= "warp" and record.state ~= "charging" and "idle" or nil
+  end
   return {
     practical = practical,
     location = platform.space_location,
@@ -965,9 +954,17 @@ function Warp.snapshot(record)
     closest_endpoint = closest_endpoint,
     endpoint_distance_km = endpoint_distance_km,
     endpoint_blocked = endpoint_distance_km <= ENDPOINT_MARGIN_KM,
-    circuit_active = circuit_active,
-    control_active = control_active,
-    preparation_ready = can_prepare(record, platform, record.direction),
+    activate_active = activate_active,
+    deactivate_active = deactivate_active,
+    detector_start_active = detector_start_active,
+    detector_stop_active = detector_stop_active,
+    detector_start_blocker = detector_start_blocker,
+    detector_stop_blocker = detector_stop_blocker,
+    detector_paused = practical and (record.state == "warp" or record.state == "charging"
+      or record.state == "cooldown"),
+    prerequisites_met = prerequisites,
+    engage_blocker = engage_blocker,
+    disengage_blocker = disengage_blocker,
     required_charge = charge,
     stored_charge = stored_charge,
     charge_ratio = charge > 0 and math.min(1, stored_charge / charge) or 0,
@@ -984,15 +981,93 @@ function Warp.snapshot(record)
   }
 end
 
-function Warp.engagement_changed(record, condition_only)
-  if condition_only then
-    if record.circuit_enabled and not circuit_engagement_satisfied(record) then
-      exit_warp(record, "circuit-condition")
-    end
-  elseif not engagement_satisfied(record) then
-    local reason = record.circuit_enabled and "circuit-condition" or "control-disabled"
-    exit_warp(record, reason)
+--- Why the Engage button cannot start warp now, or nil when it can: already engaged, waiting
+-- for the switch to practical mode, held off by the deactivate condition, locked out, or
+-- missing a specific entry requirement (travel, speed, or endpoint clearance).
+function Warp.engage_blocker(record, platform)
+  if record.state == "warp" then
+    return "warp"
+  elseif record.state == "charging" then
+    return "charging"
+  elseif record.power_mode ~= "practical" then
+    return "locked"
+  elseif deactivate_requested(record) then
+    return "deactivate"
+  elseif game.tick < record.cooldown_until then
+    return "cooldown"
+  elseif not platform.space_connection or not platform.distance or platform.paused then
+    return "travel"
+  elseif platform_speed_km_per_second(platform) < MINIMUM_SPEED then
+    return "speed"
+  elseif not endpoint_clear(platform, record.direction) then
+    return "clearance"
   end
+  return nil
+end
+
+--- The Start buttons: latch the detector on for the next update. Returns whether it changed.
+function Warp.start_detector(record)
+  if record.detector_on or condition_true(record, record.detector_stop) then
+    return false
+  end
+  record.detector_on = true
+  return true
+end
+
+--- The Stop buttons: latch the detector off for the next update. Returns whether it changed.
+function Warp.stop_detector(record)
+  if not record.detector_on or condition_true(record, record.detector_start) then
+    return false
+  end
+  record.detector_on = false
+  return true
+end
+
+--- The large left button. Before Practical research it is Start tachyon detector; after it,
+-- Engage begins charging immediately rather than at the next 10-tick update, so the buildup hum
+-- answers the click. Returns whether the drive engaged.
+function Warp.engage(record)
+  local entity = record.entity
+  local platform = entity and entity.valid and entity.surface.platform
+  if not platform then
+    return false
+  end
+  if not practical_researched(platform.force) then
+    return Warp.start_detector(record)
+  end
+  local charge_buffer = Drive.ensure_power(record)
+  if not charge_buffer or Warp.engage_blocker(record, platform) then
+    return false
+  end
+  begin_charging(record)
+  update_idle_or_charging(record, platform, record.direction, charge_buffer)
+  update_charge_sound(record, platform)
+  return record.state == "charging" or record.state == "warp"
+end
+
+--- The large right button. Before Practical research it is Stop tachyon detector; after it,
+-- Disengage abandons charging with the usual interrupted-activation lockout, or exits warp.
+-- Returns whether anything was disengaged.
+function Warp.disengage(record)
+  local entity = record.entity
+  local platform = entity and entity.valid and entity.surface.platform
+  if not platform then
+    return false
+  end
+  if not practical_researched(platform.force) then
+    return Warp.stop_detector(record)
+  end
+  if record.state == "warp" then
+    exit_warp(record, "manual")
+    return true
+  elseif record.state == "charging" then
+    local charge_buffer = Drive.ensure_power(record)
+    if charge_buffer then
+      reset_preparation(record, charge_buffer, "manual")
+      return true
+    end
+  end
+  return false
 end
 
 function Warp.platform_tiles_changed(event)

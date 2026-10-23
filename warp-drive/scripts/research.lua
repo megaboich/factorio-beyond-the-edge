@@ -7,6 +7,11 @@ local BASE_TACHYONS_PER_SECOND = 2
 local LOCATION_MULTIPLIER_MINIMUM = 10
 local LOCATION_MULTIPLIER_MAXIMUM = 5000
 local DETECTOR_SPEED_REFERENCE = 100
+local MAXIMUM_DENSITY = BASE_TACHYONS_PER_SECOND * LOCATION_MULTIPLIER_MAXIMUM
+-- After Practical research the detector powers the Tachyon Science Boost: an extra share of each
+-- eligible laboratory's ordinary rate, up to this much at maximum density and full power.
+local SCIENCE_BOOST_MAXIMUM = 1
+local DETECTOR_MAXIMUM_POWER_RATIO = 5
 local RESEARCH_UPDATE_TICKS = 60
 local TICKS_PER_SECOND = 60
 local CRAFTING_MACHINE_TYPES = {
@@ -306,6 +311,18 @@ local function detector_signal(record, power_ratio)
   return signal, signal * power_ratio * tachyon_bonus_factor()
 end
 
+local function practical_complete(force)
+  local technology = force.technologies[PRACTICAL_TECH]
+  return technology ~= nil and technology.researched
+end
+
+-- The Tachyon Science Boost share for one drive: tachyon density relative to its maximum times
+-- delivered detector power relative to 1 GW. Speed and Severely impatient mode do not apply.
+local function science_boost(record, platform)
+  local power = math.min(1, (record.detector_power_ratio or 0) / DETECTOR_MAXIMUM_POWER_RATIO)
+  return SCIENCE_BOOST_MAXIMUM * Research.tachyon_density(platform) / MAXIMUM_DENSITY * power
+end
+
 -- research_unit_energy is ticks, despite technology unit time being authored in seconds.
 local function research_seconds(research)
   return research.research_unit_energy / TICKS_PER_SECOND
@@ -313,35 +330,56 @@ end
 
 -- Both GUI estimates and progress updates use this aggregation. Relay signals are summed
 -- before one force-wide lab scan; local signals use only labs on their detector surfaces.
+--
+-- Before Practical research, detector signals accelerate only that research and add up across
+-- drives. Afterwards every research receives the Tachyon Science Boost, and a laboratory takes
+-- only the strongest boost that reaches it, so several drives never exceed the 2x ceiling.
 local function aggregate_bonus_rates(target_force, target_research)
   local buckets = {}
   for _, record in pairs(storage.drives or {}) do
     local entity = record.entity
     local power_ratio = record.detector_power_ratio or 0
-    if entity and entity.valid and power_ratio > 0 and entity.surface.platform
+    local platform = entity and entity.valid and entity.surface.platform
+    if platform and power_ratio > 0
         and (not target_force or entity.force == target_force) then
       local force = entity.force
       local research = target_force and target_research or force.current_research
-      if research and research.name == PRACTICAL_TECH then
-        local _, bonus_multiplier = detector_signal(record, power_ratio)
+      local boost = practical_complete(force)
+      if research and (boost or research.name == PRACTICAL_TECH) then
+        local bonus_multiplier
+        if boost then
+          bonus_multiplier = science_boost(record, platform)
+        else
+          local _, signal = detector_signal(record, power_ratio)
+          bonus_multiplier = signal
+        end
         if bonus_multiplier > 0 then
           local bucket = buckets[force.index]
           if not bucket then
-            bucket = {force = force, research = research, local_work = 0, relay_signal = 0}
+            bucket = {force = force, research = research, boost = boost, local_signals = {},
+              relay_signal = 0}
             buckets[force.index] = bucket
           end
           if Research.branch(entity.surface) == "relay" then
-            bucket.relay_signal = bucket.relay_signal + bonus_multiplier
+            bucket.relay_signal = boost and math.max(bucket.relay_signal, bonus_multiplier)
+              or bucket.relay_signal + bonus_multiplier
           else
-            local _, platform_rate = working_lab_metrics(entity.surface, force)
-            bucket.local_work = bucket.local_work + platform_rate * bonus_multiplier
+            bucket.local_signals[entity.surface] = bonus_multiplier
           end
         end
       end
     end
   end
   for _, bucket in pairs(buckets) do
-    local work = bucket.local_work
+    local work = 0
+    for surface, signal in pairs(bucket.local_signals) do
+      -- A boosted laboratory already covered by a stronger relay boost gains nothing more.
+      local extra = bucket.boost and math.max(0, signal - bucket.relay_signal) or signal
+      if extra > 0 then
+        local _, platform_rate = working_lab_metrics(surface, bucket.force)
+        work = work + platform_rate * extra
+      end
+    end
     if bucket.relay_signal > 0 then
       local _, force_rate = force_lab_metrics(bucket.force)
       work = work + force_rate * bucket.relay_signal
@@ -382,6 +420,7 @@ function Research.snapshot(record)
     force_bonus_rate = bucket and bucket.rate or 0
     total_rate = ordinary_lab_rate / seconds + force_bonus_rate
   end
+  local boost = complete and science_boost(record, platform) or 0
   local map = travel_map(platform)
   local progress_km = travel_depth(platform) or 0
   local deepest_name = map.deepest_name
@@ -396,7 +435,7 @@ function Research.snapshot(record)
     detector_speed = math.max(0, platform_speed_km_per_second(platform)),
     detector_speed_factor = detector_speed_factor(platform),
     density = Research.tachyon_density(platform),
-    maximum_density = BASE_TACHYONS_PER_SECOND * LOCATION_MULTIPLIER_MAXIMUM,
+    maximum_density = MAXIMUM_DENSITY,
     lab_count = lab_count,
     lab_rate = lab_rate,
     average_lab_rate = lab_count > 0 and lab_rate / lab_count / math.max(1, seconds) or 0,
@@ -409,7 +448,10 @@ function Research.snapshot(record)
       and research.research_unit_count * (1 - force.research_progress) or 0,
     progress_km = progress_km,
     progress_ratio = map.farthest > 0 and progress_km / map.farthest or 0,
-    deepest_location = deepest_name and prototypes.space_location[deepest_name] or nil
+    deepest_location = deepest_name and prototypes.space_location[deepest_name] or nil,
+    science_boost = boost,
+    science_boost_rate = boost > 0 and research ~= nil
+      and lab_rate * boost / research_seconds(research) or 0
   }
 end
 
@@ -429,8 +471,8 @@ local function apply_research_progress(bucket)
   force.research_progress = math.min(0.999999999, force.research_progress + progress)
 end
 
--- Practical Warp Drive is the only eligible technology, and each force receives one
--- aggregated progress write per update regardless of its number of local or relay drives.
+-- Each force receives one aggregated progress write per update regardless of its number of local
+-- or relay drives: to Practical Warp Drive before it is researched, to any research afterwards.
 function Research.update()
   for _, bucket in pairs(aggregate_bonus_rates()) do
     apply_research_progress(bucket)

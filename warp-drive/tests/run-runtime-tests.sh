@@ -11,6 +11,7 @@ PLATFORM_MODS="$TEST_ROOT/platform-mods"
 RELAY_MODS="$TEST_ROOT/relay-mods"
 LOCAL_MODS="$TEST_ROOT/local-mods"
 API_MODS="$TEST_ROOT/api-mods"
+BOOST_MODS="$TEST_ROOT/boost-mods"
 
 cleanup() {
   if [[ "${KEEP_TEST_ARTIFACTS:-0}" == "1" ]]; then
@@ -26,7 +27,7 @@ if [[ ! -x "$FACTORIO_BIN" ]]; then
   exit 1
 fi
 
-mkdir "$BUILD_MODS" "$BASIC_MODS" "$PLATFORM_MODS" "$RELAY_MODS" "$LOCAL_MODS" "$API_MODS"
+mkdir "$BUILD_MODS" "$BASIC_MODS" "$PLATFORM_MODS" "$RELAY_MODS" "$LOCAL_MODS" "$API_MODS" "$BOOST_MODS"
 FACTORIO_MODS_DIR="$BUILD_MODS" "$REPO_DIR/make.sh" warp-drive
 
 PACKAGE="$(printf '%s\n' "$BUILD_MODS"/bte-warp-drive_*.zip)"
@@ -123,5 +124,22 @@ run_branch_test "$RELAY_MODS" relay \
 run_branch_test "$LOCAL_MODS" local \
   'WARP_TEST_PASS: local research branch accelerated platform laboratories only' \
   bte-warp-drive-space-science-test
+
+# After Practical research an idle drive's detector boosts any research, up to 2x.
+cp "$PACKAGE" "$BOOST_MODS/"
+cp -R "$ROOT_DIR/tests/mods/bte-warp-drive-boost-test" "$BOOST_MODS/"
+"$FACTORIO_BIN" \
+  --mod-directory "$BOOST_MODS" \
+  --create "$TEST_ROOT/boost-save.zip" \
+  --map-gen-seed 12345
+"$FACTORIO_BIN" \
+  --mod-directory "$BOOST_MODS" \
+  --benchmark "$TEST_ROOT/boost-save.zip" \
+  --benchmark-ticks 860 \
+  --benchmark-runs 1 2>&1 | tee "$TEST_ROOT/boost.log"
+if ! grep -q 'WARP_TEST_PASS: Tachyon Science Boost' "$TEST_ROOT/boost.log"; then
+  printf 'Tachyon Science Boost test did not emit its pass marker\n' >&2
+  exit 1
+fi
 
 printf 'WARP_TEST_PASS: all runtime tests\n'

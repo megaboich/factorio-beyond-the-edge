@@ -9,7 +9,10 @@ local RESEARCH_UPDATE_TICKS = 60
 
 Gui.configure({
   snapshot = Warp.snapshot,
-  engagement_changed = Warp.engagement_changed
+  engage = Warp.engage,
+  disengage = Warp.disengage,
+  start_detector = Warp.start_detector,
+  stop_detector = Warp.stop_detector
 })
 
 if script.active_mods["bte-warp-drive-runtime-test"] then
@@ -24,16 +27,21 @@ if script.active_mods["bte-warp-drive-runtime-test"] then
       end
       return record.reserve_energy or 0
     end,
-    set_engagement = function(platform_index, enabled, circuit_enabled)
+    engage = function(platform_index)
       local record = Drive.get(platform_index)
-      if not record then
-        return nil
-      end
-      record.enabled = enabled
-      record.circuit_enabled = circuit_enabled
-      Drive.normalize_engagement(record)
-      Warp.engagement_changed(record, false)
-      return true
+      return record ~= nil and Warp.engage(record)
+    end,
+    disengage = function(platform_index)
+      local record = Drive.get(platform_index)
+      return record ~= nil and Warp.disengage(record)
+    end,
+    start_detector = function(platform_index)
+      local record = Drive.get(platform_index)
+      return record ~= nil and Warp.start_detector(record)
+    end,
+    stop_detector = function(platform_index)
+      local record = Drive.get(platform_index)
+      return record ~= nil and Warp.stop_detector(record)
     end,
     sound_state = function(platform_index)
       local record = Drive.get(platform_index)
@@ -42,6 +50,7 @@ if script.active_mods["bte-warp-drive-runtime-test"] then
       end
       return {
         state = record.state,
+        detector_on = record.detector_on,
         cooldown_until = record.cooldown_until,
         last_exit_reason = record.last_exit_reason,
         charge_next_tick = record.charge_sound_next_tick,
