@@ -245,7 +245,7 @@ script.on_init(function()
 
   local drive = platform.surface.create_entity({
     name = "bte-warp-drive-controller",
-    position = {0.5, 9.5},
+    position = {0, 10},
     force = force,
     raise_built = true
   })
@@ -254,7 +254,7 @@ script.on_init(function()
   end
   local duplicate = platform.surface.create_entity({
     name = "bte-warp-drive-controller",
-    position = {10.5, 9.5},
+    position = {11, 10},
     force = force,
     raise_built = true
   })
@@ -296,7 +296,7 @@ script.on_init(function()
   settings_platform.surface.set_tiles(settings_tiles)
   local settings_drive = settings_platform.surface.create_entity({
     name = "bte-warp-drive-controller",
-    position = {0.5, 9.5},
+    position = {0, 10},
     force = force,
     raise_built = true
   })
@@ -358,7 +358,7 @@ script.on_init(function()
   local ghosts = blueprint.build_blueprint({
     surface = settings_platform.surface,
     force = force,
-    position = {0.5, -9.5}
+    position = {0, -10}
   })
   local blueprint_ghost
   for _, ghost in pairs(ghosts) do
@@ -447,6 +447,7 @@ script.on_nth_tick(10, function()
       local tabs = find_gui_element(frame, "bte_warp_drive_tabs")
       local status_text = find_gui_element(frame, "bte_warp_drive_status_text")
       local route = find_gui_element(frame, "bte_warp_drive_route")
+      local travel = find_gui_element(frame, "bte_warp_drive_travel")
       local warp_locked = find_gui_element(frame, "bte_warp_drive_warp_locked")
       local requirements = find_gui_element(frame, "bte_warp_drive_requirements")
       local circuit_state = find_gui_element(frame, "bte_warp_drive_detector_start_state")
@@ -466,6 +467,8 @@ script.on_nth_tick(10, function()
         or not status_text or (status_text.caption[1] ~= "bte-warp-drive.header-detecting"
           and status_text.caption[1] ~= "bte-warp-drive.header-detector-no-power")
         or not route or route.caption[1] ~= "bte-warp-drive.location-transit-distance"
+        or not travel or not travel.visible or travel.caption[1] ~= "bte-warp-drive.travel-eta"
+        or travel.caption[2][1] ~= "bte-warp-drive.travel-speed"
         or not warp_locked or not warp_locked.visible
         or not requirements or requirements.visible
         or not circuit_state or circuit_state.sprite ~= "utility/status_inactive"
@@ -784,7 +787,7 @@ script.on_nth_tick(10, function()
     end
     local asteroid = platform.surface.create_entity({
       name = "small-metallic-asteroid",
-      position = {0.5, -30},
+      position = {0, -30},
       velocity = {0, 0}
     })
     if not asteroid then
@@ -793,7 +796,7 @@ script.on_nth_tick(10, function()
     storage.runtime_test.warp_asteroid = asteroid
     platform.create_asteroid_chunks({{
       name = "metallic-asteroid-chunk",
-      position = {0.5, -30},
+      position = {0, -30},
       movement = {0, 0}
     }})
     platform.distance = 0.51
@@ -821,7 +824,7 @@ script.on_nth_tick(10, function()
     -- The activation shockwave, sent 30 ticks after entry, sweeps asteroids away; until it
     -- reaches them they stay.
     if not storage.runtime_test.warp_asteroid.valid
-      or #platform.find_asteroid_chunks_filtered({area = {{-0.5, -31}, {1.5, -29}}}) ~= 1 then
+      or #platform.find_asteroid_chunks_filtered({area = {{-1, -31}, {1, -29}}}) ~= 1 then
       fail("warp entry removed asteroids before the activation shockwave reached them")
     end
     check_lightning_placement(platform)
@@ -842,12 +845,12 @@ script.on_nth_tick(10, function()
     end
     local swept = storage.runtime_test.warp_asteroid
     if swept and not swept.valid then
-      -- Warp entry is at elapsed 10. The rings leave 30 ticks later at the building's 4.5-tile
-      -- edge and grow 2.4 tiles per tick. The asteroid and chunk sit 39.5 tiles ahead of the
-      -- drive, 50.6 tiles along the ring's oval (0.78 deep), so the front reaches them about 19
+      -- Warp entry is at elapsed 10. The rings leave 30 ticks later at the building's 4-tile
+      -- edge and grow 2.4 tiles per tick. The asteroid and chunk sit 40 tiles ahead of the
+      -- drive, 51.3 tiles along the ring's oval (0.78 deep), so the front reaches them about 20
       -- ticks after that, at elapsed 60.
       if elapsed < 50 or elapsed > 70
-          or #platform.find_asteroid_chunks_filtered({area = {{-0.5, -31}, {1.5, -29}}}) ~= 0 then
+          or #platform.find_asteroid_chunks_filtered({area = {{-1, -31}, {1, -29}}}) ~= 0 then
         fail("the activation shockwave did not sweep the asteroid and chunk as it reached them: "
           .. "elapsed " .. elapsed)
       end
@@ -918,6 +921,9 @@ script.on_nth_tick(10, function()
           or caption("bte_warp_drive_status_detail") ~= "bte-warp-drive.header-warp-detail"
           or visible("bte_warp_drive_status_progress")
           or caption("bte_warp_drive_route") ~= "bte-warp-drive.location-transit-distance"
+          or caption("bte_warp_drive_travel") ~= "bte-warp-drive.travel-eta"
+          or find_gui_element(frame, "bte_warp_drive_travel").caption[2][1]
+            ~= "bte-warp-drive.travel-speed-warp"
           or not engage_button or engage_button.enabled
           or engage_button.caption[1] ~= "bte-warp-drive.engage"
           or engage_button.tooltip[1] ~= "bte-warp-drive.engage-blocked-warp"
@@ -962,6 +968,12 @@ script.on_nth_tick(10, function()
       end
     end
     if elapsed == 30 then
+      -- Warp tags the platform's name; renaming it mid-warp keeps the new name under the tag.
+      if not string.match(platform.name,
+          "^Warp runtime test %[color=cyan%]WARP%-%d%.%d%[/color%]$") then
+        fail("warp did not tag the platform name: " .. platform.name)
+      end
+      platform.name = "Renamed in warp"
       local speed = circuit_signal("signal-S")
       local charge = charge_buffer(platform)
       local required_charge = platform.weight * 100
@@ -998,6 +1010,9 @@ script.on_nth_tick(10, function()
       local required_charge = platform.weight * 100
       if math.abs((speed or 0) - 12500) > 1 then
         fail("circuit speed output changed after reaching Warp-5")
+      end
+      if platform.name ~= "Renamed in warp [color=cyan]WARP-5.0[/color]" then
+        fail("the platform name tag did not follow the rename and warp level: " .. platform.name)
       end
       if not charge or math.abs(reserve_energy(platform) - required_charge) > 1 then
         fail("delivered active power did not replenish the warp reserve to full")
@@ -1231,6 +1246,9 @@ script.on_nth_tick(10, function()
     platform.speed = 50 / 60
     set_phase("post_warp_lockout")
   elseif phase == "post_warp_lockout" and elapsed == 10 then
+    if platform.name ~= "Renamed in warp" then
+      fail("warp exit did not remove the platform name tag: " .. platform.name)
+    end
     local support = charge_buffers(platform)
     local charge = charge_buffers(platform)
     if #support ~= 1 or #charge ~= 1 or reserve_energy(platform) ~= 0 then
@@ -1496,13 +1514,13 @@ script.on_nth_tick(10, function()
     drive.destroy()
     local orphan = platform.surface.create_entity({
       name = "bte-warp-drive-animation",
-      position = {-9.5, 9.5},
+      position = {-10, 10},
       force = game.forces.player,
       snap_to_grid = false
     })
     local duplicate_orphan = platform.surface.create_entity({
       name = "bte-warp-drive-animation",
-      position = {-9.5, 9.5},
+      position = {-10, 10},
       force = game.forces.player,
       snap_to_grid = false
     })
@@ -1517,7 +1535,7 @@ script.on_nth_tick(10, function()
     storage.orphan_animations = {orphan, duplicate_orphan}
     storage.drive = platform.surface.create_entity({
       name = "bte-warp-drive-controller",
-      position = {-9.5, 9.5},
+      position = {-10, 10},
       force = game.forces.player,
       raise_built = true
     })
@@ -1535,7 +1553,7 @@ script.on_nth_tick(10, function()
     }
     for _, name in pairs(companion_names) do
       local companions = platform.surface.find_entities_filtered({name = name})
-      if #companions ~= 1 or companions[1].position.x ~= -9.5 or companions[1].position.y ~= 9.5 then
+      if #companions ~= 1 or companions[1].position.x ~= -10 or companions[1].position.y ~= 10 then
         fail(name .. " was not moved with the replacement drive")
       end
     end
@@ -1557,7 +1575,7 @@ script.on_nth_tick(10, function()
     end
     if not platform.surface.can_place_entity({
       name = "bte-warp-drive-controller",
-      position = {0.5, 9.5},
+      position = {0, 10},
       force = game.forces.player
     }) then
       fail("hidden companion blocked rebuilding at the old drive position")

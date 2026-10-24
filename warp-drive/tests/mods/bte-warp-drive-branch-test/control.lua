@@ -136,7 +136,7 @@ local function create_branch_probe(force)
   platform.surface.ignore_surface_conditions = true
   local drive = platform.surface.create_entity({
     name = "bte-warp-drive-controller",
-    position = {0.5, 10.5},
+    position = {0, 10},
     force = force,
     raise_built = true
   })
@@ -194,7 +194,7 @@ script.on_init(function()
 
   local drive = platform.surface.create_entity({
     name = "bte-warp-drive-controller",
-    position = {0.5, 10.5},
+    position = {0, 10},
     force = force,
     raise_built = true
   })

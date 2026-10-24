@@ -24,7 +24,7 @@ local WAVES = {
 -- The ring's radius in tiles at scale 1 (tools/sprites/models/warp-field.js), the building's edge
 -- where it starts, its growth in tiles per tick, and the share of its life spent fading out.
 local RING = 7
-local START = 4.5
+local START = 4
 local SPEED = 2.4
 local FADE = 0.6
 -- The ring is an oval, squashed front to back like the drive's round core; duplicated from

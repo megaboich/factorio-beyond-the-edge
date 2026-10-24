@@ -12,7 +12,7 @@ def check(t):
 
     controller = t.prototype("constant-combinator", "bte-warp-drive-controller")
     if controller is not None:
-        t.check("Warp Drive footprint", t.footprint(controller), (9, 9))
+        t.check("Warp Drive footprint", t.footprint(controller), (8, 8))
         t.check("Warp Drive is platform-only", controller.get("surface_conditions"),
                 [{"property": "pressure", "min": 0, "max": 0}])
         t.check("Warp Drive mines into its item", controller.get("minable", {}).get("result"), "bte-warp-drive")

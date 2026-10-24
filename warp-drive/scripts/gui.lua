@@ -24,7 +24,7 @@ local GUI_OUTPUT_SPEED_SIGNAL = "bte_warp_drive_output_speed_signal"
 local GUI_OUTPUT_TACHYON_DENSITY_ENABLED = "bte_warp_drive_output_tachyon_density_enabled"
 local GUI_OUTPUT_TACHYON_DENSITY_SIGNAL = "bte_warp_drive_output_tachyon_density_signal"
 local GUI_CLOSE = "bte_warp_drive_close"
-local LAYOUT_VERSION = 13
+local LAYOUT_VERSION = 14
 -- Tabs in display order; the selected one is remembered per player in storage.gui_tabs.
 local TABS = {"warp", "detector", "signals"}
 local TAB_INDEX = {warp = 1, detector = 2, signals = 3}
@@ -32,13 +32,13 @@ local LEFT_WIDTH = 520
 local CIRCUIT_PANEL_WIDTH = 272
 local PAGE_GAP = 8
 local PAGE_WIDTH = LEFT_WIDTH + PAGE_GAP + CIRCUIT_PANEL_WIDTH
-local PREVIEW_SIZE = 136
+local PREVIEW_SIZE = 156
 -- The header preview is a live camera rather than an entity-preview, because the drive's core
 -- animation is drawn as script render objects that an entity-preview never shows. The building's
--- sprite is about 11.5 tiles tall and centred 1.16 tiles above the entity, so the camera aims there
+-- sprite is about 10.2 tiles tall and centred 1.02 tiles above the entity, so the camera aims there
 -- and zooms to fit it: 32 px per tile at zoom 1.
-local PREVIEW_OFFSET_Y = -1.16
-local PREVIEW_ZOOM = PREVIEW_SIZE / (32 * 11.5)
+local PREVIEW_OFFSET_Y = -1.02
+local PREVIEW_ZOOM = PREVIEW_SIZE / (32 * 10.2)
 local HEADER_GAP = 12
 local HEADER_MAIN_WIDTH = PAGE_WIDTH - PREVIEW_SIZE - HEADER_GAP
 local CONTROL_BUTTON_GAP = 8
@@ -51,7 +51,7 @@ local STATUS_VALUE_WIDTH = LEFT_WIDTH - 24 - STATUS_LABEL_WIDTH - 12
 local PAGE_HEIGHT_MIN = 240
 local PAGE_HEIGHT_MAX = 440
 -- Display height left for the tab pages after the title, header, tab strip, and screen margin.
-local PAGE_HEIGHT_RESERVED = 360
+local PAGE_HEIGHT_RESERVED = 380
 local DETECTOR_MAX_POWER_WATTS = 1000000000
 local TICKS_PER_SECOND = 60
 local WARP_LEVEL_SIGNAL = {type = "virtual", name = "signal-W"}
@@ -465,7 +465,7 @@ local function draw_gui(player, record)
   preview.style.size = PREVIEW_SIZE
   local main = header.add({type = "flow", name = "bte_warp_drive_header_main", direction = "vertical"})
   main.style.width = HEADER_MAIN_WIDTH
-  main.style.height = PREVIEW_SIZE
+  main.style.minimal_height = PREVIEW_SIZE
   main.style.vertical_spacing = 2
   local status_line = main.add({type = "flow", name = "bte_warp_drive_status_line", direction = "horizontal"})
   status_line.style.vertical_align = "center"
@@ -484,6 +484,7 @@ local function draw_gui(player, record)
   local route = main.add({type = "label", name = "bte_warp_drive_route", caption = ""})
   route.style.single_line = false
   route.style.width = HEADER_MAIN_WIDTH
+  main.add({type = "label", name = "bte_warp_drive_travel", caption = ""})
   local filler = main.add({type = "empty-widget"})
   filler.style.vertically_stretchable = true
   local controls = main.add({type = "flow", name = "bte_warp_drive_controls", direction = "horizontal"})
@@ -590,6 +591,7 @@ end
 local REQUIRED_ELEMENTS = {
   "bte_warp_drive_preview", "bte_warp_drive_status_icon", "bte_warp_drive_status_text",
   "bte_warp_drive_status_detail", "bte_warp_drive_status_progress", "bte_warp_drive_route",
+  "bte_warp_drive_travel",
   GUI_ENGAGE, GUI_DISENGAGE, GUI_TABS, GUI_BOOST_START, GUI_BOOST_STOP,
   "bte_warp_drive_tab_warp", "bte_warp_drive_tab_detector", "bte_warp_drive_tab_signals",
   "bte_warp_drive_warp_locked", "bte_warp_drive_requirements", "bte_warp_drive_field",
@@ -707,8 +709,7 @@ local function header_status(record, snapshot)
     local detail = record.speed_exit_at
       and {"bte-warp-drive.requirement-speed-warning", string.format("%.1f", snapshot.speed),
         string.format("%.1f", math.max(0, record.speed_exit_at - game.tick) / TICKS_PER_SECOND)}
-      or {"bte-warp-drive.header-warp-detail", string.format("%.2f", snapshot.warp_boost),
-        format_km(snapshot.effective_speed)}
+      or {"bte-warp-drive.header-warp-detail", string.format("%.2f", snapshot.warp_boost)}
     return record.speed_exit_at and "warning" or "good",
       {"bte-warp-drive.active-warp-level", string.format("%.1f", record.warp_level or 1)}, detail
   elseif record.state == "charging" then
@@ -737,6 +738,22 @@ local function header_status(record, snapshot)
   return "bad", {"bte-warp-drive.header-blocked-" .. blocker}, last_reason(record)
 end
 
+-- Effective speed, in cyan only while warp boosts it, and the arrival estimate at that speed.
+local function render_travel(travel, record, snapshot)
+  travel.visible = snapshot.route_from ~= nil
+  if not travel.visible then
+    return
+  end
+  local speed = snapshot.effective_speed
+  local shown = {"bte-warp-drive.travel-speed" .. (record.state == "warp" and "-warp" or ""),
+    format_km(speed)}
+  if snapshot.travel_active and speed > 0 then
+    travel.caption = {"bte-warp-drive.travel-eta", shown, format_duration(snapshot.remaining_km / speed)}
+  else
+    travel.caption = {"bte-warp-drive.travel-stopped", shown}
+  end
+end
+
 local function render_header(view, record, snapshot)
   local tone, text, detail, progress, progress_caption = header_status(record, snapshot)
   view.bte_warp_drive_status_icon.sprite = STATUS_ICONS[tone]
@@ -758,6 +775,7 @@ local function render_header(view, record, snapshot)
   else
     route.caption = {"bte-warp-drive.location-unknown"}
   end
+  render_travel(view.bte_warp_drive_travel, record, snapshot)
   local practical = snapshot.practical
   render_button(view[GUI_ENGAGE], practical and "engage" or "start-detector", snapshot.engage_blocker)
   render_button(view[GUI_DISENGAGE], practical and "disengage" or "stop-detector",

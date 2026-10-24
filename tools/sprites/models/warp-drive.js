@@ -1,4 +1,5 @@
-// Warp Drive: a 9x9 platform-only drive core. Units are tiles; x east, y up, z south.
+// Warp Drive: an 8x8 platform-only drive core, the size of the space platform hub. Units are tiles;
+// x east, y up, z south.
 //
 // A tall core column on a round dais: a quartz glass tube between two heavy injector caps, caged by
 // six dark structural ribs. Inside, five segmented magnetic rings float around a needle-thin
@@ -41,25 +42,29 @@ const WARP_TURN = 4;
 // The activation's rings start spinning up at this fraction of it.
 const SPIN_UP_FROM = 0.45;
 
-const BASE = 0.12; // top of the deck plate
-const DAIS = 0.48; // top of the dais
-const CAP_BOTTOM = 1.0; // top of the lower injector cap
-const TUBE_BOTTOM = 1.2;
-const TUBE_TOP = 5.5;
-const TUBE_RADIUS = 1.2;
-const RIB_RADIUS = 1.33;
+const HALF = 3.9; // half the deck's width, the collision box's edge
+const BASE = 0.11; // top of the deck plate
+const DAIS = 0.43; // top of the dais
+const CAP_BOTTOM = 0.89; // top of the lower injector cap
+const TUBE_BOTTOM = 1.07;
+const TUBE_TOP = 4.89;
+const TUBE_RADIUS = 1.07;
+const RIB_RADIUS = 1.18;
 const RIBS = 6;
-const CAP_RADIUS = 1.55;
+const CAP_RADIUS = 1.38;
 const RINGS = 5;
-const RING_Y = 1.78;
-const RING_STEP = 0.78;
-const RING_RADIUS = 0.82;
+const RING_Y = 1.58;
+const RING_STEP = 0.69;
+const RING_RADIUS = 0.73;
 const SEGMENTS = 16;
 const SEGMENT = TAU / SEGMENTS;
-const CORE_BOTTOM = 1.6;
-const CORE_TOP = 5.1;
+const CORE_BOTTOM = 1.42;
+const CORE_TOP = 4.53;
 const CORE_MID = (CORE_BOTTOM + CORE_TOP) / 2;
-const PROJECTOR = 3.15; // corner projector offset on each axis
+const PROJECTOR = 2.8; // corner projector offset on each axis
+// The activation's shockwave fades at the building's 4-tile edge, where the game's rings take over
+// (warp-drive/scripts/shockwaves.lua).
+const SHOCK_REACH = 3.91;
 const DIAGONALS = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
 // The round core (dais, caps, column, rings, cooling ring, and their light) is squashed front to
 // back to this fraction. The renderer keeps ground tiles square so the footprint matches the
@@ -114,8 +119,8 @@ function canvasTexture(width, height, fn, repeat = false) {
 }
 
 export default {
-  tiles: [9, 9],
-  height: 7.8,
+  tiles: [8, 8],
+  height: 7,
   elevation: 50,
   frames: 1,
   loop: LOOP,
@@ -249,14 +254,14 @@ export default {
       part(parent, new THREE.CylinderGeometry(radius, radius, top - bottom, 48, 1, true), energy({ alpha: shellAlpha, ...options }), [0, (bottom + top) / 2, 0]);
 
     // Deck: a chamfered square plate with hazard edging.
-    const h = 4.4;
-    const c = 0.8;
+    const h = HALF;
+    const c = 0.71;
     const outline = new THREE.Shape();
     outline.moveTo(-h + c, -h);
     for (const [x, y] of [[h - c, -h], [h, -h + c], [h, h - c], [h - c, h], [-h + c, h], [-h, h - c], [-h, -h + c]]) outline.lineTo(x, y);
     outline.closePath();
     part(root, new THREE.ExtrudeGeometry(outline, { depth: BASE, bevelEnabled: false }).rotateX(-Math.PI / 2), m.deck);
-    for (const [x, z, w, d] of [[0, h - 0.18, 2 * (h - c) - 0.3, 0.2], [0, -h + 0.18, 2 * (h - c) - 0.3, 0.2], [h - 0.18, 0, 0.2, 2 * (h - c) - 0.3], [-h + 0.18, 0, 0.2, 2 * (h - c) - 0.3]]) {
+    for (const [x, z, w, d] of [[0, h - 0.16, 2 * (h - c) - 0.27, 0.18], [0, -h + 0.16, 2 * (h - c) - 0.27, 0.18], [h - 0.16, 0, 0.18, 2 * (h - c) - 0.27], [-h + 0.16, 0, 0.18, 2 * (h - c) - 0.27]]) {
       part(root, new THREE.BoxGeometry(w, 0.03, d), m.hazard, [x, BASE + 0.015, z]);
     }
 
@@ -266,61 +271,61 @@ export default {
     let roundFrom = root.children.length;
 
     // Dais: two round steps with a hazard band and a grating ring.
-    part(root, new THREE.CylinderGeometry(3.1, 3.15, 0.18, 64), m.cap, [0, BASE + 0.09, 0]);
-    part(root, new THREE.CylinderGeometry(3.16, 3.16, 0.07, 64), m.hazard, [0, BASE + 0.14, 0]);
-    part(root, new THREE.CylinderGeometry(2.6, 2.65, DAIS - BASE - 0.18, 64), m.plate, [0, (BASE + 0.18 + DAIS) / 2, 0]);
-    part(root, new THREE.CylinderGeometry(2.55, 2.55, 0.02, 64), m.grating, [0, DAIS + 0.01, 0]);
+    part(root, new THREE.CylinderGeometry(2.76, 2.8, 0.16, 64), m.cap, [0, BASE + 0.08, 0]);
+    part(root, new THREE.CylinderGeometry(2.81, 2.81, 0.06, 64), m.hazard, [0, BASE + 0.12, 0]);
+    part(root, new THREE.CylinderGeometry(2.31, 2.36, DAIS - BASE - 0.16, 64), m.plate, [0, (BASE + 0.16 + DAIS) / 2, 0]);
+    part(root, new THREE.CylinderGeometry(2.27, 2.27, 0.02, 64), m.grating, [0, DAIS + 0.01, 0]);
 
     // Lower injector cap with buttresses, and a lamp strip facing the camera.
-    part(root, new THREE.CylinderGeometry(CAP_RADIUS + 0.08, CAP_RADIUS + 0.2, CAP_BOTTOM - DAIS, 64), m.cap, [0, (DAIS + CAP_BOTTOM) / 2, 0]);
-    part(root, new THREE.TorusGeometry(CAP_RADIUS + 0.1, 0.06, 8, 64).rotateX(Math.PI / 2), m.trim, [0, CAP_BOTTOM, 0]);
-    part(root, new THREE.CylinderGeometry(TUBE_RADIUS + 0.12, TUBE_RADIUS + 0.22, TUBE_BOTTOM - CAP_BOTTOM, 64), m.dark, [0, (CAP_BOTTOM + TUBE_BOTTOM) / 2, 0]);
+    part(root, new THREE.CylinderGeometry(CAP_RADIUS + 0.07, CAP_RADIUS + 0.18, CAP_BOTTOM - DAIS, 64), m.cap, [0, (DAIS + CAP_BOTTOM) / 2, 0]);
+    part(root, new THREE.TorusGeometry(CAP_RADIUS + 0.09, 0.05, 8, 64).rotateX(Math.PI / 2), m.trim, [0, CAP_BOTTOM, 0]);
+    part(root, new THREE.CylinderGeometry(TUBE_RADIUS + 0.11, TUBE_RADIUS + 0.2, TUBE_BOTTOM - CAP_BOTTOM, 64), m.dark, [0, (CAP_BOTTOM + TUBE_BOTTOM) / 2, 0]);
     for (let i = 0; i < 8; i++) {
       const a = Math.PI / 8 + (i * TAU) / 8;
-      const r = CAP_RADIUS + 0.4;
-      part(root, new THREE.BoxGeometry(0.24, 0.55, 0.62), m.dark, [Math.sin(a) * r, DAIS + 0.27, Math.cos(a) * r]).rotation.y = a;
-      part(root, new THREE.BoxGeometry(0.28, 0.06, 0.66), m.trim, [Math.sin(a) * r, DAIS + 0.57, Math.cos(a) * r]).rotation.y = a;
+      const r = CAP_RADIUS + 0.36;
+      part(root, new THREE.BoxGeometry(0.21, 0.49, 0.55), m.dark, [Math.sin(a) * r, DAIS + 0.24, Math.cos(a) * r]).rotation.y = a;
+      part(root, new THREE.BoxGeometry(0.25, 0.05, 0.59), m.trim, [Math.sin(a) * r, DAIS + 0.51, Math.cos(a) * r]).rotation.y = a;
     }
     for (let k = 0; k < 5; k++) {
       const a = -0.36 + k * 0.18;
-      lamp(root, new THREE.BoxGeometry(0.1, 0.07, 0.04), [0x60e0ff, 0x60e0ff, 0x7dff9a, 0x60e0ff, 0x60e0ff][k],
-        [Math.sin(a) * (CAP_RADIUS + 0.16), DAIS + 0.42, Math.cos(a) * (CAP_RADIUS + 0.16)], { cycles: 4, phase: k * 0.13, duty: 0.7, on: 1.6, off: 0.5 }).rotation.y = a;
+      lamp(root, new THREE.BoxGeometry(0.09, 0.06, 0.04), [0x60e0ff, 0x60e0ff, 0x7dff9a, 0x60e0ff, 0x60e0ff][k],
+        [Math.sin(a) * (CAP_RADIUS + 0.14), DAIS + 0.37, Math.cos(a) * (CAP_RADIUS + 0.14)], { cycles: 4, phase: k * 0.13, duty: 0.7, on: 1.6, off: 0.5 }).rotation.y = a;
     }
 
     // Structural ribs, turned half a step so the camera looks into the core between two of them.
     for (let i = 0; i < RIBS; i++) {
       const a = Math.PI / RIBS + (i * TAU) / RIBS;
       const at = (r, y) => [Math.sin(a) * r, y, Math.cos(a) * r];
-      part(root, new THREE.BoxGeometry(0.15, TUBE_TOP + 0.2 - CAP_BOTTOM, 0.24), m.rib, at(RIB_RADIUS, (CAP_BOTTOM + TUBE_TOP + 0.2) / 2)).rotation.y = a;
-      part(root, new THREE.BoxGeometry(0.21, TUBE_TOP - 0.1 - CAP_BOTTOM - 0.2, 0.05), m.rib, at(RIB_RADIUS + 0.14, (CAP_BOTTOM + 0.2 + TUBE_TOP - 0.1) / 2)).rotation.y = a;
-      for (const y of [CAP_BOTTOM + 0.12, TUBE_TOP + 0.05]) part(root, new THREE.BoxGeometry(0.3, 0.16, 0.4), m.dark, at(RIB_RADIUS + 0.06, y)).rotation.y = a;
+      part(root, new THREE.BoxGeometry(0.13, TUBE_TOP + 0.18 - CAP_BOTTOM, 0.21), m.rib, at(RIB_RADIUS, (CAP_BOTTOM + TUBE_TOP + 0.18) / 2)).rotation.y = a;
+      part(root, new THREE.BoxGeometry(0.19, TUBE_TOP - 0.09 - CAP_BOTTOM - 0.18, 0.04), m.rib, at(RIB_RADIUS + 0.12, (CAP_BOTTOM + 0.18 + TUBE_TOP - 0.09) / 2)).rotation.y = a;
+      for (const y of [CAP_BOTTOM + 0.11, TUBE_TOP + 0.04]) part(root, new THREE.BoxGeometry(0.27, 0.14, 0.36), m.dark, at(RIB_RADIUS + 0.05, y)).rotation.y = a;
     }
 
     // Upper injector cap, crown, and beacon mast.
-    const capTop = TUBE_TOP + 0.62;
-    part(root, new THREE.CylinderGeometry(TUBE_RADIUS + 0.12, TUBE_RADIUS + 0.22, 0.2, 64), m.dark, [0, TUBE_TOP + 0.1, 0]);
-    part(root, new THREE.CylinderGeometry(CAP_RADIUS, CAP_RADIUS + 0.08, capTop - TUBE_TOP - 0.2, 64), m.cap, [0, (TUBE_TOP + 0.2 + capTop) / 2, 0]);
-    part(root, new THREE.TorusGeometry(CAP_RADIUS + 0.06, 0.06, 8, 64).rotateX(Math.PI / 2), m.trim, [0, TUBE_TOP + 0.2, 0]);
-    part(root, new THREE.CylinderGeometry(1.05, CAP_RADIUS, 0.3, 64), m.plate, [0, capTop + 0.15, 0]);
-    part(root, new THREE.CylinderGeometry(0.6, 0.66, 0.42, 32), m.dark, [0, capTop + 0.51, 0]);
-    part(root, new THREE.SphereGeometry(0.6, 32, 12, 0, TAU, 0, Math.PI / 2).scale(1, 0.45, 1), m.trim, [0, capTop + 0.72, 0]);
+    const capTop = TUBE_TOP + 0.55;
+    part(root, new THREE.CylinderGeometry(TUBE_RADIUS + 0.11, TUBE_RADIUS + 0.2, 0.18, 64), m.dark, [0, TUBE_TOP + 0.09, 0]);
+    part(root, new THREE.CylinderGeometry(CAP_RADIUS, CAP_RADIUS + 0.07, capTop - TUBE_TOP - 0.18, 64), m.cap, [0, (TUBE_TOP + 0.18 + capTop) / 2, 0]);
+    part(root, new THREE.TorusGeometry(CAP_RADIUS + 0.05, 0.05, 8, 64).rotateX(Math.PI / 2), m.trim, [0, TUBE_TOP + 0.18, 0]);
+    part(root, new THREE.CylinderGeometry(0.93, CAP_RADIUS, 0.27, 64), m.plate, [0, capTop + 0.13, 0]);
+    part(root, new THREE.CylinderGeometry(0.53, 0.59, 0.37, 32), m.dark, [0, capTop + 0.45, 0]);
+    part(root, new THREE.SphereGeometry(0.53, 32, 12, 0, TAU, 0, Math.PI / 2).scale(1, 0.45, 1), m.trim, [0, capTop + 0.64, 0]);
     for (let i = 0; i < RIBS; i++) {
       const a = Math.PI / RIBS + (i * TAU) / RIBS;
-      part(root, new THREE.BoxGeometry(0.2, capTop - TUBE_TOP - 0.1, 0.22), m.rib, [Math.sin(a) * (CAP_RADIUS + 0.06), (TUBE_TOP + 0.2 + capTop) / 2, Math.cos(a) * (CAP_RADIUS + 0.06)]).rotation.y = a;
+      part(root, new THREE.BoxGeometry(0.18, capTop - TUBE_TOP - 0.09, 0.2), m.rib, [Math.sin(a) * (CAP_RADIUS + 0.05), (TUBE_TOP + 0.18 + capTop) / 2, Math.cos(a) * (CAP_RADIUS + 0.05)]).rotation.y = a;
     }
-    part(root, new THREE.TorusGeometry(1.3, 0.05, 8, 64).rotateX(Math.PI / 2), m.hazard, [0, capTop + 0.09, 0]);
+    part(root, new THREE.TorusGeometry(1.16, 0.04, 8, 64).rotateX(Math.PI / 2), m.hazard, [0, capTop + 0.08, 0]);
     for (let i = 0; i < 4; i++) {
       const a = (i * TAU) / 4;
       const at = (r, y) => [Math.sin(a) * r, y, Math.cos(a) * r];
-      tube(root, [at(0.62, capTop + 0.45), at(0.9, capTop + 0.35), at(1.25, capTop + 0.16), at(1.5, capTop - 0.05)], 0.06, m.frost, 16);
-      part(root, new THREE.BoxGeometry(0.3, 0.12, 0.22), m.dark, at(1.15, capTop + 0.21)).rotation.y = a;
+      tube(root, [at(0.55, capTop + 0.4), at(0.8, capTop + 0.31), at(1.11, capTop + 0.14), at(1.33, capTop - 0.04)], 0.05, m.frost, 16);
+      part(root, new THREE.BoxGeometry(0.27, 0.11, 0.2), m.dark, at(1.02, capTop + 0.19)).rotation.y = a;
       // Heavy flanged ports on the diagonals, where the upper conduits leave the cap.
       const d = a + Math.PI / 4;
-      const port = [Math.sin(d) * (CAP_RADIUS - 0.02), TUBE_TOP + 0.45, Math.cos(d) * (CAP_RADIUS - 0.02)];
-      part(root, new THREE.CylinderGeometry(0.24, 0.26, 0.22, 20), m.trim, port, [Math.PI / 2, d, 0]).rotation.order = "YXZ";
+      const port = [Math.sin(d) * (CAP_RADIUS - 0.02), TUBE_TOP + 0.4, Math.cos(d) * (CAP_RADIUS - 0.02)];
+      part(root, new THREE.CylinderGeometry(0.21, 0.23, 0.2, 20), m.trim, port, [Math.PI / 2, d, 0]).rotation.order = "YXZ";
     }
-    part(root, new THREE.CylinderGeometry(0.05, 0.05, 0.5, 8), m.pipe, [0, capTop + 1.0, 0]);
-    lamp(root, new THREE.SphereGeometry(0.08, 16, 8), 0xff3020, [0, capTop + 1.28, 0], { cycles: 2, duty: 0.2, on: 4 });
+    part(root, new THREE.CylinderGeometry(0.04, 0.04, 0.44, 8), m.pipe, [0, capTop + 0.89, 0]);
+    lamp(root, new THREE.SphereGeometry(0.07, 16, 8), 0xff3020, [0, capTop + 1.14, 0], { cycles: 2, duty: 0.2, on: 4 });
 
     round.push([roundFrom, root.children.length]);
 
@@ -328,16 +333,16 @@ export default {
     for (const [sx, sz] of DIAGONALS) {
       const x = sx * PROJECTOR;
       const z = sz * PROJECTOR;
-      part(root, new THREE.BoxGeometry(1.15, 0.3, 1.15), m.cap, [x, BASE + 0.15, z]);
-      part(root, new THREE.BoxGeometry(1.2, 0.06, 1.2), m.hazard, [x, BASE + 0.27, z]);
-      part(root, new THREE.CylinderGeometry(0.34, 0.42, 1.5, 24), m.plate, [x, BASE + 0.3 + 0.75, z]);
-      for (const y of [0.9, 1.15, 1.4]) part(root, new THREE.TorusGeometry(0.37, 0.05, 8, 24).rotateX(Math.PI / 2), m.pipe, [x, BASE + y, z]);
-      part(root, new THREE.CylinderGeometry(0.5, 0.42, 0.22, 24), m.dark, [x, BASE + 1.91, z]);
-      part(root, new THREE.TorusGeometry(0.46, 0.05, 8, 24).rotateX(Math.PI / 2), m.trim, [x, BASE + 2.02, z]);
-      part(root, new THREE.OctahedronGeometry(0.3, 0).scale(1, 1.45, 1), m.crystal, [x, BASE + 2.4, z]);
-      lamp(root, new THREE.BoxGeometry(0.09, 0.06, 0.03), 0x7dff9a, [x, BASE + 0.15, z + 0.59], { cycles: 1, phase: (sx + sz + 2) * 0.12, duty: 0.8, on: 1.6, off: 0.4 });
-      const glowShell = part(root, new THREE.OctahedronGeometry(0.34, 0).scale(1, 1.45, 1), energy({ opacity: 0.55 }), [x, BASE + 2.4, z]);
-      const glowHalo = halo(root, 0.85, [x, BASE + 2.4, z]);
+      part(root, new THREE.BoxGeometry(1.02, 0.27, 1.02), m.cap, [x, BASE + 0.13, z]);
+      part(root, new THREE.BoxGeometry(1.07, 0.05, 1.07), m.hazard, [x, BASE + 0.24, z]);
+      part(root, new THREE.CylinderGeometry(0.3, 0.37, 1.33, 24), m.plate, [x, BASE + 0.27 + 0.67, z]);
+      for (const y of [0.8, 1.02, 1.24]) part(root, new THREE.TorusGeometry(0.33, 0.04, 8, 24).rotateX(Math.PI / 2), m.pipe, [x, BASE + y, z]);
+      part(root, new THREE.CylinderGeometry(0.44, 0.37, 0.2, 24), m.dark, [x, BASE + 1.7, z]);
+      part(root, new THREE.TorusGeometry(0.41, 0.04, 8, 24).rotateX(Math.PI / 2), m.trim, [x, BASE + 1.8, z]);
+      part(root, new THREE.OctahedronGeometry(0.27, 0).scale(1, 1.45, 1), m.crystal, [x, BASE + 2.13, z]);
+      lamp(root, new THREE.BoxGeometry(0.08, 0.05, 0.03), 0x7dff9a, [x, BASE + 0.13, z + 0.52], { cycles: 1, phase: (sx + sz + 2) * 0.12, duty: 0.8, on: 1.6, off: 0.4 });
+      const glowShell = part(root, new THREE.OctahedronGeometry(0.3, 0).scale(1, 1.45, 1), energy({ opacity: 0.55 }), [x, BASE + 2.13, z]);
+      const glowHalo = halo(root, 0.76, [x, BASE + 2.13, z]);
       state.projectors.push({ shell: glowShell, halo: glowHalo, phase: rand() });
     }
 
@@ -353,16 +358,16 @@ export default {
       // ease from ROUND_DEPTH to full depth along the way.
       const ease = (points) => points.map(([x, y, z], i) => [x, y, z * (ROUND_DEPTH + (1 - ROUND_DEPTH) * (i / (points.length - 1)))]);
       const paths = [
-        ease([at(CAP_RADIUS + 0.02, TUBE_TOP + 0.45), at(2.55, TUBE_TOP + 0.35), at(3.55, TUBE_TOP - 0.7), at(corner - 0.05, BASE + 2.15)]),
-        ease([at(CAP_RADIUS + 0.12, DAIS + 0.4), at(2.5, DAIS + 0.32), at(3.35, DAIS + 0.3), at(corner - 0.45, BASE + 0.6)])
+        ease([at(CAP_RADIUS + 0.02, TUBE_TOP + 0.4), at(2.27, TUBE_TOP + 0.31), at(3.16, TUBE_TOP - 0.62), at(corner - 0.04, BASE + 1.91)]),
+        ease([at(CAP_RADIUS + 0.11, DAIS + 0.36), at(2.22, DAIS + 0.28), at(2.98, DAIS + 0.27), at(corner - 0.4, BASE + 0.53)])
       ];
       for (const [k, points] of paths.entries()) {
-        const radius = k === 0 ? 0.16 : 0.14;
+        const radius = k === 0 ? 0.14 : 0.12;
         tube(root, points, radius, conduitGlass, 40);
-        tube(root, points, 0.04, m.cable, 40);
-        state.conduits.push(tube(root, points, 0.075, conduitEnergy, 40));
+        tube(root, points, 0.035, m.cable, 40);
+        state.conduits.push(tube(root, points, 0.065, conduitEnergy, 40));
         for (const p of [points[0], points[points.length - 1]]) {
-          part(root, new THREE.SphereGeometry(radius + 0.05, 16, 8), m.trim, p);
+          part(root, new THREE.SphereGeometry(radius + 0.04, 16, 8), m.trim, p);
         }
       }
     }
@@ -371,37 +376,37 @@ export default {
     roundFrom = root.children.length;
     // Liquid-helium cooling: a ring main around the dais, four manifold pumps, and feeds into the
     // lower cap.
-    part(root, new THREE.TorusGeometry(3.32, 0.07, 8, 96).rotateX(Math.PI / 2), m.frost, [0, BASE + 0.3, 0]);
+    part(root, new THREE.TorusGeometry(2.95, 0.06, 8, 96).rotateX(Math.PI / 2), m.frost, [0, BASE + 0.27, 0]);
     for (let i = 0; i < 4; i++) {
       const a = (i * TAU) / 4;
       const g = new THREE.Group();
-      g.position.set(Math.sin(a) * 3.7, BASE, Math.cos(a) * 3.7);
+      g.position.set(Math.sin(a) * 3.29, BASE, Math.cos(a) * 3.29);
       g.rotation.y = a;
       root.add(g);
-      part(g, new THREE.BoxGeometry(0.95, 0.42, 0.62), m.dark, [0, 0.21, 0]);
-      part(g, new THREE.BoxGeometry(1.0, 0.05, 0.66), m.trim, [0, 0.44, 0]);
-      part(g, new THREE.CylinderGeometry(0.19, 0.19, 0.62, 20), m.frost, [-0.18, 0.66, 0], [0, 0, Math.PI / 2]);
-      part(g, new THREE.CylinderGeometry(0.21, 0.21, 0.08, 20), m.pipe, [0.15, 0.66, 0], [0, 0, Math.PI / 2]);
-      part(g, new THREE.CylinderGeometry(0.17, 0.17, 0.5, 20), m.frost, [0.3, 0.71, 0]);
-      part(g, new THREE.SphereGeometry(0.17, 20, 8, 0, TAU, 0, Math.PI / 2), m.frost, [0.3, 0.96, 0]);
-      lamp(g, new THREE.BoxGeometry(0.12, 0.06, 0.03), 0x60e0ff, [-0.25, 0.3, 0.32], { cycles: 6, phase: i * 0.21, duty: 0.5, on: 2 });
+      part(g, new THREE.BoxGeometry(0.84, 0.37, 0.55), m.dark, [0, 0.19, 0]);
+      part(g, new THREE.BoxGeometry(0.89, 0.04, 0.59), m.trim, [0, 0.39, 0]);
+      part(g, new THREE.CylinderGeometry(0.17, 0.17, 0.55, 20), m.frost, [-0.16, 0.59, 0], [0, 0, Math.PI / 2]);
+      part(g, new THREE.CylinderGeometry(0.19, 0.19, 0.07, 20), m.pipe, [0.13, 0.59, 0], [0, 0, Math.PI / 2]);
+      part(g, new THREE.CylinderGeometry(0.15, 0.15, 0.44, 20), m.frost, [0.27, 0.63, 0]);
+      part(g, new THREE.SphereGeometry(0.15, 20, 8, 0, TAU, 0, Math.PI / 2), m.frost, [0.27, 0.85, 0]);
+      lamp(g, new THREE.BoxGeometry(0.11, 0.05, 0.03), 0x60e0ff, [-0.22, 0.27, 0.28], { cycles: 6, phase: i * 0.21, duty: 0.5, on: 2 });
       tube(root, [
-        [Math.sin(a) * 3.45, BASE + 0.62, Math.cos(a) * 3.45], [Math.sin(a) * 2.95, BASE + 0.7, Math.cos(a) * 2.95],
-        [Math.sin(a) * 2.25, DAIS + 0.4, Math.cos(a) * 2.25], [Math.sin(a) * (CAP_RADIUS + 0.12), DAIS + 0.45, Math.cos(a) * (CAP_RADIUS + 0.12)]
-      ], 0.07, m.frost, 24);
+        [Math.sin(a) * 3.07, BASE + 0.55, Math.cos(a) * 3.07], [Math.sin(a) * 2.62, BASE + 0.62, Math.cos(a) * 2.62],
+        [Math.sin(a) * 2.0, DAIS + 0.36, Math.cos(a) * 2.0], [Math.sin(a) * (CAP_RADIUS + 0.11), DAIS + 0.4, Math.cos(a) * (CAP_RADIUS + 0.11)]
+      ], 0.06, m.frost, 24);
     }
 
     round.push([roundFrom, root.children.length]);
 
     // Circuit terminal south-west of the dais; its insulator tips carry the circuit wires
     // (red east, green west: warp-drive/prototypes/entities.lua).
-    part(root, new THREE.BoxGeometry(0.5, 0.5, 0.34), m.dark, [-1.55, BASE + 0.25, 3.75]);
-    part(root, new THREE.BoxGeometry(0.54, 0.05, 0.38), m.trim, [-1.55, BASE + 0.52, 3.75]);
-    for (const [x, color] of [[-1.45, 0xc0392b], [-1.65, 0x2e9e4f]]) {
-      part(root, new THREE.CylinderGeometry(0.035, 0.05, 0.3, 10), m.pipe, [x, BASE + 0.7, 3.75]);
-      part(root, new THREE.SphereGeometry(0.05, 12, 8), new THREE.MeshStandardMaterial({ color, roughness: 0.4 }), [x, BASE + 0.86, 3.75]);
+    part(root, new THREE.BoxGeometry(0.44, 0.44, 0.3), m.dark, [-1.38, BASE + 0.22, 3.33]);
+    part(root, new THREE.BoxGeometry(0.48, 0.04, 0.34), m.trim, [-1.38, BASE + 0.46, 3.33]);
+    for (const [x, color] of [[-1.29, 0xc0392b], [-1.47, 0x2e9e4f]]) {
+      part(root, new THREE.CylinderGeometry(0.03, 0.04, 0.27, 10), m.pipe, [x, BASE + 0.62, 3.33]);
+      part(root, new THREE.SphereGeometry(0.04, 12, 8), new THREE.MeshStandardMaterial({ color, roughness: 0.4 }), [x, BASE + 0.76, 3.33]);
     }
-    lamp(root, new THREE.BoxGeometry(0.08, 0.05, 0.03), 0xffb020, [-1.55, BASE + 0.3, 3.93], { cycles: 3, duty: 0.4 });
+    lamp(root, new THREE.BoxGeometry(0.07, 0.04, 0.03), 0xffb020, [-1.38, BASE + 0.27, 3.49], { cycles: 3, duty: 0.4 });
 
     roundFrom = root.children.length;
     // Overlay contents. The quartz tube with glare streaks.
@@ -415,9 +420,9 @@ export default {
 
     // Injector nozzles at both ends of the collision chamber, and the core thread between them.
     const nozzle = interior(m.trim.clone());
-    part(root, new THREE.CylinderGeometry(0.07, 0.34, CORE_BOTTOM - TUBE_BOTTOM, 24), nozzle, [0, (TUBE_BOTTOM + CORE_BOTTOM) / 2, 0]);
-    part(root, new THREE.CylinderGeometry(0.34, 0.07, TUBE_TOP - CORE_TOP, 24), nozzle, [0, (CORE_TOP + TUBE_TOP) / 2, 0]);
-    const thread = part(root, new THREE.CylinderGeometry(0.035, 0.035, CORE_TOP - CORE_BOTTOM, 12), interior(new THREE.MeshStandardMaterial({ color: 0x030405, roughness: 0.15, metalness: 0.2 })), [0, CORE_MID, 0]);
+    part(root, new THREE.CylinderGeometry(0.06, 0.3, CORE_BOTTOM - TUBE_BOTTOM, 24), nozzle, [0, (TUBE_BOTTOM + CORE_BOTTOM) / 2, 0]);
+    part(root, new THREE.CylinderGeometry(0.3, 0.06, TUBE_TOP - CORE_TOP, 24), nozzle, [0, (CORE_TOP + TUBE_TOP) / 2, 0]);
+    const thread = part(root, new THREE.CylinderGeometry(0.03, 0.03, CORE_TOP - CORE_BOTTOM, 12), interior(new THREE.MeshStandardMaterial({ color: 0x030405, roughness: 0.15, metalness: 0.2 })), [0, CORE_MID, 0]);
     state.thread = thread;
 
     // Magnetic rings: SEGMENTS identical coil segments, each with a clamp and a node lamp at its
@@ -426,7 +431,7 @@ export default {
     const clamp = interior(new THREE.MeshStandardMaterial({ color: 0x3a3f46, metalness: 0.7, roughness: 0.5 }));
     const node = interior(new THREE.MeshStandardMaterial({ color: 0x182030, emissive: COLORS.icy, emissiveIntensity: 0.4, roughness: 0.3 }));
     state.node = node;
-    const segment = new THREE.TorusGeometry(RING_RADIUS, 0.09, 10, 8, SEGMENT * 0.86).rotateX(Math.PI / 2).scale(1, 0.85, 1);
+    const segment = new THREE.TorusGeometry(RING_RADIUS, 0.08, 10, 8, SEGMENT * 0.86).rotateX(Math.PI / 2).scale(1, 0.85, 1);
     for (let k = 0; k < RINGS; k++) {
       const ring = new THREE.Group();
       ring.position.y = RING_Y + k * RING_STEP;
@@ -437,9 +442,9 @@ export default {
         ring.add(holder);
         part(holder, segment.clone(), copper);
         const mid = SEGMENT * 0.43;
-        part(holder, new THREE.BoxGeometry(0.08, 0.18, 0.25), clamp, [Math.cos(mid) * RING_RADIUS, 0, -Math.sin(mid) * RING_RADIUS]).rotation.y = mid;
+        part(holder, new THREE.BoxGeometry(0.07, 0.16, 0.22), clamp, [Math.cos(mid) * RING_RADIUS, 0, -Math.sin(mid) * RING_RADIUS]).rotation.y = mid;
         const end = SEGMENT * 0.93;
-        part(holder, new THREE.BoxGeometry(0.05, 0.12, 0.2), node, [Math.cos(end) * RING_RADIUS, 0, -Math.sin(end) * RING_RADIUS]).rotation.y = end;
+        part(holder, new THREE.BoxGeometry(0.04, 0.11, 0.18), node, [Math.cos(end) * RING_RADIUS, 0, -Math.sin(end) * RING_RADIUS]).rotation.y = end;
       }
       // Alternate rings counter-rotate while charging and in warp; offsets spread their snap at
       // activation.
@@ -448,21 +453,22 @@ export default {
 
     // Energy effects, shown per state by setVariant().
     const fx = state.effects;
-    fx.halo = [[0.07, 1.4], [0.15, 0.55], [0.26, 0.22]].map(([r, intensity]) => ({ mesh: shell(root, r, CORE_BOTTOM, CORE_TOP), intensity }));
-    fx.plasma = [[0.11, COLORS.white], [0.2, COLORS.cobalt], [0.34, COLORS.deep], [0.52, COLORS.deep]].map(([r, color]) => ({ mesh: shell(root, r, CORE_BOTTOM - 0.1, CORE_TOP + 0.1, { color }), r }));
-    fx.jets = [[TUBE_BOTTOM + 0.3, 1], [TUBE_TOP - 0.3, -1]].map(([y, dir]) => {
-      const geometry = new THREE.ConeGeometry(0.16, 1, 16, 1, true).translate(0, -0.5, 0);
+    fx.halo = [[0.06, 1.4], [0.13, 0.55], [0.23, 0.22]].map(([r, intensity]) => ({ mesh: shell(root, r, CORE_BOTTOM, CORE_TOP), intensity }));
+    fx.plasma = [[0.1, COLORS.white], [0.18, COLORS.cobalt], [0.3, COLORS.deep], [0.46, COLORS.deep]].map(([r, color]) => ({ mesh: shell(root, r, CORE_BOTTOM - 0.09, CORE_TOP + 0.09, { color }), r }));
+    fx.jets = [[TUBE_BOTTOM + 0.27, 1], [TUBE_TOP - 0.27, -1]].map(([y, dir]) => {
+      const length = 0.89;
+      const geometry = new THREE.ConeGeometry(0.14, length, 16, 1, true).translate(0, -length / 2, 0);
       if (dir > 0) geometry.rotateX(Math.PI);
       return { mesh: part(root, geometry, energy({ color: COLORS.white, opacity: 0.7, side: THREE.DoubleSide }), [0, y, 0]), dir };
     });
-    fx.jetHalos = [CORE_BOTTOM, CORE_TOP].map((y) => halo(root, 0.55, [0, y, 0]));
+    fx.jetHalos = [CORE_BOTTOM, CORE_TOP].map((y) => halo(root, 0.49, [0, y, 0]));
     // The spatial lens: camera-facing rings that shrink towards a vanishing point at the core.
     fx.tunnel = Array.from({ length: 6 }, () => part(root, new THREE.TorusGeometry(1, 0.03, 6, 64), energy({ color: COLORS.violet }), [0, CORE_MID, 0], [-THREE.MathUtils.degToRad(50), 0, 0]));
-    fx.column = shell(root, 0.12, CORE_BOTTOM - 0.05, CORE_TOP + 0.05, { color: COLORS.white });
-    fx.cascade = [[0.26, 1.0], [0.48, 0.6], [0.74, 0.3]].map(([r, intensity], k) => {
+    fx.column = shell(root, 0.11, CORE_BOTTOM - 0.04, CORE_TOP + 0.04, { color: COLORS.white });
+    fx.cascade = [[0.23, 1.0], [0.43, 0.6], [0.66, 0.3]].map(([r, intensity], k) => {
       const map = bands.clone();
       map.repeat.set(1, 2 - (k % 2) * 0.5);
-      return { mesh: shell(root, r, CORE_BOTTOM - 0.1, CORE_TOP + 0.1, { color: 0xffffff, map }), map, intensity };
+      return { mesh: shell(root, r, CORE_BOTTOM - 0.09, CORE_TOP + 0.09, { color: 0xffffff, map }), map, intensity };
     });
     // Filaments are posed per frame by replacing their geometry; the meshes exist from the start so
     // render.js sees them when it swaps materials for each layer.
@@ -472,10 +478,10 @@ export default {
       bolt.renderOrder = 7;
       return bolt;
     });
-    fx.flash = halo(root, 2.2, [0, CORE_MID, 0]);
+    fx.flash = halo(root, 1.96, [0, CORE_MID, 0]);
     fx.shock = part(root, new THREE.CircleGeometry(1, 64), energy({ color: COLORS.white, alpha: wave, side: THREE.DoubleSide }), [0, CORE_MID, 0], [-Math.PI / 2, 0, 0]);
-    pool(4.3, BASE + 0.01);
-    pool(2.6, DAIS + 0.025);
+    pool(3.82, BASE + 0.01);
+    pool(2.31, DAIS + 0.025);
     pool(CAP_RADIUS, CAP_BOTTOM + 0.01);
     round.push([roundFrom, root.children.length]);
 
@@ -560,12 +566,12 @@ export default {
         const angle = r() * TAU;
         for (let j = 0; j <= 12; j++) {
           const f = j / 12;
-          const reach = 0.08 + 0.22 * Math.sin(f * Math.PI);
+          const reach = 0.07 + 0.2 * Math.sin(f * Math.PI);
           const a = angle + (r() - 0.5) * 1.6;
           points.push([Math.sin(a) * reach * r(), mix(CORE_BOTTOM, CORE_TOP, f), Math.cos(a) * reach * r()]);
         }
         bolt.geometry.dispose();
-        bolt.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(...p))), 48, 0.018, 6);
+        bolt.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(...p))), 48, 0.016, 6);
         bolt.visible = true;
       }
       fx.lightningMaterial.emissiveIntensity = level;
@@ -592,12 +598,12 @@ export default {
       // Infinite depth: each ring halves in size per loop and the next takes its place.
       fx.tunnel.forEach((mesh, k) => {
         const depth = k + t;
-        const size = 1.0 * Math.pow(0.55, depth);
+        const size = 0.89 * Math.pow(0.55, depth);
         mesh.scale.set(size, size * 1.45, size);
         set(mesh, palette.tunnel, 0.9 * smoothstep(0, 0.6, depth) * (1 - smoothstep(4, 5.5, depth)));
       });
       nodeColor = palette.accent;
-      nodeLevel = (ring) => 1.1 + 0.6 * Math.max(0, Math.sin(TAU * (2 * t + ring.y * 0.35)));
+      nodeLevel = (ring) => 1.1 + 0.6 * Math.max(0, Math.sin(TAU * (2 * t + ring.y * 0.39)));
       conduit = { color: palette.accent, level: 0.35, cycles: 1 };
       projector = { color: palette.accent, level: 0.45 + 0.15 * beat };
       poolLevel = { color: palette.accent, level: 0.45 + 0.15 * beat };
@@ -616,7 +622,7 @@ export default {
       set(fx.flash, 0xffffff, 1.4 * flash, 0.9);
       set(fx.column, COLORS.white, 3 * flash + 1.6 * smoothstep(0.6, 1, p));
       const spread = smoothstep(0.35, 0.8, p);
-      fx.shock.scale.setScalar(mix(1.2, 4.4, spread));
+      fx.shock.scale.setScalar(mix(1.07, SHOCK_REACH, spread));
       set(fx.shock, COLORS.azure, p > 0.35 ? 2.2 * (1 - spread) : 0, 1);
       cascade(smoothstep(0.55, 0.95, p));
       if (p > 0.6) lightning(2, 2 * smoothstep(0.6, 0.95, p), 900 + Math.round(p * ACTIVATION_FRAMES));
@@ -636,7 +642,7 @@ export default {
       set(fx.column, COLORS.white, 1.6 + 0.3 * Math.sin(TAU * 4 * t));
       lightning(3, 2.2, 500 + Math.round(t * LOOP));
       nodeColor = COLORS.violet;
-      nodeLevel = (ring) => 1.6 + 1.2 * Math.pow(0.5 + 0.5 * Math.cos(TAU * (2 * t + ring.y / 1.4)), 3);
+      nodeLevel = (ring) => 1.6 + 1.2 * Math.pow(0.5 + 0.5 * Math.cos(TAU * (2 * t + ring.y / 1.24)), 3);
       conduit = { color: COLORS.azure, level: 1.5, cycles: 2 };
       projector = { color: COLORS.azure, level: 1.3 };
       poolLevel = { color: COLORS.violet, level: 0.75 };

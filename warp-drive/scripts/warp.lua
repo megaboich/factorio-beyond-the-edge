@@ -894,6 +894,7 @@ function Warp.update(record)
     update_charge_sound(record, platform)
     update_warp_background_sound(record)
   end
+  Drive.set_name_tag(platform, record.state == "warp" and (record.warp_level or 1) or nil)
   Visuals.update(record, visual_level(record, platform))
   Anomalies.update(record, platform.surface, record.lightning_bounds, record.state == "warp")
   return true

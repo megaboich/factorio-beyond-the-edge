@@ -307,8 +307,7 @@ local function create_companion(record, field, name, direction)
   if not entity or not entity.valid then
     return nil
   end
-  -- Zero-size companions would snap to tile corners, while the odd-sized controller sits on a tile
-  -- centre (or, in saves from the 6x6 drive, on a corner); keep them exactly on the controller.
+  -- Keep companions exactly on the controller rather than letting the engine snap them to the grid.
   record[field] = entity.surface.create_entity({
     name = name,
     position = entity.position,
@@ -475,10 +474,39 @@ function Drive.register_from_event(event)
   return Drive.register(event.entity, event.tags)
 end
 
+-- While warp holds, the platform's name ends with a cyan WARP-<level> tag: mods cannot add lines
+-- to the platform status panel or the space map's platform tooltip, but both show the name. The tag
+-- goes last so platform lists still sort by the player's name, and each update rebuilds the name
+-- from whatever precedes the tag, so renaming the platform during warp keeps the new name.
+local NAME_TAG_PATTERN = " %[color=cyan%]WARP%-[%d%.]+%[/color%]$"
+
+--- Tags `platform`'s name with warp `level`, or removes the tag when `level` is nil.
+function Drive.set_name_tag(platform, level)
+  local base = (string.gsub(platform.name, NAME_TAG_PATTERN, ""))
+  local name = level and base .. string.format(" [color=cyan]WARP-%.1f[/color]", level) or base
+  if platform.name ~= name then
+    platform.name = name
+  end
+end
+
+local function find_platform(platform_index)
+  for _, force in pairs(game.forces) do
+    for _, platform in pairs(force.platforms) do
+      if platform.valid and platform.index == platform_index then
+        return platform
+      end
+    end
+  end
+end
+
 function Drive.remove(platform_index, record)
   local drives = Drive.records()
   local current = drives[platform_index]
   if current and (not record or current == record) then
+    local platform = find_platform(platform_index)
+    if platform then
+      Drive.set_name_tag(platform, nil)
+    end
     Drive.destroy_companions(current)
     Anomalies.destroy(current)
     Shockwaves.destroy(current)
@@ -506,7 +534,10 @@ function Drive.rebuild()
   for _, force in pairs(game.forces) do
     for _, platform in pairs(force.platforms) do
       local entities = platform.surface.find_entities_filtered({name = DRIVE_NAME})
-      if #entities > 0 then
+      if #entities == 0 then
+        -- A tag left by a drive that is gone; drives still in warp re-tag on their next update.
+        Drive.set_name_tag(platform, nil)
+      else
         local record = Drive.normalize_record(old_drives[platform.index] or {}, entities[1], platform)
         rebuilt[platform.index] = record
         -- Overlay animations may have changed with the mod version; redraw them on the next update.

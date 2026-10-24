@@ -89,7 +89,7 @@ local function build_platform(force, index)
   platform.surface.set_tiles(platform_tiles)
   local drive = platform.surface.create_entity({
     name = "bte-warp-drive-controller",
-    position = {0.5, 10.5},
+    position = {0, 10},
     force = force,
     raise_built = true
   })

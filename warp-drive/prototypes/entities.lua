@@ -46,8 +46,8 @@ end
 -- The insulator tips of the circuit terminal south-west of the dais, red east of green.
 local function drive_wire_connection_points()
   local point = {
-    wire = {red = {-1.45, 2.93}, green = {-1.65, 2.93}},
-    shadow = {red = {-0.47, 4.0}, green = {-0.67, 4.0}}
+    wire = {red = {-1.29, 2.6}, green = {-1.47, 2.6}},
+    shadow = {red = {-0.42, 3.56}, green = {-0.6, 3.56}}
   }
   local points = {}
   for index = 1, 4 do
@@ -99,9 +99,10 @@ local drive = {
   max_health = 3000,
   corpse = "nuclear-reactor-remnants",
   dying_explosion = "nuclear-reactor-explosion",
-  collision_box = {{-4.4, -4.4}, {4.4, 4.4}},
-  selection_box = {{-4.5, -4.5}, {4.5, 4.5}},
-  drawing_box_vertical_extension = 2.6,
+  -- The space platform hub's footprint.
+  collision_box = {{-3.9, -3.9}, {3.9, 3.9}},
+  selection_box = {{-4, -4}, {4, 4}},
+  drawing_box_vertical_extension = 2.3,
   surface_conditions = {{property = "pressure", min = 0, max = 0}},
   item_slot_count = 1,
   sprites = hull_directional_sprites(),
