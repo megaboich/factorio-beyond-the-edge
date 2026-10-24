@@ -2,9 +2,9 @@
 // Not a building: every layer is additive light in neutral white, which the game tints per use,
 // and nothing is drawn in the main or shadow layers. Units are tiles on the deck plane.
 //
-// - shockwave: one frame, a ring of light with a soft wake inside it. Trivial smoke grows it from
-//   the drive (start_scale to end_scale), carrying the building's activation shockwave across the
-//   whole platform.
+// - shockwave: one frame, a ring of light with a soft wake inside it. scripts/shockwaves.lua grows
+//   it from the drive, carrying the building's activation shockwave across the whole platform and
+//   sweeping the asteroids away.
 // - nebula: the life of one subspace cloud in NEBULA_FRAMES frames: it billows out around a bright
 //   core, veined with flickering filaments, then thins away. Warp lightning uses it as its cloud.
 // - anomaly: ANOMALY_SHAPES unrelated frames, each a large, soft, irregular cloud with faint wisps.

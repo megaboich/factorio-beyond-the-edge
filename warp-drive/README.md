@@ -123,12 +123,21 @@ Once Practical Warp Drive is researched, the detector speeds up any research, fa
 B_{science} = \frac{D}{10000} \cdot \mathrm{clamp}\left(\frac{P_{delivered}}{1\ \mathrm{GW}}, 0, 1\right)
 ```
 
-Each eligible laboratory adds $B_{science}$ times its ordinary rate as bonus research, so the boost reaches its `2x` maximum only at the Shattered Planet's `10,000 particles/s` with a full `1 GW`. Halfway through the final route at `4,828 particles/s`, `1 GW` gives about `1.48x`, and `200 MW` there gives about `1.10x`. Platform speed and Severely impatient mode do not apply.
+Every laboratory your force owns, on any planet or platform, adds $B_{science}$ times its ordinary rate as bonus research. One drive therefore reaches its `+100%` maximum only at the Shattered Planet's `10,000 particles/s` with a full `1 GW`. Halfway through the final route at `4,828 particles/s`, `1 GW` gives about `+48%`, and `200 MW` there gives about `+10%`. Platform speed and Severely impatient mode do not apply.
+
+Boosts from several drives add up:
+
+```math
+\text{research} = \left(1 + \sum_{drives} B_{science}\right) \cdot \text{ordinary research}
+```
+
+Three drives at full strength therefore give `4x` research everywhere.
 
 - **Start boost** and **Stop boost** in the drive window switch it on and off; it stays in that state until switched again. It is the same detector switch as before Practical research, so a detector left running keeps boosting, and new drives start with it on. Optional start and stop circuit conditions switch it the same way while they are true, the stop condition winning.
 - It runs only while warp is not engaged: it pauses during charging, warp, and the re-entry lockout, then resumes on its own.
 - It uses the detector's adaptive demand, up to `1 GW` of spare platform power.
-- The same [laboratories](#where-research-happens) receive it as before Practical research. With several drives, each laboratory takes only the strongest boost reaching it, so the total never exceeds `2x`.
+- Unlike the research acceleration before Practical research, the boost does not depend on [where research happens](#where-research-happens): it always reaches every laboratory you own.
+- The Science Boost tab shows this drive's boost and the combined boost of all your drives.
 - Labs consume packs at their normal rate; the boost adds progress without extra packs.
 
 ## Warp Travel
@@ -148,7 +157,7 @@ After Practical Warp Drive is researched:
 - The drive compares delivered power with the next fractional level's support demand before accelerating into it.
 - Lost engine speed lowers sustainable warp levels immediately. Falling below the minimum `50 km/s` starts a prominent 5-second exit warning; restoring speed during that grace period keeps Warp-1 engaged. If power falls below the current level's support demand, the drive holds that level and drains its warp support reserve in proportion to the shortfall. A complete outage lasts 1 second immediately after entry or 10 seconds after the reserve replenishes to full.
 - Charging rises through a 20-step machinery hum and climbing capacitor whine. Warp activation is a 5-second breach of the dimensional edge: the whine screams upward, the air is drawn in, and at the core's flash a vortex tears across the ship, a jet-like phasing roar and howling wind over a deep, shimmering hum, before it settles into a continuous two-part subspace ambience. Exit pulls the vortex back in, lands with a thump, and spins the drive down. These sounds play at full volume across the whole platform, on the game-effects volume slider. While warp holds, the building itself keeps humming with the field it maintains, audible nearby like other machines.
-- Warp removes asteroid chunks and large asteroids while active and fills the space around the ship, 128 tiles out on every side, with subspace phenomena. Glowing streaks in shades of electric blue rush past. Harmless Fulgora-style lightning strikes around the Warp Drive itself, each bolt landing within 10 tiles of it about once every 1.7 seconds; open space stays free of lightning. Behind it all, large pastel anomalies, 30 to 60 tiles across, drift slowly beneath the ship, swelling, turning, changing shape and hue, and fading in and out over 30 to 60 seconds each, independent of the lightning. They fade in with warp and away after it.
+- Warp removes asteroid chunks and large asteroids while active: the activation shockwave sweeps away those already around the ship, each vanishing as the ring reaches it, and any that appear later vanish at once. Asteroids keep flying for the moment before the ring reaches them, so the ship's defences still matter at entry. Warp also fills the space around the ship, 128 tiles out on every side, with subspace phenomena. Glowing streaks in shades of electric blue rush past. Harmless Fulgora-style lightning strikes around the Warp Drive itself, each bolt landing within 10 tiles of it about once every 1.7 seconds; open space stays free of lightning. Behind it all, large pastel anomalies, 30 to 60 tiles across, drift slowly beneath the ship, swelling, turning, changing shape and hue, and fading in and out over 30 to 60 seconds each, independent of the lightning. They fade in with warp and away after it.
 - Warp exits immediately on **Disengage**, when the disengage condition becomes true, or when route eligibility is lost. Minimum engine speed has the 5-second grace period above; support failure exits when the warp support reserve is depleted.
 - Each engagement is one jump: after warp exits for any reason, the drive stays idle until Engage is clicked again or the engage condition is true.
 - Every active-warp exit starts a 10-second charge and re-entry lockout; interrupted activation uses the same lockout mechanism for 5 seconds.
@@ -205,7 +214,7 @@ The intended solution is an automated cycle: the engage condition starts warp on
 The drive window has a header that stays visible and three tabs.
 
 - **Header:** a live view of the drive showing its current animation, one status line saying what it is doing, the route and distance remaining, and two large buttons. Before Practical research the buttons are **Start tachyon detector** and **Stop tachyon detector**; afterwards they are **Engage warp drive** and **Disengage**. Both are always shown; a greyed-out button's tooltip says why it cannot act. The status line names the exact blocker when the drive is not ready, such as low speed, endpoint clearance, or the re-entry lockout, and shows a progress bar while charging or detecting.
-- **Warp:** entry requirements (destination, endpoint clearance, re-entry lockout, and engine speed), plus the warp field (reserve charge, power consumption, and acceleration) while charging or in warp. Its engage and disengage conditions sit beside them. Before Practical research the tab only explains how warp unlocks.
+- **Warp:** entry requirements (destination, endpoint clearance, re-entry lockout, and engine speed), plus the warp field while charging or in warp. It adds detail behind the header's headline instead of repeating it: the exact reserve energy, then while charging how the reserve size follows platform mass and the time to full charge, or during warp how long the reserve would carry a power outage and the current warp level against what power and the engine allow. Power shows delivered against requested power, plus the part needed for support during warp, and acceleration shows the current ramp state. Its engage and disengage conditions sit beside them. Before Practical research the tab only explains how warp unlocks.
 - **Tachyon Detector**, renamed **Science Boost** after Practical research: detector status, power, tachyon density, and the research it is speeding up, with the detector's start and stop conditions beside them. After Practical research it adds the smaller **Start boost** and **Stop boost** buttons. The ⓘ next to each heading explains the formula.
 - **Signals:** red and green network status, and the circuit outputs.
 
@@ -239,7 +248,7 @@ All circuit outputs are independently enabled and can use any signal. `W`, `D`, 
 - **Standby:** The rings hang motionless in alignment around a needle-thin black core in a faint icy halo. The drive looks like this while idle, cooling down, or switched off.
 - **Detecting tachyons:** Before Practical Warp Drive, the drive runs its charging animation in neon green: counter-rotating rings, a pulsing green plasma column, and green conduits and projectors. The rings spin faster and the plasma brightens with detector power.
 - **Charging:** Alternate rings counter-rotate, injectors at both caps fire into a pulsing cobalt-white plasma column, and the inside of the tube seems to stretch into endless depth. The rings spin faster and the plasma brightens as the warp reserve fills.
-- **Activation:** On warp entry, the rings snap into alignment, the core draws in and flashes, a shockwave leaves the column, and the conduits flare azure, in time with the activation sound. The rings then spin back up. With the flash, an azure ring of light, followed by a violet one, sweeps out from the drive across the whole platform.
+- **Activation:** On warp entry, the rings snap into alignment, the core draws in and flashes, a shockwave leaves the column, and the conduits flare azure, in time with the activation sound. The rings then spin back up. With the flash, an azure ring of light, followed by a violet one, sweeps out from the drive across the whole platform and on past every asteroid around it.
 - **Warp:** Alternate rings keep counter-rotating at full-charge speed while blue and violet waves cascade down the column around flickering filaments, and the conduits carry azure plasma to the projectors.
 
 The Warp Drive takes 120 seconds to craft from:

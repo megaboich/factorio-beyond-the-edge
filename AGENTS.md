@@ -27,7 +27,7 @@ Each mod directory is a complete Factorio mod root. Directory names are reposito
 ### Warp Drive
 
 - `control.lua`: runtime composition root.
-- `scripts/`: feature-owned runtime modules (`drive.lua`, `warp.lua`, `research.lua`, `gui.lua`, `visuals.lua`, `anomalies.lua`).
+- `scripts/`: feature-owned runtime modules (`drive.lua`, `warp.lua`, `research.lua`, `gui.lua`, `visuals.lua`, `anomalies.lua`, `shockwaves.lua`).
 - `prototypes/`: feature-sized prototype files.
 - `graphics/`: generated building sheets, item icon, and technology icon.
 - `resources/audio/`: committed sound bank and its generator.
@@ -66,7 +66,8 @@ All mods in this repository share the prefix, so a new name must also be unique 
 ## References
 
 - Factorio data: `/Applications/factorio.app/Contents/data`, or the Steam app under `~/Library/Application Support/Steam/steamapps/common/Factorio/factorio.app/Contents/data`.
-- Factorio API docs: `/Applications/factorio.app/Contents/doc-html`.
+- Factorio API docs: `/Applications/factorio.app/Contents/doc-html`, matching the installed version; `doc-html/runtime-api.json` and `prototype-api.json` are the same docs in searchable form. Online: <https://lua-api.factorio.com/latest/>.
+- Vanilla prototype source: `/Applications/factorio.app/Contents/data` locally, or <https://github.com/wube/factorio-data>. GUI styles are in `data/core/prototypes/style.lua`, utility sprites in `utility-sprites.lua`.
 - Use Space Exploration as a design reference only, never as a runtime dependency. Local source root: `~/work/other/factorio-space-exploration`. The SE Growth Facility prototype is `space-exploration_0.7.57/prototypes/phase-1/entity/growth-facility.lua`; related graphics are under `space-exploration-graphics-3_0.7.3/graphics/entity/growth-facility/` and `space-exploration-graphics_0.7.6/graphics/icons/` / `graphics/technology/`.
 - Use mature mods as design evidence, not templates. Krastorio 2 supports a small composition root and paired feature/GUI modules; Space Exploration's custom dispatcher, globals, and migration framework are not justified at these mods' scale.
 
@@ -82,6 +83,20 @@ All mods in this repository share the prefix, so a new name must also be unique 
 - Runtime tinting is multiplicative. Strongly colored source sprites may not tint to the requested hue; prefer neutral source art for colorized icons.
 - Validate resolved `data.raw`; source inspection alone does not catch prototype normalization or changes from other installed mods.
 - Keep prototype code in feature-sized files. Duplicate constants across data and runtime stages when sharing them would couple incompatible Factorio load phases.
+
+## Factorio Runtime and GUI Behaviour
+
+Facts found the hard way in this repository. Most are not in the API docs; each names how it was established.
+
+- `LuaSurface.create_trivial_smoke` creates nothing where no player can see the position at that moment, so smoke started off screen never appears even after it would grow into view (Warp Drive activation rings, seen in game). Effects that must show wherever the player looks use `LuaRendering` objects updated by script instead (`warp-drive/scripts/shockwaves.lua`). Particles may be culled the same way; that is untested.
+- `on_tick` runs at the start of a tick, before entity updates, and the frame is drawn after them. Something the engine spawns during a tick is drawn for that frame before any script can remove it; a 10-tick handler leaves it on screen for up to ten frames (Warp Drive asteroid clearing).
+- There is no runtime API to stop a space platform spawning asteroids. During travel they appeared on a line about 70 tiles ahead of the foundation's leading edge (headless probe, small platform). The space background also draws faint decorative asteroids that are not entities and that scripts cannot remove; do not mistake them for survivors in screenshots.
+- `LuaRendering` objects can be kept in `storage`. `x_scale`/`y_scale` multiply the animation prototype's own `scale`. Additive objects take colours premultiplied by alpha, and a colour channel above 1 is read as 0–255.
+- `LuaSurface.execute_lightning` rejects space platform surfaces; create the lightning entity directly (`warp-drive/scripts/warp.lua`).
+- Each mod has its own `storage`, so another mod reads a mod's state only through its remote interface. Handlers of a mod that depends on another run after the other mod's handlers for the same event.
+- GUI: assigning `element.style = "name"` resets every custom style property set on the element, such as `width` and `single_line`; set them again afterwards. Frames reject `horizontal_spacing`; put an inner flow in the frame. `entity-preview` draws only the entity's own sprites, never `LuaRendering` overlays; a small `camera` element shows the live building.
+- Ratios built from fixed increments can land just below a step edge (`0.45 * 20 = 8.999...`); add a small epsilon before `math.floor` when picking a step from them.
+- GitHub's README math renderer rejects `\operatorname`; use `\mathrm{...}`.
 
 ## SPACELAB Constraints
 
@@ -99,7 +114,7 @@ All mods in this repository share the prefix, so a new name must also be unique 
 - The model's state layers (`interior-<state>`, `glow-<state>`) map one-to-one to the `bte-warp-drive-<state>-interior` and `-glow` animation prototypes. Frame counts are duplicated in `prototypes/entities.lua` (`overlay_frames`) and `scripts/visuals.lua` (`STATES`), and playback speeds assume the model's 32-frame loop lasts 64 ticks.
 - The circuit wire points in `prototypes/entities.lua` are the model's terminal insulator tips; move them with the terminal.
 
-Round parts of both buildings (tanks, dais, caps, rings, and the activation shockwave) are squashed front to back by `ROUND_DEPTH` (0.78), duplicated in `growth-facility.js`, `warp-drive.js`, and `warp-field.js`: the renderer keeps ground tiles square to match the game grid, which would otherwise draw flat circles as circles rather than the ovals vanilla art shows.
+Round parts of both buildings (tanks, dais, caps, rings, and the activation shockwave) are squashed front to back by `ROUND_DEPTH` (0.78), duplicated in `growth-facility.js`, `warp-drive.js`, `warp-field.js`, and `warp-drive/scripts/shockwaves.lua` (which sweeps asteroids along the ring's oval): the renderer keeps ground tiles square to match the game grid, which would otherwise draw flat circles as circles rather than the ovals vanilla art shows.
 
 ## Generated Assets
 
@@ -215,5 +230,7 @@ Use `FACTORIO_BIN` to override `/Applications/factorio.app/Contents/MacOS/factor
 Test helpers live under `warp-drive/tests/mods/` and must never enter the published ZIP. Do not commit generated saves, logs, mod directories, or ZIPs.
 
 Runtime assertions use `error("WARP_TEST_FAIL: ...")`; emit `log("WARP_TEST_PASS: ...")` only after all checks pass. Recreate saves after helper changes because mod scripts are stored in saves; the runner does this automatically.
+
+Headless runs (`--benchmark`) have no player, so GUI code and anything that depends on what a player sees, such as smoke culling, are only exercised in the visible game. To probe runtime state headlessly, add a throwaway helper mod named `bte-warp-drive-runtime-test` so the drive registers its test remote interface, and log from its `on_tick`. Standalone Lua 5.5 `luac -p` is a quick syntax check, but it rejects assigning to `_`, which Factorio's Lua accepts.
 
 Scripted tests do not replace interactive checks for GUI behavior, visuals, natural travel direction and speed, real brownouts, robots and ghosts, asteroid removal, or wire geometry.

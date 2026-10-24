@@ -349,32 +349,13 @@ local streak = {
 
 local field_effects = {warp_lightning, anomaly, streak}
 
--- The activation shockwave carried across the ship: trivial smoke grows the ring from the
--- building's edge, where the drive's own shockwave fades, to `reach` tiles at 1.2 tiles per tick.
--- scripts/warp.lua picks the smallest reach that covers the platform.
-local SHOCKWAVE_RING = 7 -- ring radius in tiles at scale 1
-local SHOCKWAVE_START = 4.5
-for _, reach in pairs({32, 64, 128, 256}) do
-  for name, color in pairs({azure = {0.35, 0.75, 1}, violet = {0.6, 0.45, 1}}) do
-    local ticks = math.ceil((reach - SHOCKWAVE_START) / 1.2)
-    table.insert(field_effects, {
-      type = "trivial-smoke",
-      name = "bte-warp-drive-shockwave-" .. name .. "-" .. reach,
-      animation = field_layer("shockwave", {tint = scaled(color, 1)}),
-      cyclic = true,
-      duration = ticks,
-      fade_in_duration = 0,
-      fade_away_duration = math.floor(ticks * 0.6),
-      spread_duration = ticks,
-      start_scale = SHOCKWAVE_START / SHOCKWAVE_RING,
-      end_scale = reach / SHOCKWAVE_RING,
-      render_layer = "smoke",
-      affected_by_wind = false,
-      movement_slow_down_factor = 0,
-      show_when_smoke_off = true
-    })
-  end
-end
+-- The activation shockwave carried across the ship: one ring, 7 tiles in radius at scale 1, that
+-- scripts/shockwaves.lua draws with LuaRendering, tints, and grows and fades every tick.
+table.insert(field_effects, {
+  type = "animation",
+  name = "bte-warp-drive-shockwave",
+  layers = {field_layer("shockwave")}
+})
 
 local detector_load = table.deepcopy(charge_buffer)
 detector_load.name = "bte-warp-drive-detector-load"

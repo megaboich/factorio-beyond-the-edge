@@ -58,6 +58,7 @@ if script.active_mods["bte-warp-drive-runtime-test"] then
         warp_next_tick = record.warp_sound_next_tick,
         background_index = record.warp_background_sound_index,
         shockwaves_sent = record.shockwaves_sent,
+        shockwaves = record.shockwaves and #record.shockwaves or 0,
         anomalies = record.anomalies and #record.anomalies or 0
       }
     end
@@ -122,6 +123,13 @@ script.on_nth_tick(UPDATE_TICKS, function()
         Drive.update_output_signals(record, platform, Research.tachyon_density(platform))
       end
     end
+  end
+  Gui.refresh_open_windows(true)
+end)
+
+script.on_event(defines.events.on_tick, function()
+  for _, record in pairs(Drive.records()) do
+    Warp.tick(record)
   end
 end)
 

@@ -1,5 +1,6 @@
 local Anomalies = require("scripts.anomalies")
 local Drive = require("scripts.drive")
+local Shockwaves = require("scripts.shockwaves")
 local Visuals = require("scripts.visuals")
 
 local Warp = {}
@@ -24,11 +25,11 @@ local LIGHTNING_NAME = "bte-warp-drive-lightning"
 -- A strike draws its cloud at the entity position and its bolt this many tiles south of it,
 -- the length of the prototypes' source_offset.
 local LIGHTNING_BOLT_LENGTH = 25
--- Ship-wide activation shockwaves, sent this many ticks after warp entry: the first with the
--- core's flash at 0.54 s (scripts/visuals.lua), a fainter violet one just behind it. Each uses
--- the smallest prototype reach, in tiles, that covers the platform.
-local SHOCKWAVES = {{delay = 30, tint = "azure"}, {delay = 40, tint = "violet"}}
+-- Ship-wide activation shockwaves (scripts/shockwaves.lua) grow to the smallest of these reaches,
+-- in tiles, that covers the platform, or further to sweep away every asteroid present at warp
+-- entry, up to SHOCKWAVE_MAX_REACH.
 local SHOCKWAVE_REACHES = {32, 64, 128, 256}
+local SHOCKWAVE_MAX_REACH = 512
 -- Lightning strikes only around the drive: each bolt lands within LIGHTNING_DRIVE_RADIUS of it.
 local LIGHTNING_DRIVE_RADIUS = 10
 -- Chance per 10-tick update of a strike near the drive: about one every 1.7 seconds.
@@ -209,7 +210,11 @@ local function update_charge_sound(record, platform)
   end
   local charge = required_charge(platform)
   local ratio = charge > 0 and math.min(1, (record.reserve_energy or 0) / charge) or 0
-  local step = math.min(CHARGE_SOUND_COUNT, math.floor(ratio * CHARGE_SOUND_COUNT) + 1)
+  -- The reserve grows in 10-tick increments, so at full power each half-second boundary lands
+  -- exactly on a step edge. Rounding before flooring keeps float error (0.45 * 20 = 8.9999...)
+  -- from repeating one step and then skipping the next.
+  local step = math.min(CHARGE_SOUND_COUNT,
+    math.floor(ratio * CHARGE_SOUND_COUNT + 0.000001) + 1)
   play_global_sound(record, string.format("bte-warp-drive-buzz-%02d", step))
   record.charge_sound_step = step
   record.charge_sound_next_tick = game.tick + CHARGE_SOUND_TICKS
@@ -300,8 +305,8 @@ local function exit_warp(record, reason)
   record.speed_exit_at = nil
   record.warp_warning = nil
   record.lightning_bounds = nil
-  record.shockwave_tick = nil
-  record.shockwaves_sent = nil
+  record.asteroid_sweep = nil
+  Shockwaves.cancel(record)
   record.reserve_energy = was_warp and 0 or (record.reserve_energy or 0)
   if record.power and record.power.valid then
     -- Keep the mandatory 1 J working buffer stable. Emptying a larger previous buffer here
@@ -440,12 +445,31 @@ local function update_detector_latch(record)
   end
 end
 
--- Asteroid chunks and asteroid entities are separate runtime objects. Clearing both every
--- update prevents newly spawned hazards from crossing subspace before the next 10-tick sample.
+-- Asteroid chunks and asteroid entities are separate runtime objects. During warp both are
+-- cleared every tick (Warp.tick): the platform keeps spawning them at the edge of its asteroid
+-- field, and anything left until the 10-tick update was drawn for up to ten frames, its outline
+-- blinking against the bright anomalies behind it.
 local function clear_warp_asteroids(platform)
   platform.destroy_asteroid_chunks({})
   for _, asteroid in pairs(platform.surface.find_entities_filtered({type = "asteroid"})) do
     asteroid.destroy()
+  end
+end
+
+-- At warp entry the activation shockwave sweeps the asteroids away instead: each vanishes the
+-- tick the ring's oval front reaches it.
+local function sweep_warp_asteroids(platform, center, radius)
+  local depth = radius * Shockwaves.ROUND_DEPTH
+  local area = {{center.x - radius, center.y - depth}, {center.x + radius, center.y + depth}}
+  for _, asteroid in pairs(platform.surface.find_entities_filtered({type = "asteroid", area = area})) do
+    if Shockwaves.oval_distance(center, asteroid.position) <= radius then
+      asteroid.destroy()
+    end
+  end
+  for _, chunk in pairs(platform.find_asteroid_chunks_filtered({area = area})) do
+    if Shockwaves.oval_distance(center, chunk.position) <= radius then
+      platform.destroy_asteroid_chunks({position = chunk.position, limit = 1})
+    end
   end
 end
 
@@ -547,46 +571,33 @@ local function render_warp_lightning(record, platform)
 end
 
 -- The smallest shockwave reach that covers the platform's foundation from the drive.
-local function shockwave_reach(record)
+local function shockwave_reach(record, platform)
   local bounds = record.lightning_bounds
   local center = record.entity.position
+  -- Far enough to sweep the asteroids already around the ship while the ring still glows.
+  local farthest = 0
+  for _, asteroid in pairs(platform.surface.find_entities_filtered({type = "asteroid"})) do
+    farthest = math.max(farthest, Shockwaves.oval_distance(center, asteroid.position))
+  end
+  for _, chunk in pairs(platform.find_asteroid_chunks_filtered({})) do
+    farthest = math.max(farthest, Shockwaves.oval_distance(center, chunk.position))
+  end
+  local sweep = farthest > 0 and math.min(SHOCKWAVE_MAX_REACH, Shockwaves.sweep_reach(farthest)) or 0
   local margin = WARP_EFFECT_FIELD_MARGIN
   local dx = math.max(center.x - bounds.left, bounds.right - center.x) - margin
   local dy = math.max(center.y - bounds.top, bounds.bottom - center.y) - margin
   local reach = math.sqrt(dx * dx + dy * dy)
   for _, candidate in ipairs(SHOCKWAVE_REACHES) do
     if candidate >= reach then
-      return candidate
+      return math.max(candidate, sweep)
     end
   end
-  return SHOCKWAVE_REACHES[#SHOCKWAVE_REACHES]
-end
-
--- Sends each activation shockwave once its delay has passed; the engine grows and fades them.
-local function render_shockwaves(record, platform)
-  local started = record.shockwave_tick
-  local entity = record.entity
-  if not started or not (entity and entity.valid) then
-    return
-  end
-  local sent = record.shockwaves_sent or 0
-  while SHOCKWAVES[sent + 1] and game.tick - started >= SHOCKWAVES[sent + 1].delay do
-    sent = sent + 1
-    platform.surface.create_trivial_smoke({
-      name = "bte-warp-drive-shockwave-" .. SHOCKWAVES[sent].tint .. "-" .. shockwave_reach(record),
-      position = entity.position
-    })
-  end
-  record.shockwaves_sent = sent
-  if not SHOCKWAVES[sent + 1] then
-    record.shockwave_tick = nil
-  end
+  return math.max(SHOCKWAVE_REACHES[#SHOCKWAVE_REACHES], sweep)
 end
 
 local function render_warp_effect(record, platform)
   render_warp_streaks(record, platform)
   render_warp_lightning(record, platform)
-  render_shockwaves(record, platform)
 end
 
 -- Entry retains ten percent of the activation charge as support reserve. A new electric sink needs
@@ -614,10 +625,9 @@ local function enter_warp(record, platform)
   request_power(record, buffer, record.support_demand_watts, support_demand)
   record.support_check_after = game.tick + UPDATE_TICKS * 2
   start_warp_sound(record)
-  clear_warp_asteroids(platform)
   update_warp_effect_bounds(record, platform)
-  record.shockwave_tick = game.tick
-  record.shockwaves_sent = 0
+  Shockwaves.start(record, shockwave_reach(record, platform))
+  record.asteroid_sweep = true
   render_warp_effect(record, platform)
   return true
 end
@@ -734,7 +744,6 @@ local function update_active_warp(record, platform, direction, charge_buffer)
   else
     platform.distance = target
     record.last_distance = target
-    clear_warp_asteroids(platform)
     render_warp_effect(record, platform)
   end
 end
@@ -890,6 +899,34 @@ function Warp.update(record)
   return true
 end
 
+--- Per-tick work, limited to what cannot wait for the 10-tick update: growing activation
+-- shockwaves, and clearing asteroids while warp holds. Until the sweeping ring has passed, only
+-- what its front has reached is cleared; afterwards, everything. Idle drives cost one state check.
+function Warp.tick(record)
+  if record.shockwave_tick or record.shockwaves then
+    Shockwaves.update(record)
+  end
+  if record.state ~= "warp" then
+    return
+  end
+  local entity = record.entity
+  local platform = entity and entity.valid and entity.surface.platform
+  if not platform then
+    return
+  end
+  if record.asteroid_sweep then
+    local center, radius, pending = Shockwaves.front(record)
+    if center then
+      sweep_warp_asteroids(platform, center, radius)
+      return
+    elseif pending then
+      return
+    end
+    record.asteroid_sweep = nil
+  end
+  clear_warp_asteroids(platform)
+end
+
 function Warp.snapshot(record)
   local entity = record.entity
   local platform = entity and entity.valid and entity.surface.platform
@@ -974,6 +1011,12 @@ function Warp.snapshot(record)
       record.state == "warp" and (record.warp_level or 1) or nil),
     warp_boost = record.state == "warp" and warp_multiplier(record.warp_level) or 1,
     support_required = support_required,
+    -- Details for the Warp tab beyond the header's headline figures.
+    mass_kg = platform_weight_kg(platform),
+    demand_watts = record.support_demand_watts or 0,
+    engine_level_limit = engine_warp_limit(platform),
+    -- How long the current reserve would carry a complete power outage during warp.
+    outage_seconds = charge > 0 and stored_charge / charge * WARP_RESERVE_SECONDS or 0,
     power_ready = (record.support_power or 0)
       >= support_required * SUPPORT_POWER_TOLERANCE,
     cooldown_ready = game.tick >= record.cooldown_until,

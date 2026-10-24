@@ -1,4 +1,5 @@
 local Anomalies = require("scripts.anomalies")
+local Shockwaves = require("scripts.shockwaves")
 local Visuals = require("scripts.visuals")
 
 local Drive = {}
@@ -480,6 +481,7 @@ function Drive.remove(platform_index, record)
   if current and (not record or current == record) then
     Drive.destroy_companions(current)
     Anomalies.destroy(current)
+    Shockwaves.destroy(current)
     drives[platform_index] = nil
   end
 end
@@ -522,6 +524,7 @@ function Drive.rebuild()
     if not rebuilt[platform_index] then
       Drive.destroy_companions(old)
       Anomalies.destroy(old)
+      Shockwaves.destroy(old)
     end
   end
 end

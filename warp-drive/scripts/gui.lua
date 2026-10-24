@@ -24,7 +24,7 @@ local GUI_OUTPUT_SPEED_SIGNAL = "bte_warp_drive_output_speed_signal"
 local GUI_OUTPUT_TACHYON_DENSITY_ENABLED = "bte_warp_drive_output_tachyon_density_enabled"
 local GUI_OUTPUT_TACHYON_DENSITY_SIGNAL = "bte_warp_drive_output_tachyon_density_signal"
 local GUI_CLOSE = "bte_warp_drive_close"
-local LAYOUT_VERSION = 12
+local LAYOUT_VERSION = 13
 -- Tabs in display order; the selected one is remembered per player in storage.gui_tabs.
 local TABS = {"warp", "detector", "signals"}
 local TAB_INDEX = {warp = 1, detector = 2, signals = 3}
@@ -511,7 +511,9 @@ local function draw_gui(player, record)
   field.add({type = "line"}).style.top_margin = 6
   add_heading(field, "bte_warp_drive_field_heading", {"bte-warp-drive.field-section"})
   add_status_row(field, "bte_warp_drive_reserve", {"bte-warp-drive.requirement-charge-label"})
-  add_bar(field, "bte_warp_drive_reserve_bar")
+  add_status_row(field, "bte_warp_drive_reserve_detail", "")
+  add_status_row(field, "bte_warp_drive_charge_eta", {"bte-warp-drive.field-charge-eta-label"})
+  add_status_row(field, "bte_warp_drive_warp_level", {"bte-warp-drive.field-warp-level-label"})
   add_requirement(field, "bte_warp_drive_requirement_power", {"bte-warp-drive.requirement-power-label"})
   add_requirement(field, "bte_warp_drive_requirement_acceleration", {"bte-warp-drive.requirement-acceleration-label"})
   local field_idle = warp.add({type = "label", name = "bte_warp_drive_field_idle", caption = {"bte-warp-drive.field-idle"}})
@@ -591,13 +593,15 @@ local REQUIRED_ELEMENTS = {
   GUI_ENGAGE, GUI_DISENGAGE, GUI_TABS, GUI_BOOST_START, GUI_BOOST_STOP,
   "bte_warp_drive_tab_warp", "bte_warp_drive_tab_detector", "bte_warp_drive_tab_signals",
   "bte_warp_drive_warp_locked", "bte_warp_drive_requirements", "bte_warp_drive_field",
-  "bte_warp_drive_field_idle", "bte_warp_drive_reserve", "bte_warp_drive_reserve_bar",
+  "bte_warp_drive_field_idle", "bte_warp_drive_reserve", "bte_warp_drive_reserve_detail",
+  "bte_warp_drive_reserve_detail_label", "bte_warp_drive_charge_eta", "bte_warp_drive_warp_level",
   "bte_warp_drive_warp_right", "bte_warp_drive_warp_circuit_locked", "bte_warp_drive_boost_controls",
   "bte_warp_drive_detector_heading", "bte_warp_drive_detector_status", "bte_warp_drive_detector_power",
   "bte_warp_drive_detector_bar", "bte_warp_drive_signal_multiplier", "bte_warp_drive_signal_section",
   "bte_warp_drive_detector_speed", "bte_warp_drive_detector_power_multiplier",
   "bte_warp_drive_tachyon_rate", "bte_warp_drive_research_heading", "bte_warp_drive_research_status",
-  "bte_warp_drive_research_branch", "bte_warp_drive_working_labs", "bte_warp_drive_average_lab_rate",
+  "bte_warp_drive_research_branch", "bte_warp_drive_research_branch_label",
+  "bte_warp_drive_working_labs", "bte_warp_drive_average_lab_rate",
   "bte_warp_drive_research_bonus", "bte_warp_drive_research_progress",
   "bte_warp_drive_research_estimate", "bte_warp_drive_circuit_red_network",
   "bte_warp_drive_circuit_green_network"
@@ -656,9 +660,16 @@ end
 local function requirement(view, name, state, caption)
   local selected = REQUIREMENT_PRESENTATION[state]
   view[name .. "_icon"].sprite = selected[1]
-  view[name .. "_label"].style = selected[2]
-  view[name].caption = caption
-  view[name].style = selected[3]
+  -- Assigning a style resets the element's custom size, so the column widths are reapplied.
+  local label = view[name .. "_label"]
+  label.style = selected[2]
+  label.style.width = STATUS_LABEL_WIDTH - 22
+  label.style.single_line = false
+  local value = view[name]
+  value.caption = caption
+  value.style = selected[3]
+  value.style.width = STATUS_VALUE_WIDTH
+  value.style.single_line = false
 end
 
 local function render_button(button, key, blocker)
@@ -788,14 +799,41 @@ local function render_warp(view, record, snapshot)
   if not engaged then
     return
   end
+  -- The header already shows the headline (charge percentage, energy still needed, or warp level,
+  -- boost and speed); these rows add the figures behind it.
+  local charging = record.state == "charging"
+  local delivered = record.support_power or 0
   set_status(view, "bte_warp_drive_reserve", {"bte-warp-drive.charge-value",
     format_energy(snapshot.stored_charge), format_energy(snapshot.required_charge),
     math.floor(snapshot.charge_ratio * 100)})
-  view.bte_warp_drive_reserve_bar.value = snapshot.charge_ratio
+  if charging then
+    view.bte_warp_drive_reserve_detail_label.caption = {"bte-warp-drive.field-reserve-size-label"}
+    set_status(view, "bte_warp_drive_reserve_detail", {"bte-warp-drive.field-reserve-size",
+      format_km(snapshot.mass_kg / 1000)})
+  else
+    view.bte_warp_drive_reserve_detail_label.caption = {"bte-warp-drive.field-outage-label"}
+    set_status(view, "bte_warp_drive_reserve_detail", {"bte-warp-drive.field-outage",
+      string.format("%.1f", snapshot.outage_seconds)})
+  end
+  set_row_visible(view, "bte_warp_drive_charge_eta", charging)
+  if charging then
+    local missing = math.max(0, snapshot.required_charge - snapshot.stored_charge)
+    set_status(view, "bte_warp_drive_charge_eta", delivered > 0
+      and format_duration(missing / delivered) or {"bte-warp-drive.field-charge-eta-waiting"})
+  end
+  set_row_visible(view, "bte_warp_drive_warp_level", not charging)
+  if not charging then
+    set_status(view, "bte_warp_drive_warp_level", {"bte-warp-drive.field-warp-level",
+      string.format("%.2f", record.warp_level or 1), string.format("%.2f", record.warp_target or 0),
+      string.format("%.2f", snapshot.engine_level_limit)})
+  end
   requirement(view, "bte_warp_drive_requirement_power",
-    (record.state == "charging" or record.warp_ramp_state == "stabilizing") and "warning"
+    (charging or record.warp_ramp_state == "stabilizing") and "warning"
       or (snapshot.power_ready and "pass" or "fail"),
-    {"bte-warp-drive.requirement-power-value", format_power(record.support_power or 0)})
+    charging and {"bte-warp-drive.field-power-charging", format_power(delivered),
+      format_power(snapshot.demand_watts)}
+      or {"bte-warp-drive.field-power", format_power(delivered), format_power(snapshot.demand_watts),
+        format_power(snapshot.support_required)})
   local ramp_state = record.warp_ramp_state or "inactive"
   set_row_visible(view, "bte_warp_drive_requirement_acceleration", record.state == "warp")
   requirement(view, "bte_warp_drive_requirement_acceleration",
@@ -873,8 +911,18 @@ local function render_detector(view, record, snapshot, research_snapshot)
       string.format("%.6f", research_snapshot.progress * 100)})
   end
   set_row_visible(view, "bte_warp_drive_research_progress", practical or researching_practical)
-  set_status(view, "bte_warp_drive_research_branch", {"bte-warp-drive.branch-"
-    .. (research_snapshot.branch or "unknown")})
+  if practical then
+    -- Every boost reaches all of the force's laboratories, so this row shows what all drives
+    -- add together instead of where this one's observations go.
+    local combined = research_snapshot.combined_science_boost
+    view.bte_warp_drive_research_branch_label.caption = {"bte-warp-drive.boost-combined-label"}
+    set_status(view, "bte_warp_drive_research_branch", {"bte-warp-drive.boost-value",
+      string.format("%.1f", combined * 100), string.format("%.2f", 1 + combined)})
+  else
+    view.bte_warp_drive_research_branch_label.caption = {"bte-warp-drive.research-branch"}
+    set_status(view, "bte_warp_drive_research_branch", {"bte-warp-drive.branch-"
+      .. (research_snapshot.branch or "unknown")})
+  end
   set_status(view, "bte_warp_drive_working_labs", bold_number(research_snapshot.lab_count))
   set_row_visible(view, "bte_warp_drive_average_lab_rate", not practical and researching_practical)
   if not practical and researching_practical then
@@ -943,7 +991,10 @@ local function render_circuit(view, record, snapshot)
     defines.wire_connector_id.circuit_green)
 end
 
-update_gui = function(player, record)
+-- `fast` refreshes run every 10-tick drive update while charging or in warp. They skip the
+-- detector tab, whose research figures scan every laboratory the force owns; the regular
+-- once-a-second refresh keeps that tab current.
+update_gui = function(player, record, fast)
   local frame = player.gui.screen[GUI_NAME]
   if not frame or not record.entity or not record.entity.valid then
     if frame then
@@ -962,26 +1013,30 @@ update_gui = function(player, record)
     return
   end
   local snapshot = snapshot_callback and snapshot_callback(record)
-  local research_snapshot = Research.snapshot(record)
-  if not snapshot or not research_snapshot then
+  local research_snapshot = not fast and Research.snapshot(record)
+  if not snapshot or not (fast or research_snapshot) then
     frame.destroy()
     return
   end
   render_header(view, record, snapshot)
   render_warp(view, record, snapshot)
-  render_detector(view, record, snapshot, research_snapshot)
+  if not fast then
+    render_detector(view, record, snapshot, research_snapshot)
+  end
   render_circuit(view, record, snapshot)
 end
 
-function Gui.refresh_open_windows()
+--- Refreshes every open drive window. With `fast`, only windows of drives that are charging or
+-- in warp are refreshed, without their research figures; see update_gui.
+function Gui.refresh_open_windows(fast)
   for _, player in pairs(game.connected_players) do
     local frame = player.gui.screen[GUI_NAME]
     if frame then
       local record = Drive.get(frame.tags.platform_index)
-      if record then
-        update_gui(player, record)
-      else
+      if not record then
         frame.destroy()
+      elseif not fast or record.state == "charging" or record.state == "warp" then
+        update_gui(player, record, fast)
       end
     end
   end

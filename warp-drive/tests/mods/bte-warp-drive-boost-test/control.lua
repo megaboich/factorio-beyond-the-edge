@@ -1,12 +1,14 @@
--- Verifies the Tachyon Science Boost: once Practical Warp Drive is researched, an idle drive's
--- powered detector speeds up any other research by its share of tachyon density times delivered
--- power relative to 1 GW, up to 2x.
+-- Verifies the Tachyon Science Boost: once Practical Warp Drive is researched, each idle drive's
+-- powered detector adds its share of tachyon density times delivered power relative to 1 GW, up
+-- to 100% of every laboratory's ordinary rate, and the boosts of several drives add up.
 --
--- The drive sits almost at the Shattered Planet, where density is close to its maximum, and its
--- platform has a controlled power source: 2 GW first, so the detector's initial 1 GW request is
--- met at once, then none for the baseline window, then 200 MW, which the adaptive detector climbs
--- to in 10 MW steps from zero. In vanilla Space Age the relay branch applies, so the measured
--- laboratories are on Nauvis. Each window spans the same two research updates.
+-- Two drives sit almost at the Shattered Planet, where density is close to its maximum, each on
+-- a platform with a controlled power source: 2 GW first, so each detector's initial 1 GW request
+-- is met at once, then none for the baseline window, then 200 MW, which the adaptive detectors
+-- climb to in 10 MW steps from zero. The measured laboratories are on Nauvis only. With
+-- bte-warp-drive-space-science-test the platforms select the local research branch, which before
+-- Practical research would leave Nauvis unaccelerated; the boost must reach it regardless. Each
+-- window spans the same two research updates.
 local Research = require("__bte-warp-drive__/scripts/research")
 
 local TECHNOLOGY = "bte-practical-warp-drive"
@@ -17,6 +19,7 @@ local REFERENCE_POWER_TICK = 430
 local FULL_WATTS = 2e9
 local REFERENCE_WATTS = 2e8
 local LAB_COUNT = 3
+local DRIVE_COUNT = 2
 
 local function fail(message)
   error("WARP_TEST_FAIL: " .. message)
@@ -63,10 +66,46 @@ local function pick_technology(force)
 end
 
 local function set_platform_power(watts)
-  local source = storage.platform_source
-  source.power_production = watts / 60
-  source.output_flow_limit = watts / 60
-  source.electric_buffer_size = math.max(1, watts / 60)
+  for _, source in pairs(storage.platform_sources) do
+    source.power_production = watts / 60
+    source.output_flow_limit = watts / 60
+    source.electric_buffer_size = math.max(1, watts / 60)
+  end
+end
+
+local function build_platform(force, index)
+  local platform = force.create_space_platform({
+    name = "Warp boost test " .. index,
+    planet = "nauvis",
+    starter_pack = "space-platform-starter-pack"
+  })
+  platform.apply_starter_pack()
+  local platform_tiles = {}
+  for x = -16, 16 do
+    for y = -16, 16 do
+      platform_tiles[#platform_tiles + 1] = {name = "space-platform-foundation", position = {x, y}}
+    end
+  end
+  platform.surface.set_tiles(platform_tiles)
+  local drive = platform.surface.create_entity({
+    name = "bte-warp-drive-controller",
+    position = {0.5, 10.5},
+    force = force,
+    raise_built = true
+  })
+  local source = platform.surface.create_entity({
+    name = "electric-energy-interface",
+    position = {0, 0},
+    force = force
+  })
+  platform.surface.create_entity({name = "substation", position = {6, 4}, force = force})
+  if not drive or not source then
+    fail("could not build boost test platform " .. index)
+  end
+  source.input_flow_limit = 0
+  source.energy = 0
+  platform.space_connection = ROUTE
+  return platform, source
 end
 
 script.on_init(function()
@@ -105,39 +144,11 @@ script.on_init(function()
   end
   nauvis.create_entity({name = "substation", position = {22, 22}, force = force})
 
-  local platform = force.create_space_platform({
-    name = "Warp boost test",
-    planet = "nauvis",
-    starter_pack = "space-platform-starter-pack"
-  })
-  platform.apply_starter_pack()
-  local platform_tiles = {}
-  for x = -16, 16 do
-    for y = -16, 16 do
-      platform_tiles[#platform_tiles + 1] = {name = "space-platform-foundation", position = {x, y}}
-    end
+  storage.platforms = {}
+  storage.platform_sources = {}
+  for index = 1, DRIVE_COUNT do
+    storage.platforms[index], storage.platform_sources[index] = build_platform(force, index)
   end
-  platform.surface.set_tiles(platform_tiles)
-  local drive = platform.surface.create_entity({
-    name = "bte-warp-drive-controller",
-    position = {0.5, 10.5},
-    force = force,
-    raise_built = true
-  })
-  local platform_source = platform.surface.create_entity({
-    name = "electric-energy-interface",
-    position = {0, 0},
-    force = force
-  })
-  platform.surface.create_entity({name = "substation", position = {6, 4}, force = force})
-  if not drive or not platform_source then
-    fail("could not build the boost test platform")
-  end
-  platform_source.input_flow_limit = 0
-  platform_source.energy = 0
-  platform.space_connection = ROUTE
-  storage.platform = platform
-  storage.platform_source = platform_source
   storage.technology = technology.name
   storage.samples = {}
   set_platform_power(FULL_WATTS)
@@ -146,14 +157,15 @@ end)
 -- Platform physics would carry the platform to its destination, where the density collapses;
 -- pin it in place, and keep the field's asteroids off the undefended platform.
 script.on_event(defines.events.on_tick, function()
-  local platform = storage.platform
-  platform.paused = false
-  platform.speed = 1
-  platform.distance = DEEP_DISTANCE
-  for _, entity in pairs(platform.surface.find_entities_filtered({
-    type = {"asteroid", "solar-panel", "accumulator"}
-  })) do
-    entity.destroy()
+  for _, platform in pairs(storage.platforms) do
+    platform.paused = false
+    platform.speed = 1
+    platform.distance = DEEP_DISTANCE
+    for _, entity in pairs(platform.surface.find_entities_filtered({
+      type = {"asteroid", "solar-panel", "accumulator"}
+    })) do
+      entity.destroy()
+    end
   end
 end)
 
@@ -182,7 +194,7 @@ script.on_nth_tick(10, function()
     if baseline <= 0 then
       fail("ordinary laboratory research did not advance during the unpowered window")
     end
-    local share = Research.tachyon_density(storage.platform) / 10000
+    local share = Research.tachyon_density(storage.platforms[1]) / 10000
     local full = (samples.full1 - samples.full0) / baseline
     local reference = (force.research_progress - samples.reference0) / baseline
     local detail = string.format("density share=%.4f full=%.4fx reference=%.4fx", share, full,
@@ -190,13 +202,16 @@ script.on_nth_tick(10, function()
     if share < 0.95 then
       fail("the test platform was not near maximum tachyon density: " .. detail)
     end
-    if math.abs(full - (1 + share)) > 0.05 then
-      fail("1 GW did not boost research to 1 + density share: " .. detail)
+    if math.abs(full - (1 + DRIVE_COUNT * share)) > 0.05 * DRIVE_COUNT then
+      fail(DRIVE_COUNT .. " drives at 1 GW did not each add their density share: " .. detail)
     end
-    if reference < 1 + 0.15 * share or reference > 1 + 0.21 * share then
-      fail("200 MW did not boost research by a fifth of the density share: " .. detail)
+    if reference < 1 + 0.15 * DRIVE_COUNT * share or reference > 1 + 0.21 * DRIVE_COUNT * share then
+      fail(DRIVE_COUNT .. " drives at 200 MW did not each add a fifth of their density share: "
+        .. detail)
     end
-    log("WARP_TEST_PASS: Tachyon Science Boost reached " .. string.format("%.3f", full)
-      .. "x at 1 GW and " .. string.format("%.3f", reference) .. "x at 200 MW")
+    log("WARP_TEST_PASS: Tachyon Science Boost from " .. DRIVE_COUNT .. " drives reached "
+      .. string.format("%.3f", full) .. "x at 1 GW and " .. string.format("%.3f", reference)
+      .. "x at 200 MW (" .. (script.active_mods["bte-warp-drive-space-science-test"]
+        and "local" or "relay") .. " branch)")
   end
 end)

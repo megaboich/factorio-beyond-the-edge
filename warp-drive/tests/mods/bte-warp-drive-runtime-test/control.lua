@@ -379,6 +379,17 @@ script.on_init(function()
   blueprint_inventory.destroy()
 end)
 
+script.on_event(defines.events.on_tick, function()
+  local test = storage.runtime_test
+  if test and test.stray_tick and game.tick == test.stray_tick + 1 then
+    if test.stray_asteroid.valid then
+      fail("an asteroid spawned during warp survived into the next tick")
+    end
+    test.stray_asteroid = nil
+    test.stray_tick = nil
+  end
+end)
+
 script.on_nth_tick(10, function()
   local platform = storage.platform
   local drive = storage.drive
@@ -773,15 +784,16 @@ script.on_nth_tick(10, function()
     end
     local asteroid = platform.surface.create_entity({
       name = "small-metallic-asteroid",
-      position = {10, 0},
+      position = {0.5, -30},
       velocity = {0, 0}
     })
     if not asteroid then
       fail("could not create an asteroid for warp suppression testing")
     end
+    storage.runtime_test.warp_asteroid = asteroid
     platform.create_asteroid_chunks({{
       name = "metallic-asteroid-chunk",
-      position = {-10, 0},
+      position = {0.5, -30},
       movement = {0, 0}
     }})
     platform.distance = 0.51
@@ -806,9 +818,11 @@ script.on_nth_tick(10, function()
         "warp entry did not retain ten percent of the activation charge: energy=%s required=%s",
         reserve_energy(platform), required_charge))
     end
-    if #platform.surface.find_entities_filtered({type = "asteroid"}) ~= 0
-      or #platform.find_asteroid_chunks_filtered({}) ~= 0 then
-      fail("warp entry did not remove asteroid entities and chunks")
+    -- The activation shockwave, sent 30 ticks after entry, sweeps asteroids away; until it
+    -- reaches them they stay.
+    if not storage.runtime_test.warp_asteroid.valid
+      or #platform.find_asteroid_chunks_filtered({area = {{-0.5, -31}, {1.5, -29}}}) ~= 1 then
+      fail("warp entry removed asteroids before the activation shockwave reached them")
     end
     check_lightning_placement(platform)
     local overlays = overlay_names(storage.drive)
@@ -823,6 +837,34 @@ script.on_nth_tick(10, function()
       fail("circuit speed output was " .. tostring(speed) .. ", expected 500 km/s at Warp-1")
     end
   elseif phase == "warp_ramp" and elapsed >= 20 and elapsed <= 560 then
+    if sound_state(platform).shockwaves > 0 then
+      storage.runtime_test.shockwave_seen = true
+    end
+    local swept = storage.runtime_test.warp_asteroid
+    if swept and not swept.valid then
+      -- Warp entry is at elapsed 10. The rings leave 30 ticks later at the building's 4.5-tile
+      -- edge and grow 2.4 tiles per tick. The asteroid and chunk sit 39.5 tiles ahead of the
+      -- drive, 50.6 tiles along the ring's oval (0.78 deep), so the front reaches them about 19
+      -- ticks after that, at elapsed 60.
+      if elapsed < 50 or elapsed > 70
+          or #platform.find_asteroid_chunks_filtered({area = {{-0.5, -31}, {1.5, -29}}}) ~= 0 then
+        fail("the activation shockwave did not sweep the asteroid and chunk as it reached them: "
+          .. "elapsed " .. elapsed)
+      end
+      storage.runtime_test.warp_asteroid = nil
+    elseif swept and elapsed > 70 then
+      fail("the activation shockwave did not sweep the asteroid in its path")
+    end
+    -- After the sweep, asteroids spawned during warp must go on the next tick, not wait for the
+    -- 10-tick update; the on_tick handler checks it.
+    if elapsed == 520 then
+      storage.runtime_test.stray_asteroid = platform.surface.create_entity({
+        name = "small-metallic-asteroid",
+        position = {10, -40},
+        velocity = {0, 0}
+      })
+      storage.runtime_test.stray_tick = game.tick
+    end
     if elapsed == 200 then
       local overlays = overlay_names(storage.drive)
       if overlays ~= "bte-warp-drive-warp-glow,bte-warp-drive-warp-interior" then
@@ -833,6 +875,9 @@ script.on_nth_tick(10, function()
       end
       if sound_state(platform).shockwaves_sent ~= 2 then
         fail("warp activation did not send both ship-wide shockwaves")
+      end
+      if not storage.runtime_test.shockwave_seen or sound_state(platform).shockwaves ~= 0 then
+        fail("activation shockwaves were not drawn, or their rings were not cleaned up")
       end
       -- The small test platform's field, 128 tiles beyond it on every side, holds about 64.
       if sound_state(platform).anomalies < 50 then
@@ -882,7 +927,9 @@ script.on_nth_tick(10, function()
           or visible("bte_warp_drive_warp_locked") or not visible("bte_warp_drive_requirements")
           or not visible("bte_warp_drive_field") or visible("bte_warp_drive_field_idle")
           or caption("bte_warp_drive_reserve") ~= "bte-warp-drive.charge-value"
-          or caption("bte_warp_drive_requirement_power") ~= "bte-warp-drive.requirement-power-value"
+          or caption("bte_warp_drive_requirement_power") ~= "bte-warp-drive.field-power"
+          or caption("bte_warp_drive_reserve_detail") ~= "bte-warp-drive.field-outage"
+          or caption("bte_warp_drive_warp_level") ~= "bte-warp-drive.field-warp-level"
           or caption("bte_warp_drive_requirement_acceleration") ~= "bte-warp-drive.ramp-accelerating"
           or not acceleration_icon or acceleration_icon.sprite ~= "utility/check_mark_green"
           or caption("bte_warp_drive_requirement_clearance") ~= "bte-warp-drive.requirement-clearance-clear"
@@ -1297,7 +1344,7 @@ script.on_nth_tick(10, function()
       local required_charge = platform.weight * 100
       local charge_ratio = reserve_energy(platform) / required_charge
       if not power or type(power.caption) ~= "table"
-        or power.caption[1] ~= "bte-warp-drive.requirement-power-value"
+        or power.caption[1] ~= "bte-warp-drive.field-power-charging"
         or not power_icon or power_icon.sprite ~= "utility/status_yellow"
         or not acceleration_row or acceleration_row.visible
         or not status_icon or status_icon.sprite ~= "utility/status_yellow"

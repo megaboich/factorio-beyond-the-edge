@@ -27,7 +27,7 @@ if [[ ! -x "$FACTORIO_BIN" ]]; then
   exit 1
 fi
 
-mkdir "$BUILD_MODS" "$BASIC_MODS" "$PLATFORM_MODS" "$RELAY_MODS" "$LOCAL_MODS" "$API_MODS" "$BOOST_MODS"
+mkdir "$BUILD_MODS" "$BASIC_MODS" "$PLATFORM_MODS" "$RELAY_MODS" "$LOCAL_MODS" "$API_MODS"
 FACTORIO_MODS_DIR="$BUILD_MODS" "$REPO_DIR/make.sh" warp-drive
 
 PACKAGE="$(printf '%s\n' "$BUILD_MODS"/bte-warp-drive_*.zip)"
@@ -125,21 +125,35 @@ run_branch_test "$LOCAL_MODS" local \
   'WARP_TEST_PASS: local research branch accelerated platform laboratories only' \
   bte-warp-drive-space-science-test
 
-# After Practical research an idle drive's detector boosts any research, up to 2x.
-cp "$PACKAGE" "$BOOST_MODS/"
-cp -R "$ROOT_DIR/tests/mods/bte-warp-drive-boost-test" "$BOOST_MODS/"
-"$FACTORIO_BIN" \
-  --mod-directory "$BOOST_MODS" \
-  --create "$TEST_ROOT/boost-save.zip" \
-  --map-gen-seed 12345
-"$FACTORIO_BIN" \
-  --mod-directory "$BOOST_MODS" \
-  --benchmark "$TEST_ROOT/boost-save.zip" \
-  --benchmark-ticks 860 \
-  --benchmark-runs 1 2>&1 | tee "$TEST_ROOT/boost.log"
-if ! grep -q 'WARP_TEST_PASS: Tachyon Science Boost' "$TEST_ROOT/boost.log"; then
-  printf 'Tachyon Science Boost test did not emit its pass marker\n' >&2
-  exit 1
-fi
+# After Practical research each idle drive's detector boosts any research in every laboratory the
+# force owns, and several drives add up. The second run makes the drives' platforms select the
+# local research branch, which must not narrow the boost.
+run_boost_test() {
+  local mods_dir="$1"
+  local label="$2"
+  shift 2
+  mkdir "$mods_dir"
+  cp "$PACKAGE" "$mods_dir/"
+  cp -R "$ROOT_DIR/tests/mods/bte-warp-drive-boost-test" "$mods_dir/"
+  for extra in "$@"; do
+    cp -R "$ROOT_DIR/tests/mods/$extra" "$mods_dir/"
+  done
+  "$FACTORIO_BIN" \
+    --mod-directory "$mods_dir" \
+    --create "$TEST_ROOT/$label-save.zip" \
+    --map-gen-seed 12345
+  "$FACTORIO_BIN" \
+    --mod-directory "$mods_dir" \
+    --benchmark "$TEST_ROOT/$label-save.zip" \
+    --benchmark-ticks 860 \
+    --benchmark-runs 1 2>&1 | tee "$TEST_ROOT/$label.log"
+  if ! grep -q 'WARP_TEST_PASS: Tachyon Science Boost' "$TEST_ROOT/$label.log"; then
+    printf '%s Tachyon Science Boost test did not emit its pass marker\n' "$label" >&2
+    exit 1
+  fi
+}
+
+run_boost_test "$BOOST_MODS" boost-relay
+run_boost_test "$TEST_ROOT/boost-local-mods" boost-local bte-warp-drive-space-science-test
 
 printf 'WARP_TEST_PASS: all runtime tests\n'

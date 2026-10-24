@@ -65,15 +65,12 @@ def check(t):
     if anomaly is not None:
         t.check("Warp anomaly shapes", anomaly["layers"][0].get("frame_count"), 6)
 
-    # Activation shockwaves grow from the building's edge (4.5 tiles) to their reach; the ring is
-    # 7 tiles in radius at scale 1.
+    # Activation shockwaves are one ring sheet that scripts/shockwaves.lua scales and tints; the
+    # trivial smoke it replaced is gone.
+    t.prototype("animation", "bte-warp-drive-shockwave")
     for tint in ("azure", "violet"):
         for reach in (32, 64, 128, 256):
-            wave = t.prototype("trivial-smoke", f"bte-warp-drive-shockwave-{tint}-{reach}")
-            if wave is not None:
-                t.check(f"{tint} shockwave {reach} reach",
-                        [round(wave.get("start_scale") * 7, 3), round(wave.get("end_scale") * 7, 3)],
-                        [4.5, reach])
+            t.absent("trivial-smoke", f"bte-warp-drive-shockwave-{tint}-{reach}")
 
     # While warp holds, a hidden companion makes the building itself hum.
     hum = t.prototype("simple-entity-with-owner", "bte-warp-drive-field-hum")

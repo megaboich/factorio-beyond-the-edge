@@ -317,8 +317,12 @@ local function practical_complete(force)
 end
 
 -- The Tachyon Science Boost share for one drive: tachyon density relative to its maximum times
--- delivered detector power relative to 1 GW. Speed and Severely impatient mode do not apply.
+-- delivered detector power relative to 1 GW. Speed and the impatient-mode multiplier do not
+-- apply.
 local function science_boost(record, platform)
+  if not platform then
+    return 0
+  end
   local power = math.min(1, (record.detector_power_ratio or 0) / DETECTOR_MAXIMUM_POWER_RATIO)
   return SCIENCE_BOOST_MAXIMUM * Research.tachyon_density(platform) / MAXIMUM_DENSITY * power
 end
@@ -332,8 +336,8 @@ end
 -- before one force-wide lab scan; local signals use only labs on their detector surfaces.
 --
 -- Before Practical research, detector signals accelerate only that research and add up across
--- drives. Afterwards every research receives the Tachyon Science Boost, and a laboratory takes
--- only the strongest boost that reaches it, so several drives never exceed the 2x ceiling.
+-- drives. Afterwards every research receives the Tachyon Science Boost: each drive adds up to
+-- 100% of the ordinary rate of every laboratory the force owns, wherever it is, so drives combine.
 local function aggregate_bonus_rates(target_force, target_research)
   local buckets = {}
   for _, record in pairs(storage.drives or {}) do
@@ -360,9 +364,8 @@ local function aggregate_bonus_rates(target_force, target_research)
               relay_signal = 0}
             buckets[force.index] = bucket
           end
-          if Research.branch(entity.surface) == "relay" then
-            bucket.relay_signal = boost and math.max(bucket.relay_signal, bonus_multiplier)
-              or bucket.relay_signal + bonus_multiplier
+          if boost or Research.branch(entity.surface) == "relay" then
+            bucket.relay_signal = bucket.relay_signal + bonus_multiplier
           else
             bucket.local_signals[entity.surface] = bonus_multiplier
           end
@@ -373,12 +376,8 @@ local function aggregate_bonus_rates(target_force, target_research)
   for _, bucket in pairs(buckets) do
     local work = 0
     for surface, signal in pairs(bucket.local_signals) do
-      -- A boosted laboratory already covered by a stronger relay boost gains nothing more.
-      local extra = bucket.boost and math.max(0, signal - bucket.relay_signal) or signal
-      if extra > 0 then
-        local _, platform_rate = working_lab_metrics(surface, bucket.force)
-        work = work + platform_rate * extra
-      end
+      local _, platform_rate = working_lab_metrics(surface, bucket.force)
+      work = work + platform_rate * signal
     end
     if bucket.relay_signal > 0 then
       local _, force_rate = force_lab_metrics(bucket.force)
@@ -402,7 +401,7 @@ function Research.snapshot(record)
   local power_ratio = complete and 0 or (record.detector_power_ratio or 0)
   local _, bonus_multiplier = detector_signal(record, power_ratio)
   local lab_count, lab_rate
-  if branch == "relay" then
+  if complete or branch == "relay" then
     lab_count, lab_rate = force_lab_metrics(force)
   else
     lab_count, lab_rate = working_lab_metrics(entity.surface, force)
@@ -421,6 +420,17 @@ function Research.snapshot(record)
     total_rate = ordinary_lab_rate / seconds + force_bonus_rate
   end
   local boost = complete and science_boost(record, platform) or 0
+  -- Every powered drive of the force adds its own boost; the GUI shows this drive's share and
+  -- the force-wide total.
+  local combined_boost = 0
+  if complete then
+    for _, other in pairs(storage.drives or {}) do
+      local other_entity = other.entity
+      if other_entity and other_entity.valid and other_entity.force == force then
+        combined_boost = combined_boost + science_boost(other, other_entity.surface.platform)
+      end
+    end
+  end
   local map = travel_map(platform)
   local progress_km = travel_depth(platform) or 0
   local deepest_name = map.deepest_name
@@ -450,8 +460,9 @@ function Research.snapshot(record)
     progress_ratio = map.farthest > 0 and progress_km / map.farthest or 0,
     deepest_location = deepest_name and prototypes.space_location[deepest_name] or nil,
     science_boost = boost,
-    science_boost_rate = boost > 0 and research ~= nil
-      and lab_rate * boost / research_seconds(research) or 0
+    combined_science_boost = combined_boost,
+    science_boost_rate = combined_boost > 0 and research ~= nil
+      and lab_rate * combined_boost / research_seconds(research) or 0
   }
 end
 
