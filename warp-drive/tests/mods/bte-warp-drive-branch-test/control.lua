@@ -21,12 +21,12 @@ local TECHNOLOGY = "bte-practical-warp-drive"
 -- The bands are wide enough to survive balance tweaks but
 -- narrow enough to fail on an order-of-magnitude formula error, which is what a wrong
 -- research_unit_energy conversion looks like.
-local NEAR_MINIMUM = 900
-local NEAR_MAXIMUM = 2000
-local FAR_MINIMUM = 14000
-local FAR_MAXIMUM = 18000
+local NEAR_MINIMUM = 1800
+local NEAR_MAXIMUM = 4000
+local FAR_MINIMUM = 28000
+local FAR_MAXIMUM = 36000
 local OUTWARD_GAIN_MINIMUM = 5
-local FAST_MINIMUM = 120000
+local FAST_MINIMUM = 240000
 local SPEED_POWER_GAIN_MINIMUM = 9
 local SPEED_POWER_GAIN_MAXIMUM = 9.75
 local UNBOOSTED_MAXIMUM = 1.5

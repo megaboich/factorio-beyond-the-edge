@@ -24,7 +24,7 @@ local GUI_OUTPUT_SPEED_SIGNAL = "bte_warp_drive_output_speed_signal"
 local GUI_OUTPUT_TACHYON_DENSITY_ENABLED = "bte_warp_drive_output_tachyon_density_enabled"
 local GUI_OUTPUT_TACHYON_DENSITY_SIGNAL = "bte_warp_drive_output_tachyon_density_signal"
 local GUI_CLOSE = "bte_warp_drive_close"
-local LAYOUT_VERSION = 14
+local LAYOUT_VERSION = 15
 -- Tabs in display order; the selected one is remembered per player in storage.gui_tabs.
 local TABS = {"warp", "detector", "signals"}
 local TAB_INDEX = {warp = 1, detector = 2, signals = 3}
@@ -326,13 +326,6 @@ local function add_requirement(parent, name, caption)
   value.style.single_line = false
 end
 
-local function add_bar(parent, name)
-  local bar = parent.add({type = "progressbar", name = name, value = 0, style = "production_progressbar"})
-  bar.style.horizontally_stretchable = true
-  bar.style.top_margin = 2
-  bar.style.bottom_margin = 4
-end
-
 local function add_button(parent, name, style, width, height, font)
   local button = parent.add({type = "button", name = name, caption = "", style = style})
   button.style.width = width
@@ -541,7 +534,7 @@ local function draw_gui(player, record)
   add_heading(detector, "bte_warp_drive_detector_heading", "")
   add_status_row(detector, "bte_warp_drive_detector_status", {"bte-warp-drive.detector-status"})
   add_status_row(detector, "bte_warp_drive_detector_power", {"bte-warp-drive.detector-power"})
-  add_bar(detector, "bte_warp_drive_detector_bar")
+  add_status_row(detector, "bte_warp_drive_detector_request", {"bte-warp-drive.detector-request"})
   add_status_row(detector, "bte_warp_drive_signal_multiplier", {"bte-warp-drive.signal-multiplier"})
   local signal = detector.add({type = "flow", name = "bte_warp_drive_signal_section", direction = "vertical"})
   add_status_row(signal, "bte_warp_drive_detector_speed", {"bte-warp-drive.detector-speed"})
@@ -599,7 +592,7 @@ local REQUIRED_ELEMENTS = {
   "bte_warp_drive_reserve_detail_label", "bte_warp_drive_charge_eta", "bte_warp_drive_warp_level",
   "bte_warp_drive_warp_right", "bte_warp_drive_warp_circuit_locked", "bte_warp_drive_boost_controls",
   "bte_warp_drive_detector_heading", "bte_warp_drive_detector_status", "bte_warp_drive_detector_power",
-  "bte_warp_drive_detector_bar", "bte_warp_drive_signal_multiplier", "bte_warp_drive_signal_section",
+  "bte_warp_drive_detector_request", "bte_warp_drive_signal_multiplier", "bte_warp_drive_signal_section",
   "bte_warp_drive_detector_speed", "bte_warp_drive_detector_power_multiplier",
   "bte_warp_drive_tachyon_rate", "bte_warp_drive_research_heading", "bte_warp_drive_research_status",
   "bte_warp_drive_research_branch", "bte_warp_drive_research_branch_label",
@@ -892,9 +885,13 @@ local function render_detector(view, record, snapshot, research_snapshot)
   set_status(view, "bte_warp_drive_detector_status", {"bte-warp-drive." .. state})
   set_status(view, "bte_warp_drive_detector_power", {"bte-warp-drive.power-value", format_power(power),
     format_power(DETECTOR_MAX_POWER_WATTS), math.floor(power / DETECTOR_MAX_POWER_WATTS * 100)})
-  local fraction = math.min(1, power / DETECTOR_MAX_POWER_WATTS)
-  view.bte_warp_drive_detector_bar.value = fraction
-  view.bte_warp_drive_detector_bar.caption = {"bte-warp-drive.percent-value", math.floor(fraction * 100)}
+  -- The header already draws delivered power as a bar; this row adds the adaptive demand behind it.
+  local requested = record.detector_on and record.detector_request_watts
+  set_row_visible(view, "bte_warp_drive_detector_request", requested ~= nil)
+  if requested then
+    set_status(view, "bte_warp_drive_detector_request", {"bte-warp-drive.detector-request-value",
+      format_power(requested), requested > 0 and math.floor(power / requested * 100) or 0})
+  end
   set_status(view, "bte_warp_drive_signal_multiplier", {"bte-warp-drive.boost-density-value",
     string.format("%.1f", research_snapshot.density), format_km(research_snapshot.maximum_density)})
   view.bte_warp_drive_signal_section.visible = not practical

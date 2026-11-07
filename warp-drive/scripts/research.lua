@@ -7,6 +7,8 @@ local BASE_TACHYONS_PER_SECOND = 2
 local LOCATION_MULTIPLIER_MINIMUM = 10
 local LOCATION_MULTIPLIER_MAXIMUM = 5000
 local DETECTOR_SPEED_REFERENCE = 100
+-- Scales the research bonus before Practical research only; density and the boost are unaffected.
+local DETECTOR_BONUS_MULTIPLIER = 2
 local MAXIMUM_DENSITY = BASE_TACHYONS_PER_SECOND * LOCATION_MULTIPLIER_MAXIMUM
 -- After Practical research the detector powers the Tachyon Science Boost: an extra share of each
 -- eligible laboratory's ordinary rate, up to this much at maximum density and full power.
@@ -308,7 +310,7 @@ local function detector_signal(record, power_ratio)
     * location_multiplier(platform)
     * detector_speed_factor(platform)
     * spacelab_multiplier(entity.surface)
-  return signal, signal * power_ratio * tachyon_bonus_factor()
+  return signal, DETECTOR_BONUS_MULTIPLIER * signal * power_ratio * tachyon_bonus_factor()
 end
 
 local function practical_complete(force)

@@ -108,12 +108,12 @@ P = \mathrm{clamp}\left(\frac{P_{delivered}}{200\ \mathrm{MW}}, 0, 5\right)
 ```
 
 ```math
-B = D S P I
+B = 2 D S P I
 ```
 
-Here, $v$ is platform speed in km/s, $P_{delivered}$ is delivered detector power, $I$ is `1` normally or `1,000` in Severely impatient mode, and $B$ is the bonus multiplier added on top of each eligible laboratory's ordinary research. Thus stationary is `1x` speed scaling, `100 km/s` is `2x`, and each additional `100 km/s` adds `1x` with no cap. At maximum density and `100 km/s`, `200 MW` adds approximately `20,000x` bonus research while `1 GW` adds approximately `100,000x` before the optional impatient multiplier.
+Here, $v$ is platform speed in km/s, $P_{delivered}$ is delivered detector power, $I$ is `1` normally or `1,000` in Severely impatient mode, and $B$ is the bonus multiplier added on top of each eligible laboratory's ordinary research. Thus stationary is `1x` speed scaling, `100 km/s` is `2x`, and each additional `100 km/s` adds `1x` with no cap. At maximum density and `100 km/s`, `200 MW` adds approximately `40,000x` bonus research while `1 GW` adds approximately `200,000x` before the optional impatient multiplier.
 
-For example, without an additional SPACELAB facility bonus, `300,000 km` toward Shattered Planet gives approximately `549 particles/s` of tachyon density. At `50 km/s`, the speed multiplier is `1.5x`; at `500 MW`, the power multiplier is `2.5x`. The resulting effective signal is approximately `2,057 particles/s`, so every eligible laboratory adds about `2,057x` its ordinary rate as bonus research.
+For example, without an additional SPACELAB facility bonus, `300,000 km` toward Shattered Planet gives approximately `549 particles/s` of tachyon density. At `50 km/s`, the speed multiplier is `1.5x`; at `500 MW`, the power multiplier is `2.5x`. The resulting effective signal is approximately `2,057 particles/s`, doubled to a bonus of about `4,115x`: every eligible laboratory adds about `4,115x` its ordinary rate as bonus research.
 
 ## Tachyon Science Boost
 
@@ -215,7 +215,7 @@ The drive window has a header that stays visible and three tabs.
 
 - **Header:** a live view of the drive showing its current animation, one status line saying what it is doing, the route and distance remaining, the effective speed (in cyan while warp boosts it) with the estimated arrival time at that speed, and two large buttons. Before Practical research the buttons are **Start tachyon detector** and **Stop tachyon detector**; afterwards they are **Engage warp drive** and **Disengage**. Both are always shown; a greyed-out button's tooltip says why it cannot act. The status line names the exact blocker when the drive is not ready, such as low speed, endpoint clearance, or the re-entry lockout, and shows a progress bar while charging or detecting.
 - **Warp:** entry requirements (destination, endpoint clearance, re-entry lockout, and engine speed), plus the warp field while charging or in warp. It adds detail behind the header's headline instead of repeating it: the exact reserve energy, then while charging how the reserve size follows platform mass and the time to full charge, or during warp how long the reserve would carry a power outage and the current warp level against what power and the engine allow. Power shows delivered against requested power, plus the part needed for support during warp, and acceleration shows the current ramp state. Its engage and disengage conditions sit beside them. Before Practical research the tab only explains how warp unlocks.
-- **Tachyon Detector**, renamed **Science Boost** after Practical research: detector status, power, tachyon density, and the research it is speeding up, with the detector's start and stop conditions beside them. After Practical research it adds the smaller **Start boost** and **Stop boost** buttons. The ⓘ next to each heading explains the formula.
+- **Tachyon Detector**, renamed **Science Boost** after Practical research: detector status, delivered and requested power, tachyon density, and the research it is speeding up, with the detector's start and stop conditions beside them. After Practical research it adds the smaller **Start boost** and **Stop boost** buttons. The ⓘ next to each heading explains the formula.
 - **Signals:** red and green network status, and the circuit outputs.
 
 While warp holds, the platform's name ends with its current warp level, such as "My platform WARP-2.4" with the tag in cyan, so the space map's platform tooltip and the platform status panel show it too; Factorio does not let mods add lines to either. The tag sits at the end so platform lists still sort by name, follows renames made during warp, and disappears when warp ends.
