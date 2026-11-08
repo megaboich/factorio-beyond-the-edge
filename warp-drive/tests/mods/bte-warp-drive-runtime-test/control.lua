@@ -114,6 +114,10 @@ local function assert_research_gui_snapshot(frame, record)
   local snapshot = Research.snapshot(record)
   local branch = frame and find_gui_element(frame, "bte_warp_drive_research_branch")
   local bonus = frame and find_gui_element(frame, "bte_warp_drive_research_bonus")
+  local graph = frame and find_gui_element(frame, "bte_warp_drive_density_graph")
+  local graph_pos = frame and find_gui_element(frame, "bte_warp_drive_density_graph_position")
+  local bar1 = frame and find_gui_element(frame, "bte_warp_drive_density_bar_1")
+  local bar48 = frame and find_gui_element(frame, "bte_warp_drive_density_bar_48")
   if not snapshot or not branch or type(branch.caption) ~= "table"
       or branch.caption[1] ~= "bte-warp-drive.branch-" .. snapshot.branch then
     fail("research GUI branch did not match its module snapshot")
@@ -122,6 +126,11 @@ local function assert_research_gui_snapshot(frame, record)
       or bonus.caption[1] ~= "bte-warp-drive.research-rate-value"
       or bonus.caption[2] ~= string.format("%.2f", snapshot.bonus_rate) then
     fail("research GUI bonus estimate did not match its module snapshot")
+  end
+  if not graph or not graph.visible or not graph_pos or type(graph_pos.caption) ~= "table"
+      or not bar1 or not bar48
+      or #bar1.parent.children < 2 or #bar48.parent.children < 2 then
+    fail("research GUI did not render the final-route tachyon density line chart")
   end
 end
 
@@ -515,8 +524,32 @@ script.on_nth_tick(10, function()
           or circuit_signal("signal-P") ~= nil then
         fail("research circuit outputs did not expose only the configured tachyon density")
       end
+      -- Saves written before travel_map carried final_length and edge_depth must rebuild the cache
+      -- on demand without requiring on_configuration_changed.
+      storage.travel_map = {
+        by_location = {
+          nauvis = {
+            remaining = {nauvis = 4145000},
+            farthest = 4145000,
+            unit = 15000,
+            deepest_name = "shattered-planet"
+          }
+        }
+      }
+      remote.call("bte-warp-drive-runtime-test", "inject_legacy_travel_map")
+      if math.abs(Research.tachyon_density(platform) - density) > 1e-6
+          or not storage.travel_map.version then
+        fail("stale unversioned travel_map cache was not rebuilt on demand")
+      end
       local settings_platform = storage.settings_drive.surface.platform
-      settings_platform.surface.ignore_surface_conditions = true
+      local settings_lab = settings_platform.surface.create_entity({
+        name = "lab",
+        position = {-9, -9},
+        force = game.forces.player
+      })
+      if not settings_lab then
+        fail("could not place laboratory on settings platform for local branch check")
+      end
       player.opened = storage.settings_drive
       local settings_frame = player.gui.screen.bte_warp_drive_window
       local activate = settings_frame and find_gui_element(settings_frame,
@@ -553,8 +586,10 @@ script.on_nth_tick(10, function()
         "bte_warp_drive_output_tachyon_density_signal")
       local settings_record = Drive.get(settings_platform.index)
       assert_research_gui_snapshot(settings_frame, settings_record)
-      if Research.branch(platform.surface) == Research.branch(settings_platform.surface) then
-        fail("differently configured platform surfaces selected the same research branch")
+      if Research.branch(platform.surface) ~= "relay"
+          or Research.branch(settings_platform.surface) ~= "local"
+          or Research.snapshot(platform_record).lab_count ~= 0 then
+        fail("platform without labs did not select relay (counting only planetary labs) or platform with lab did not select local")
       end
       if not activate or not activate.state or not deactivate or deactivate.state
         or not first or first.elem_value.name ~= "signal-A"
@@ -1430,10 +1465,12 @@ script.on_nth_tick(10, function()
     if player then
       local frame = player.gui.screen.bte_warp_drive_window
       local green_network = find_gui_element(frame, "bte_warp_drive_circuit_green_network")
+      local green_signals_frame = find_gui_element(frame, "bte_warp_drive_circuit_green_signals_frame")
       local tooltip = green_network and green_network.tooltip
       if type(green_network.caption) ~= "table"
         or green_network.caption[1] ~= "bte-warp-drive.circuit-network-connected"
         or #green_network.caption ~= 4
+        or not green_signals_frame or green_signals_frame.visible
         or type(tooltip) ~= "table" or #tooltip ~= 2
         or type(tooltip[2]) ~= "table"
         or tooltip[2][1] ~= "bte-warp-drive.circuit-network-tooltip-heading" then
@@ -1464,6 +1501,10 @@ script.on_nth_tick(10, function()
         "bte_warp_drive_detector_start_state")
       local green_network = find_gui_element(player.gui.screen.bte_warp_drive_window,
         "bte_warp_drive_circuit_green_network")
+      local green_signals_frame = find_gui_element(player.gui.screen.bte_warp_drive_window,
+        "bte_warp_drive_circuit_green_signals_frame")
+      local green_signals = find_gui_element(player.gui.screen.bte_warp_drive_window,
+        "bte_warp_drive_circuit_green_signals")
       local tooltip = green_network and green_network.tooltip
       local signal_text = tooltip and tooltip[#tooltip]
       if not state or state.sprite ~= "utility/status_working"
@@ -1471,6 +1512,8 @@ script.on_nth_tick(10, function()
         or type(green_network.caption) ~= "table"
         or green_network.caption[1] ~= "bte-warp-drive.circuit-network-connected-signals"
         or green_network.caption[4] ~= 1 or green_network.caption[5] < 2
+        or not green_signals_frame or not green_signals_frame.visible
+        or not green_signals or #green_signals.children < 2
         or type(tooltip) ~= "table" or tooltip[1] ~= ""
         or type(tooltip[2]) ~= "table"
         or tooltip[2][1] ~= "bte-warp-drive.circuit-network-tooltip-heading-signals"

@@ -1,25 +1,31 @@
--- Verifies the Tachyon Science Boost: once Practical Warp Drive is researched, each idle drive's
--- powered detector adds its share of tachyon density times delivered power relative to 1 GW, up
--- to 100% of every laboratory's ordinary rate, and the boosts of several drives add up.
+-- Verifies the General Science Tachyon Boost: once Practical Warp Drive is researched, each idle
+-- drive's powered detector uses the same tachyon signal formula (T * S * P * R) divided by
+-- 10,000 particles/s:
+--   - At 10,000 particles/s, 100 km/s (S = 2), and 1 GW (P = 10):
+--     - Remote transfer (no labs on platform, R = 0.1): +200% (2.0x bonus) per drive to planetary
+--       laboratories, and boosts from multiple relay drives add together.
+--     - Onboard local (labs on platform, R = 1.0): +2,000% (20.0x bonus) exclusively to working
+--       laboratories on that platform.
 --
--- Two drives sit almost at the Shattered Planet, where density is close to its maximum, each on
--- a platform with a controlled power source: 2 GW first, so each detector's initial 1 GW request
--- is met at once, then none for the baseline window, then 200 MW, which the adaptive detectors
--- climb to in 10 MW steps from zero. The measured laboratories are on Nauvis only. With
--- bte-warp-drive-space-science-test the platforms select the local research branch, which before
--- Practical research would leave Nauvis unaccelerated; the boost must reach it regardless. Each
--- window spans the same two research updates.
+-- Two drives sit almost at the Shattered Planet (T ~= 10,000), moving at 100 km/s (S = 2), each
+-- on a platform with a controlled power source: 2 GW first (satisfying the 1 GW detector cap,
+-- P = 10), then none for the baseline window, then 200 MW (P = 2).
 local Research = require("__bte-warp-drive__/scripts/research")
 
+local EXPECT_LOCAL = script.active_mods["bte-warp-drive-space-science-test"] ~= nil
 local TECHNOLOGY = "bte-practical-warp-drive"
 local ROUTE = "solar-system-edge-shattered-planet"
 local DEEP_DISTANCE = 0.999
+local PLATFORM_SPEED_TILES_PER_TICK = 100 / 60
 local BASELINE_TICK = 190
 local REFERENCE_POWER_TICK = 430
 local FULL_WATTS = 2e9
 local REFERENCE_WATTS = 2e8
 local LAB_COUNT = 3
-local DRIVE_COUNT = 2
+local DRIVE_COUNT = EXPECT_LOCAL and 1 or 2
+-- At 100 km/s (S = 2) and 1 GW (P = 10), each drive adds 20 * share locally (+2,000%) or
+-- 2 * share via remote planetary transfer (+200%).
+local FULL_BOOST_PER_DRIVE = EXPECT_LOCAL and 20 or 2
 
 local function fail(message)
   error("WARP_TEST_FAIL: " .. message)
@@ -50,7 +56,7 @@ local function pick_technology(force)
     local technology = force.technologies[name]
     local usable = technology.enabled and not technology.researched
       and not technology.prototype.research_trigger
-      and technology.research_unit_count >= 100
+      and technology.research_unit_count >= 1000
       and #technology.research_unit_ingredients > 0
     for _, prerequisite in pairs(usable and technology.prerequisites or {}) do
       usable = usable and prerequisite.researched
@@ -73,7 +79,7 @@ local function set_platform_power(watts)
   end
 end
 
-local function build_platform(force, index)
+local function build_platform(force, index, technology)
   local platform = force.create_space_platform({
     name = "Warp boost test " .. index,
     planet = "nauvis",
@@ -101,6 +107,20 @@ local function build_platform(force, index)
   platform.surface.create_entity({name = "substation", position = {6, 4}, force = force})
   if not drive or not source then
     fail("could not build boost test platform " .. index)
+  end
+  if EXPECT_LOCAL then
+    local lab_Offsets = {{-10, -8}, {-4, -8}, {4, -8}}
+    for lab_index = 1, LAB_COUNT do
+      local offset = lab_Offsets[lab_index]
+      platform.surface.create_entity({name = "substation", position = {offset[1], offset[2] + 3}, force = force})
+      local lab = platform.surface.create_entity({name = "lab", position = offset, force = force})
+      if not lab then
+        fail("could not create platform laboratory for local boost test")
+      end
+      for _, ingredient in pairs(technology.research_unit_ingredients) do
+        lab.insert({name = ingredient.name, count = 200})
+      end
+    end
   end
   source.input_flow_limit = 0
   source.energy = 0
@@ -132,22 +152,24 @@ script.on_init(function()
       entity.destroy()
     end
   end
-  local source = nauvis.create_entity({name = "electric-energy-interface", position = {20, 20}, force = force})
-  source.power_production = 1e9 / 60
-  for index = 1, LAB_COUNT do
-    local x = 24 + index * 6
-    nauvis.create_entity({name = "substation", position = {x, 24}, force = force})
-    local lab = nauvis.create_entity({name = "lab", position = {x, 28}, force = force})
-    for _, ingredient in pairs(technology.research_unit_ingredients) do
-      lab.insert({name = ingredient.name, count = 200})
+  if not EXPECT_LOCAL then
+    local source = nauvis.create_entity({name = "electric-energy-interface", position = {20, 20}, force = force})
+    source.power_production = 1e9 / 60
+    for index = 1, LAB_COUNT do
+      local x = 24 + index * 6
+      nauvis.create_entity({name = "substation", position = {x, 24}, force = force})
+      local lab = nauvis.create_entity({name = "lab", position = {x, 28}, force = force})
+      for _, ingredient in pairs(technology.research_unit_ingredients) do
+        lab.insert({name = ingredient.name, count = 200})
+      end
     end
+    nauvis.create_entity({name = "substation", position = {22, 22}, force = force})
   end
-  nauvis.create_entity({name = "substation", position = {22, 22}, force = force})
 
   storage.platforms = {}
   storage.platform_sources = {}
   for index = 1, DRIVE_COUNT do
-    storage.platforms[index], storage.platform_sources[index] = build_platform(force, index)
+    storage.platforms[index], storage.platform_sources[index] = build_platform(force, index, technology)
   end
   storage.technology = technology.name
   storage.samples = {}
@@ -155,11 +177,11 @@ script.on_init(function()
 end)
 
 -- Platform physics would carry the platform to its destination, where the density collapses;
--- pin it in place, and keep the field's asteroids off the undefended platform.
+-- pin it in place at 100 km/s (S = 2), and keep the field's asteroids off the undefended platform.
 script.on_event(defines.events.on_tick, function()
   for _, platform in pairs(storage.platforms) do
     platform.paused = false
-    platform.speed = 1
+    platform.speed = PLATFORM_SPEED_TILES_PER_TICK
     platform.distance = DEEP_DISTANCE
     for _, entity in pairs(platform.surface.find_entities_filtered({
       type = {"asteroid", "solar-panel", "accumulator"}
@@ -176,7 +198,9 @@ script.on_nth_tick(10, function()
     fail("the boosted research stopped being active")
   end
   if game.tick == BASELINE_TICK then
-    set_platform_power(0)
+    -- In the local run, platform labs need ~180 kW to keep running during the unpowered detector
+    -- baseline window; 180 kW is < 0.2% of 100 MW so detector power ratio is negligible (< 0.002).
+    set_platform_power(EXPECT_LOCAL and 180000 or 0)
   elseif game.tick == REFERENCE_POWER_TICK then
     set_platform_power(REFERENCE_WATTS)
   elseif game.tick == 60 then
@@ -197,21 +221,22 @@ script.on_nth_tick(10, function()
     local share = Research.tachyon_density(storage.platforms[1]) / 10000
     local full = (samples.full1 - samples.full0) / baseline
     local reference = (force.research_progress - samples.reference0) / baseline
-    local detail = string.format("density share=%.4f full=%.4fx reference=%.4fx", share, full,
-      reference)
+    local expected_full = 1 + DRIVE_COUNT * FULL_BOOST_PER_DRIVE * share
+    local detail = string.format("density share=%.4f full=%.4fx expected_full=%.4fx reference=%.4fx",
+      share, full, expected_full, reference)
     if share < 0.95 then
       fail("the test platform was not near maximum tachyon density: " .. detail)
     end
-    if math.abs(full - (1 + DRIVE_COUNT * share)) > 0.05 * DRIVE_COUNT then
-      fail(DRIVE_COUNT .. " drives at 1 GW did not each add their density share: " .. detail)
+    if math.abs(full - expected_full) > 0.08 * DRIVE_COUNT * FULL_BOOST_PER_DRIVE then
+      fail(DRIVE_COUNT .. " drives at 1 GW and 100 km/s did not match expected boost: " .. detail)
     end
-    if reference < 1 + 0.15 * DRIVE_COUNT * share or reference > 1 + 0.21 * DRIVE_COUNT * share then
-      fail(DRIVE_COUNT .. " drives at 200 MW did not each add a fifth of their density share: "
+    if reference < 1 + 0.15 * DRIVE_COUNT * FULL_BOOST_PER_DRIVE * share
+        or reference > 1 + 0.22 * DRIVE_COUNT * FULL_BOOST_PER_DRIVE * share then
+      fail(DRIVE_COUNT .. " drives at 200 MW did not each add a fifth of their 1 GW boost: "
         .. detail)
     end
     log("WARP_TEST_PASS: Tachyon Science Boost from " .. DRIVE_COUNT .. " drives reached "
       .. string.format("%.3f", full) .. "x at 1 GW and " .. string.format("%.3f", reference)
-      .. "x at 200 MW (" .. (script.active_mods["bte-warp-drive-space-science-test"]
-        and "local" or "relay") .. " branch)")
+      .. "x at 200 MW (" .. (EXPECT_LOCAL and "local" or "relay") .. " branch)")
   end
 end)

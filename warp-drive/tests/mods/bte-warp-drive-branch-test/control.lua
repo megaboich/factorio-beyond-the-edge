@@ -1,28 +1,34 @@
 -- Verifies which laboratories receive the tachyon research bonus.
 --
--- The mod under test never looks for a mod by name; it asks whether every science pack
--- Practical Warp Drive requires can be crafted on a space platform. This test flips that
--- capability with bte-warp-drive-space-science-test, which strips the four vanilla planetary
--- surface conditions, and asserts the resulting routing from observable research progress
--- alone rather than by reading Warp Drive's internal state.
+-- Before Practical Warp Drive is researched, a drive delivers 100% of its tachyon signal
+-- exclusively to working laboratories on its own platform when at least one laboratory building
+-- exists on that platform ("local" branch). When no laboratories are built on the drive's
+-- platform ("relay" branch), it relays the signal to working planetary laboratories with a 10x
+-- remote-transfer loss (0.1x).
 --
--- Laboratories exist only on Nauvis until tick 520, so the two branches are distinguished
--- by whether powering the detector accelerates them at all. The space-science patch also
--- enables Severely impatient mode by default, giving the local run exact 1,000x coverage.
+-- In the relay run, laboratories exist only on Nauvis. In the local run
+-- (bte-warp-drive-space-science-test), a second unpowered platform also has a laboratory before
+-- tick 520, proving that the relay branch accelerates only planetary laboratories (not other
+-- platforms) and that placing laboratories on the detector platform at tick 520 switches it to
+-- 100% local acceleration while leaving planetary laboratories unaccelerated. The space-science
+-- patch also enables Severely impatient mode by default, giving the local run exact 1,000x
+-- coverage.
 local EXPECT_LOCAL = script.active_mods["bte-warp-drive-space-science-test"] ~= nil
-local BONUS_FACTOR = EXPECT_LOCAL and 1000 or 1
+-- Local branch receives 100% signal (1x * 1,000 impatient = 1,000x); relay branch receives 1/10
+-- remote-transfer signal (0.1x).
+local BONUS_FACTOR = EXPECT_LOCAL and 1000 or 0.1
 local TECHNOLOGY = "bte-practical-warp-drive"
--- Signal strength follows orbital distance from the star. Just outside the Solar system
--- edge is worth about 640 particles/s after 345,000 km of travel; almost at the Shattered
--- Planet, on the same connection, is near the 10000 particles/s density ceiling. Platform
--- speed multiplies both branches without a cap. Near and far windows use the settled 200 MW
--- reference power; the final 200 km/s window starts after adaptive demand settles at 1 GW and
--- must gain the expected 5x power factor as well as the speed increase.
+-- Signal strength follows route depth. At 2.5% into the final route (100,000 km past the Solar
+-- System Edge), density is about 981 particles/s; almost at the Shattered Planet, on the same
+-- connection, it is near the 10,000 particles/s density ceiling. Platform speed multiplies both
+-- branches without a cap. Near and far windows use 200 MW (a 2x power factor); the final 200 km/s
+-- window starts after adaptive demand settles at 1 GW (10x) and must gain the expected 5x power
+-- factor as well as the speed increase.
 -- The bands are wide enough to survive balance tweaks but
 -- narrow enough to fail on an order-of-magnitude formula error, which is what a wrong
 -- research_unit_energy conversion looks like.
-local NEAR_MINIMUM = 1800
-local NEAR_MAXIMUM = 4000
+local NEAR_MINIMUM = 3500
+local NEAR_MAXIMUM = 6500
 local FAR_MINIMUM = 28000
 local FAR_MAXIMUM = 36000
 local OUTWARD_GAIN_MINIMUM = 5
@@ -133,7 +139,16 @@ local function create_branch_probe(force)
     end
   end
   platform.surface.set_tiles(tiles)
-  platform.surface.ignore_surface_conditions = true
+  -- Place an unpowered laboratory on the probe platform so it selects the local branch (with 0
+  -- working labs) and therefore leaves planetary laboratories on Nauvis at their ordinary rate.
+  local probe_lab = platform.surface.create_entity({
+    name = "lab",
+    position = {-9, -9},
+    force = force
+  })
+  if not probe_lab then
+    fail("branch probe lab creation returned nil")
+  end
   local drive = platform.surface.create_entity({
     name = "bte-warp-drive-controller",
     position = {0, 10},
@@ -206,6 +221,21 @@ script.on_init(function()
     platform.hub.destructible = false
   end
 
+  -- In the local branch run, place an unpowered laboratory on the platform before tick 520 so the
+  -- drive selects the local branch (with 0 working labs on the ship) and leaves Nauvis unboosted
+  -- during the [powered_p0, p2] window, then populate working platform labs at tick 520.
+  if EXPECT_LOCAL then
+    local standby_lab = platform.surface.create_entity({
+      name = "lab",
+      position = {-12, 12},
+      force = force
+    })
+    if not standby_lab then
+      fail("standby platform lab creation returned nil")
+    end
+    storage.standby_lab = standby_lab
+  end
+
   platform.space_connection = ROUTE
   platform.distance = 0.5
   platform.speed = 1
@@ -240,10 +270,13 @@ script.on_nth_tick(10, function()
     storage.samples.powered_p0 = force.research_progress
   elseif game.tick == 520 then
     storage.samples.p2 = force.research_progress
-    -- Only the local branch needs laboratories on the platform. Leaving the relay run with
+    -- Only the local branch needs working laboratories on the platform. Leaving the relay run with
     -- Nauvis laboratories alone keeps every measured window built from the same lab count,
     -- so a window divided by the baseline is directly comparable between the two branches.
     if EXPECT_LOCAL then
+      if storage.standby_lab and storage.standby_lab.valid then
+        storage.standby_lab.destroy()
+      end
       -- The helper's controlled source powers the whole platform grid. Adding a vanilla EEI
       -- here would also power the detector and invalidate the 200 MW measurement window.
       build_labs(platform.surface, force, {x = -9, y = -9}, LAB_COUNT)
@@ -310,11 +343,11 @@ script.on_nth_tick(10, function()
     if EXPECT_LOCAL then
       storage.branch_marker = "WARP_TEST_PASS: local research branch accelerated platform laboratories only"
     else
-      storage.branch_marker = "WARP_TEST_PASS: relay research branch accelerated force-wide laboratories"
+      storage.branch_marker = "WARP_TEST_PASS: relay research branch accelerated planetary laboratories with 10x transfer loss"
     end
-    -- The primary surface has populated its branch cache by now. A second platform that
-    -- ignores surface conditions must choose the local branch and leave Nauvis labs at
-    -- their ordinary rate, even when the primary platform selected the relay branch.
+    -- A second platform that has a laboratory on its surface must select the local branch and
+    -- leave Nauvis labs at their ordinary rate, even when the primary platform selected the relay
+    -- branch.
     drive.destroy()
     for _, lab in pairs(platform.surface.find_entities_filtered({type = "lab", force = force})) do
       lab.destroy()

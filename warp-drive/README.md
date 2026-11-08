@@ -1,6 +1,26 @@
-# Factorio Warp Drive Mod
+# Beyond the Edge: Warp Drive
 
-Warp Drive is a standalone Factorio: Space Age post-game mod. It adds one platform-only building and two technologies. The experimental drive detects tachyons to accelerate its own final research; the completed drive emulates subspace travel with a speed boost derived from active engine thrust.
+**Beyond the Edge: Warp Drive** is a standalone Factorio: Space Age post-game mod. It adds one platform-only building and two technologies: **Theoretical Warp Drive** and **Practical Warp Drive**. Before the final technology is complete, the experimental drive acts as a deep-space tachyon detector that dramatically accelerates its own research; once complete, the same building becomes a warp engine that multiplies platform travel speed and can boost general science when idle.
+
+<!-- Demo video TBD -->
+
+The mod requires `base >= 2.1.0` and `space-age >= 2.1.0`. [Beyond the Edge: Space Lab](../spacelab/README.md) is optional.
+
+## Overview
+
+The Shattered Planet route is `4,000,000 km` long. Its rising asteroid density turns the post-game into an open-ended platform-engineering challenge, but eventually progress becomes waiting at a pace the factory cannot improve.
+
+Warp Drive turns distance into a production input, then turns that research into faster travel:
+
+- **Tachyon research:** Subspace Tachyon Particles are transient observations, not items. Their signal strengthens with distance into deep space and multiplies laboratory progress toward **Practical Warp Drive** using the normal research queue and science packs.
+- **Subspace travel:** Warp is accelerated travel, not teleportation. Thrusters, fuel, platform weight, power generation, schedules, and route direction all continue to matter.
+- **The resource trade-off:** Asteroids vanish while in subspace, so high speed cuts off the platform's raw-material supply. Sustained deep-space flight becomes an automation puzzle of cycling between warp travel and normal-space asteroid collection.
+
+The mod adds no new laboratories, science packs, or particle items. Exactly one Warp Drive may be installed per space platform.
+
+## Building And Technologies
+
+<img src="docs/icons/bte-warp-drive.png" width="24" height="24" alt=""> **Warp Drive:** An `8x8` platform-only drive core, the same size as the space platform hub. It operates across five stages:
 
 | Standby | Detecting tachyons | Charging |
 | --- | --- | --- |
@@ -8,250 +28,11 @@ Warp Drive is a standalone Factorio: Space Age post-game mod. It adds one platfo
 | **Activation** | **Warp** | |
 | ![Warp Drive entering warp](docs/warp-drive-activation.gif) | ![Warp Drive at warp](docs/warp-drive-warp.gif) | |
 
-The mod requires `base >= 2.1.0` and `space-age >= 2.1.0`. SPACELAB is optional.
-
-## Why This Mod Exists
-
-The Shattered Planet route is `4,000,000 km` long. Its rising asteroid density turns the post-game into an open-ended platform-engineering challenge, but eventually progress becomes waiting at a rate the factory cannot improve.
-
-Warp Drive makes distance a production input. Deep space becomes the best place to research a technology that removes the travel plateau. The expedition is still a factory problem: a light, well-powered platform detects more tachyons, reaches warp sooner, and travels faster.
-
-Warp is accelerated travel, not teleportation. Entering subspace starts at Warp-1 and a `10x` effective speed boost. After support power stabilizes, the drive accelerates through approximately one additional warp level every 2 seconds while engine thrust and support power permit. Thrusters, fuel, weight, power, schedules, and route direction all continue to matter. Asteroids vanish in subspace, so speed also cuts off the platform's raw-material supply.
-
-## Design
-
-### Standard-Grid Electricity
-
-Warp Drive is an ordinary secondary-priority consumer, like most platform machines. It requests its current detector, charging, or support demand directly from the platform grid. During a generation shortfall, Factorio shares available power proportionally with other secondary consumers; the drive measures what it actually receives. In research mode, it lowers detector demand to delivered power after a shortfall and probes for another `10 MW` when fully supplied, converging on spare generation instead of continuously starving other machines. Its script-owned support reserve covers a warp shortfall until depleted, then exits warp safely.
-
-Warp Drive otherwise turns deep-space distance into research output, then turns that research into faster travel. It keeps the challenge factory-driven:
-
-- Research still uses the normal queue, laboratories, and science packs.
-- Engine thrust sets the maximum warp level; reaching it takes time and sufficient power.
-- Charge scales with platform weight; support power scales with both weight and warp level.
-- Asteroids disappear during warp, so sustained travel interrupts asteroid collection.
-- Circuits are optional but can automate warp around platform reserves.
-
-The mod adds no laboratories, science packs, particle items, or separate research pool. Exactly one Warp Drive may be installed per platform.
-
-## Subspace And Tachyons
-
-Subspace Tachyon Particles are transient observations, not resources. They cannot be collected, stored, shipped, or crafted into an item. Their signal strengthens with distance travelled toward the outermost destination in a connected route network.
-
-The experimental Warp Drive is first a detector. Its observations provide bonus research through eligible working laboratories. Where that bonus applies depends on whether all required science packs can be produced in space.
-
-Once Practical Warp Drive is researched, the same building becomes an engine. Warp moves the platform through subspace, where ordinary asteroid chunks do not exist. Departure and arrival still occur in normal space, which is why the first and final `1,000 km` remain conventional travel.
-
-## Research
-
-Before Practical Warp Drive is researched, the drive acts as a detector:
-
-- **Start tachyon detector** and **Stop tachyon detector** switch detection on and off; it stays in that state until switched again. New drives start with the detector on. Stopping it ends its power draw and research contribution.
-- Optional start and stop circuit conditions switch the detector the same way while they are true; the stop condition wins when both are.
-- It adaptively requests up to `1 GW` from the platform grid as an ordinary secondary-priority consumer. A shortfall lowers its next request to delivered power; full delivery makes it probe `10 MW` higher.
-- `200 MW` preserves the base detector rate; each additional `200 MW` adds another full power factor, up to `5x` at `1 GW`.
-- Partial power scales its research bonus continuously.
-- The bonus applies only while you are actively researching Practical Warp Drive. After that, the detector provides the much smaller [Tachyon Science Boost](#tachyon-science-boost) instead.
-- Labs consume the technology's normal science packs at their normal rate; tachyons add progress without increasing pack consumption.
-- The runtime Map setting **Severely impatient mode** multiplies the tachyon research bonus by `1,000`. It is for severely impatient people and takes effect immediately without restarting the game.
-
-### Where Research Happens
-
-Warp Drive automatically checks whether every required science pack can be produced on a space platform. It checks available recipes, not installed mod names.
-
-| Available science production | Labs receiving the bonus |
-| --- | --- |
-| Every required pack can be produced in space | Working labs on the drive's platform only |
-| One or more required packs cannot be produced in space | All of your working labs, wherever they are located |
-
-In an unmodded Space Age game, several required science packs cannot be produced in space. The drive therefore relays its observations to all working laboratories, allowing the detector platform to travel while the laboratory base remains at home. If another mod makes every required pack producible in space, only working laboratories on the drive's own platform receive the bonus.
-
-This avoids a dead end: Agricultural Science Packs spoil long before a platform can carry an imported stockpile deep into the final route. When every pack can be produced in orbit, the expedition instead becomes a self-contained research-platform challenge.
-
-### Tachyon Signal
-
-Signal density rises geometrically with kilometres travelled toward the deepest location in the platform's connected route network. Separate route networks are measured independently.
-
-The route-depth ratio $r$ and tachyon density $D$ are:
-
-```math
-r = \mathrm{clamp}\left(
-  \frac{\ln\left(\max(d, d_{min}) / d_{min}\right)}
-       {\ln\left(d_{max} / d_{min}\right)},
-  0, 1
-\right)
-```
-
-```math
-D = 20 \left(\frac{10000}{20}\right)^r
-```
-
-Here, $d$ is the distance travelled into the route network, $d_{min}$ is its shortest connection, and $d_{max}$ is the full depth to its outermost destination. $D$ is measured in particles per second.
-
-| Position in vanilla | Kilometres flown | Route depth | Density |
-| --- | ---: | ---: | ---: |
-| Nauvis | `0` | `0%` | `20 particles/s` |
-| Vulcanus, Gleba, or Fulgora | `15,000` | `0%` | `20 particles/s` |
-| Aquilo | `45,000` | `20%` | `67 particles/s` |
-| Solar System Edge | `145,000` | `40%` | `246 particles/s` |
-| Halfway through the final route | `2,145,000` | `88%` | `4,828 particles/s` |
-| Shattered Planet | `4,145,000` | `100%` | `10,000 particles/s` |
-
-Platform speed and delivered detector power produce the final research multiplier:
-
-```math
-S = 1 + \frac{v}{100}
-```
-
-```math
-P = \mathrm{clamp}\left(\frac{P_{delivered}}{200\ \mathrm{MW}}, 0, 5\right)
-```
-
-```math
-B = 2 D S P I
-```
-
-Here, $v$ is platform speed in km/s, $P_{delivered}$ is delivered detector power, $I$ is `1` normally or `1,000` in Severely impatient mode, and $B$ is the bonus multiplier added on top of each eligible laboratory's ordinary research. Thus stationary is `1x` speed scaling, `100 km/s` is `2x`, and each additional `100 km/s` adds `1x` with no cap. At maximum density and `100 km/s`, `200 MW` adds approximately `40,000x` bonus research while `1 GW` adds approximately `200,000x` before the optional impatient multiplier.
-
-For example, without an additional SPACELAB facility bonus, `300,000 km` toward Shattered Planet gives approximately `549 particles/s` of tachyon density. At `50 km/s`, the speed multiplier is `1.5x`; at `500 MW`, the power multiplier is `2.5x`. The resulting effective signal is approximately `2,057 particles/s`, doubled to a bonus of about `4,115x`: every eligible laboratory adds about `4,115x` its ordinary rate as bonus research.
-
-## Tachyon Science Boost
-
-Once Practical Warp Drive is researched, the detector speeds up any research, far more modestly:
-
-```math
-B_{science} = \frac{D}{10000} \cdot \mathrm{clamp}\left(\frac{P_{delivered}}{1\ \mathrm{GW}}, 0, 1\right)
-```
-
-Every laboratory your force owns, on any planet or platform, adds $B_{science}$ times its ordinary rate as bonus research. One drive therefore reaches its `+100%` maximum only at the Shattered Planet's `10,000 particles/s` with a full `1 GW`. Halfway through the final route at `4,828 particles/s`, `1 GW` gives about `+48%`, and `200 MW` there gives about `+10%`. Platform speed and Severely impatient mode do not apply.
-
-Boosts from several drives add up:
-
-```math
-\text{research} = \left(1 + \sum_{drives} B_{science}\right) \cdot \text{ordinary research}
-```
-
-Three drives at full strength therefore give `4x` research everywhere.
-
-- **Start boost** and **Stop boost** in the drive window switch it on and off; it stays in that state until switched again. It is the same detector switch as before Practical research, so a detector left running keeps boosting, and new drives start with it on. Optional start and stop circuit conditions switch it the same way while they are true, the stop condition winning.
-- It runs only while warp is not engaged: it pauses during charging, warp, and the re-entry lockout, then resumes on its own.
-- It uses the detector's adaptive demand, up to `1 GW` of spare platform power.
-- Unlike the research acceleration before Practical research, the boost does not depend on [where research happens](#where-research-happens): it always reaches every laboratory you own.
-- The Science Boost tab shows this drive's boost and the combined boost of all your drives.
-- Labs consume packs at their normal rate; the boost adds progress without extra packs.
-
-## Warp Travel
-
-After Practical Warp Drive is researched:
-
-- The warp support reserve stores `100 J` per kilogram of current platform weight.
-- Charging and active warp are ordinary secondary-priority loads. During a brownout they share available power proportionally with most platform machines. Reserve replenishment is capped at the same `10 W/kg` charging rate.
-- **Engage warp drive** starts charging the reserve at once. It is available only while the drive is idle and minimum speed, active travel, endpoint clearance, and re-entry lockout are all satisfied. Losing any of them after the audible buildup begins resets the reserve to zero, plays a matching power-down sound, and starts a 5-second re-entry lockout, so charging must complete in one uninterrupted cycle.
-- Delivered charging power is transferred into an exact, script-owned mass-scaled reserve. The hidden consumer cannot output that private reserve back to the ship network and is not classified as accumulator storage.
-- Warp entry requires at least `50 km/s`, a full reserve, active travel, and more than `1,000 km` clearance from both route endpoints.
-- Subspace travel always begins at Warp-1, applying a `10x` boost.
-- Warp entry spends 90% of the activation charge and retains the remaining 10% as the initial support reserve. Delivered power beyond active support demand replenishes it toward 100% during warp.
-- After a brief support-power stabilization interval, the drive gains approximately one warp level every 2 seconds. Each level requires another `50 km/s` of engine speed and `10 W/kg` of support power.
-- Warp-10 therefore requires at least `500 km/s`, provides a `100x` boost, and takes approximately 18 seconds to reach from Warp-1 after stabilization.
-- Warp level has no scripted maximum; Factorio's platform physics and the increasing power demand provide the limits.
-- The drive compares delivered power with the next fractional level's support demand before accelerating into it.
-- Lost engine speed lowers sustainable warp levels immediately. Falling below the minimum `50 km/s` starts a prominent 5-second exit warning; restoring speed during that grace period keeps Warp-1 engaged. If power falls below the current level's support demand, the drive holds that level and drains its warp support reserve in proportion to the shortfall. A complete outage lasts 1 second immediately after entry or 10 seconds after the reserve replenishes to full.
-- Charging rises through a 20-step machinery hum and climbing capacitor whine. Warp activation is a 5-second breach of the dimensional edge: the whine screams upward, the air is drawn in, and at the core's flash a vortex tears across the ship, a jet-like phasing roar and howling wind over a deep, shimmering hum, before it settles into a continuous two-part subspace ambience. Exit pulls the vortex back in, lands with a thump, and spins the drive down. These sounds play at full volume across the whole platform, on the game-effects volume slider. While warp holds, the building itself keeps humming with the field it maintains, audible nearby like other machines.
-- Warp removes asteroid chunks and large asteroids while active: the activation shockwave sweeps away those already around the ship, each vanishing as the ring reaches it, and any that appear later vanish at once. Asteroids keep flying for the moment before the ring reaches them, so the ship's defences still matter at entry. Warp also fills the space around the ship, 128 tiles out on every side, with subspace phenomena. Glowing streaks in shades of electric blue rush past. Harmless Fulgora-style lightning strikes around the Warp Drive itself, each bolt landing within 10 tiles of it about once every 1.7 seconds; open space stays free of lightning. Behind it all, large pastel anomalies, 30 to 60 tiles across, drift slowly beneath the ship, swelling, turning, changing shape and hue, and fading in and out over 30 to 60 seconds each, independent of the lightning. They fade in with warp and away after it.
-- Warp exits immediately on **Disengage**, when the disengage condition becomes true, or when route eligibility is lost. Minimum engine speed has the 5-second grace period above; support failure exits when the warp support reserve is depleted.
-- Each engagement is one jump: after warp exits for any reason, the drive stays idle until Engage is clicked again or the engage condition is true.
-- Every active-warp exit starts a 10-second charge and re-entry lockout; interrupted activation uses the same lockout mechanism for 5 seconds.
-- The first and final `1,000 km` of each connection use conventional travel. Connections no longer than `2,000 km` cannot use warp.
-
-For a `10,000 tonne` platform, the warp support reserve holds `1 GJ`, charging requests up to `100 MW` and takes 10 seconds at full power, entry retains `100 MJ`, and active replenishment restores the missing 90% in 9 seconds at that rate. Support is capped at `100 MW` at Warp-1 and `200 MW` at Warp-2, before the separate replenishment allowance.
-
-Factorio reports runtime platform weight directly in kilograms. The drive uses that value without the data-stage gram conversion, so reserve and support requirements scale against the full displayed platform mass.
-
-The exact mass and speed scaling is:
-
-```math
-E_{activation} = m \cdot 100\ \mathrm{J/kg}
-```
-
-```math
-L_{engine} = \frac{v_{engine}}{50\ \mathrm{km/s}}
-```
-
-```math
-L_{power} = \frac{P_{available}}{m \cdot 10\ \mathrm{W/kg}}
-```
-
-```math
-L_{target} = \min(L_{engine}, L_{power})
-```
-
-```math
-B = 10L_{current}
-```
-
-```math
-P_{support} = m \cdot 10\ \mathrm{W/kg} \cdot L_{requested}
-```
-
-```math
-v_{subspace} = B \cdot v_{engine}
-```
-
-```math
-t_{charge} = \frac{E_{activation}}{P_{charge}}
-```
-
-Here, $m$ is current platform mass in kilograms, $L_{current}$ is the continuous active warp level, $L_{requested}$ is the next small acceleration step, $B$ is the effective speed boost, $P_{available}$ is delivered support power, $P_{charge}$ is delivered charging power, and $v_{engine}$ is the platform's current engine-derived speed. Entry sets $L_{current}=1$ and spends 90% of the activation charge. After support demand is met, up to `10 W/kg` of additional delivered power replenishes the reserve toward 100%. The level rises at `0.5 levels/s` while engine speed and power permit. If delivery falls below 99.9% of current-level demand, the reserve holds that level and bridges a complete outage for up to 10 seconds when full; neither the level nor boost has a scripted upper limit.
-
-## The Endgame Challenge
-
-Warp relocates the post-game problem rather than removing it. A platform in subspace collects no asteroid chunks and eventually starves if it remains there continuously.
-
-The intended solution is an automated cycle: the engage condition starts warp once reserves have recovered, the disengage condition drops out when they fall, and collection resumes in normal space. Separate conditions give that cycle hysteresis, for example engage above 80% and disengage below 20%. The drive imposes no resource thresholds, so each platform defines which reserves matter and how low they may fall.
-
-## Controls
-
-The drive window has a header that stays visible and three tabs.
-
-- **Header:** a live view of the drive showing its current animation, one status line saying what it is doing, the route and distance remaining, the effective speed (in cyan while warp boosts it) with the estimated arrival time at that speed, and two large buttons. Before Practical research the buttons are **Start tachyon detector** and **Stop tachyon detector**; afterwards they are **Engage warp drive** and **Disengage**. Both are always shown; a greyed-out button's tooltip says why it cannot act. The status line names the exact blocker when the drive is not ready, such as low speed, endpoint clearance, or the re-entry lockout, and shows a progress bar while charging or detecting.
-- **Warp:** entry requirements (destination, endpoint clearance, re-entry lockout, and engine speed), plus the warp field while charging or in warp. It adds detail behind the header's headline instead of repeating it: the exact reserve energy, then while charging how the reserve size follows platform mass and the time to full charge, or during warp how long the reserve would carry a power outage and the current warp level against what power and the engine allow. Power shows delivered against requested power, plus the part needed for support during warp, and acceleration shows the current ramp state. Its engage and disengage conditions sit beside them. Before Practical research the tab only explains how warp unlocks.
-- **Tachyon Detector**, renamed **Science Boost** after Practical research: detector status, delivered and requested power, tachyon density, and the research it is speeding up, with the detector's start and stop conditions beside them. After Practical research it adds the smaller **Start boost** and **Stop boost** buttons. The ⓘ next to each heading explains the formula.
-- **Signals:** red and green network status, and the circuit outputs.
-
-While warp holds, the platform's name ends with its current warp level, such as "My platform WARP-2.4" with the tag in cyan, so the space map's platform tooltip and the platform status panel show it too; Factorio does not let mods add lines to either. The tag sits at the end so platform lists still sort by name, follows renames made during warp, and disappears when warp ends.
-
-The window opens on the tab you last used, or on Warp (Tachyon Detector before Practical research) the first time. Status icons are green when satisfied, orange for transitional states, and red for blockers. Each condition shows a dot that lights green while it is true.
-
-Each tab's circuit conditions work the same way:
-
-| Condition | While true |
-| --- | --- |
-| **Engage if condition** | Engages whenever every entry requirement is met, exactly like clicking Engage. Turning false does nothing. |
-| **Disengage if condition** | Abandons charging or drops out of warp, and keeps the drive from engaging. It wins over the engage condition. |
-| **Start detector if condition** / **Start boost if condition** | Switches the detector on. It stays on afterwards until stopped. |
-| **Stop detector if condition** / **Stop boost if condition** | Switches the detector off and keeps it off. It wins over the start condition. |
-
-Connect red or green circuit wire near the drive's top-left edge, then choose a signal, comparator, and either an integer threshold or second signal for each condition. No signal is selected by default, and a condition without a first signal is never true; right-clicking a signal clears it. Signals from the red and green networks are summed, matching ordinary circuit-controlled entities. Blueprints and settings paste copy all four conditions and the outputs, not whether the drive is engaged or the detector is on.
-
-All circuit outputs are independently enabled and can use any signal. `W`, `D`, and `S` are hidden and suppressed until Practical research; `T` is available in both modes. Existing practical outputs remain enabled by default; remaining distance and tachyon density are opt-in.
-
-| Default | Value |
-| --- | --- |
-| `W` | Completed integer warp level while engaged, otherwise `0` |
-| `D` | Whole kilometres remaining to the current connection destination |
-| `C` | Warp support reserve percentage from `0` to `100` |
-| `S` | Effective subspace speed in whole km/s |
-| `T` | Whole tachyon particles per second at the current route depth |
-
-## Building And Technologies
-
-<img src="docs/icons/bte-warp-drive.png" width="24" height="24" alt=""> **Warp Drive:** An `8x8` platform-only drive core, the same size as the space platform hub. Five magnetic rings float in a quartz glass column between two injector caps, caged by dark structural ribs; glass conduits arc from both caps to field projectors in the four corners, and liquid-helium lines feed the column from four manifold pumps. The core shows what the drive is doing:
-
-- **Standby:** The rings hang motionless in alignment around a needle-thin black core in a faint icy halo. The drive looks like this while idle, cooling down, or switched off.
-- **Detecting tachyons:** Before Practical Warp Drive, the drive runs its charging animation in neon green: counter-rotating rings, a pulsing green plasma column, and green conduits and projectors. The rings spin faster and the plasma brightens with detector power.
-- **Charging:** Alternate rings counter-rotate, injectors at both caps fire into a pulsing cobalt-white plasma column, and the inside of the tube seems to stretch into endless depth. The rings spin faster and the plasma brightens as the warp reserve fills.
-- **Activation:** On warp entry, the rings snap into alignment, the core draws in and flashes, a shockwave leaves the column, and the conduits flare azure, in time with the activation sound. The rings then spin back up. With the flash, an azure ring of light, followed by a violet one, sweeps out from the drive across the whole platform and on past every asteroid around it.
-- **Warp:** Alternate rings keep counter-rotating at full-charge speed while blue and violet waves cascade down the column around flickering filaments, and the conduits carry azure plasma to the projectors.
+- **Standby:** Idle, switched off, or waiting out the post-warp re-entry lockout; draws no power.
+- **Detecting tachyons:** Draws up to `1 GW` of spare platform power to observe subspace tachyons — accelerating **Practical Warp Drive** research before it is completed, or providing the general science boost afterwards while warp is not engaged.
+- **Charging:** Fills the internal warp reserve (`100 J/kg` of platform weight, up to `10 W/kg`) once **Engage warp drive** is clicked or the engage circuit condition holds.
+- **Activation:** Spends 90% of the charged reserve to breach subspace, retaining 10% as the initial support reserve and sweeping surrounding asteroids off the platform with an outward shockwave.
+- **Warp:** Multiplies platform travel speed (`10x` at Warp-1, climbing 1 level every 2 seconds while engine speed and `10 W/kg` per level of support power allow) and suppresses all incoming asteroids until disengaged.
 
 The Warp Drive takes 120 seconds to craft from:
 
@@ -263,19 +44,129 @@ The Warp Drive takes 120 seconds to craft from:
 
 | Technology | Cost | Unlock |
 | --- | --- | --- |
-| <img src="docs/icons/technology/bte-theoretical-warp-drive.png" width="48" height="48" alt=""><br>Theoretical Warp Drive | `10,000` units at 120 seconds each | Experimental detector |
-| <img src="docs/icons/technology/bte-practical-warp-drive.png" width="48" height="48" alt=""><br>Practical Warp Drive | `1,000,000,000` units at 120 seconds each | Functional warp travel |
+| <img src="docs/icons/technology/bte-theoretical-warp-drive.png" width="48" height="48" alt=""><br>**Theoretical Warp Drive** | `10,000` units at 120 seconds each | Unlocks the <img src="docs/icons/bte-warp-drive.png" width="24" height="24" alt=""> **Warp Drive** building in experimental detector mode, allowing platforms to observe deep-space tachyons, accelerate **Practical Warp Drive** research, and automate detector operation via circuit signals (`C` and `T`). |
+| <img src="docs/icons/technology/bte-practical-warp-drive.png" width="48" height="48" alt=""><br>**Practical Warp Drive** | `1,000,000,000` units at 120 seconds each | Upgrades every installed **Warp Drive** to full operational mode: unlocks subspace warp travel, warp engage/disengage circuit conditions and telemetry outputs (`W`, `D`, and `S`), and converts the detector into a general science boost (e.g. `+1,500%` for onboard platform labs or `+150%` remotely to planetary labs at `50 km/s` and `1 GW`) while not in warp. |
 
-Both technologies use <img src="docs/icons/automation-science-pack.png" width="24" height="24" alt=""> Automation, <img src="docs/icons/logistic-science-pack.png" width="24" height="24" alt=""> Logistic, <img src="docs/icons/military-science-pack.png" width="24" height="24" alt=""> Military, <img src="docs/icons/chemical-science-pack.png" width="24" height="24" alt=""> Chemical, <img src="docs/icons/production-science-pack.png" width="24" height="24" alt=""> Production, <img src="docs/icons/utility-science-pack.png" width="24" height="24" alt=""> Utility, <img src="docs/icons/space-science-pack.png" width="24" height="24" alt=""> Space, <img src="docs/icons/metallurgic-science-pack.png" width="24" height="24" alt=""> Metallurgic, <img src="docs/icons/electromagnetic-science-pack.png" width="24" height="24" alt=""> Electromagnetic, <img src="docs/icons/agricultural-science-pack.png" width="24" height="24" alt=""> Agricultural, <img src="docs/icons/cryogenic-science-pack.png" width="24" height="24" alt=""> Cryogenic, and <img src="docs/icons/promethium-science-pack.png" width="24" height="24" alt=""> Promethium science packs. Practical Warp Drive is intentionally prohibitive without the detector bonus.
+Both technologies use <img src="docs/icons/automation-science-pack.png" width="24" height="24" alt=""> Automation, <img src="docs/icons/logistic-science-pack.png" width="24" height="24" alt=""> Logistic, <img src="docs/icons/military-science-pack.png" width="24" height="24" alt=""> Military, <img src="docs/icons/chemical-science-pack.png" width="24" height="24" alt=""> Chemical, <img src="docs/icons/production-science-pack.png" width="24" height="24" alt=""> Production, <img src="docs/icons/utility-science-pack.png" width="24" height="24" alt=""> Utility, <img src="docs/icons/space-science-pack.png" width="24" height="24" alt=""> Space, <img src="docs/icons/metallurgic-science-pack.png" width="24" height="24" alt=""> Metallurgic, <img src="docs/icons/electromagnetic-science-pack.png" width="24" height="24" alt=""> Electromagnetic, <img src="docs/icons/agricultural-science-pack.png" width="24" height="24" alt=""> Agricultural, <img src="docs/icons/cryogenic-science-pack.png" width="24" height="24" alt=""> Cryogenic, and <img src="docs/icons/promethium-science-pack.png" width="24" height="24" alt=""> Promethium science packs. **Practical Warp Drive** is intentionally prohibitive without the detector bonus.
 
-## Optional SPACELAB Integration
+## Researching Practical Warp Drive
 
-Warp Drive began as the final chapter of [SPACELAB](../spacelab/README.md) and was split into a standalone mod so subspace research and travel would not require an orbital-industry overhaul. SPACELAB makes platforms self-sufficient; Warp Drive gives them a reason to travel deep into space.
+Before **Practical Warp Drive** is researched, the drive operates as a tachyon detector:
 
-SPACELAB is never required or detected by name. Its orbital science recipes make every required pack producible in space, so the research bonus applies only to working laboratories on the drive's platform. Any mod providing the same capability has the same effect.
+- **Start tachyon detector** and **Stop tachyon detector** (or their circuit conditions) switch detection on and off. New drives start with the detector on; stopping it ends its power draw and research bonus.
+- As an ordinary secondary-priority consumer, the detector adaptively requests up to `1 GW` of spare platform power: after a shortfall it drops its request to what was delivered, and when fully supplied it probes `10 MW` higher, so it uses spare generation without starving the ship.
+- The bonus applies only while researching **Practical Warp Drive**. Labs consume science packs at their normal rate while tachyons add bonus progress.
+- The runtime Map setting **Severely impatient mode** multiplies the tachyon research bonus by `1,000` and takes effect immediately.
+
+### Where Research Happens
+
+While researching **Practical Warp Drive**, each detector checks whether any laboratory buildings exist on its own space platform:
+
+| Laboratories on the drive's platform | Target laboratories | Signal efficiency ($R$) |
+| --- | --- | --- |
+| At least one laboratory on this platform | Working laboratories on this platform only | **100%** (1x, full local signal) |
+| No laboratories on this platform | All of your working laboratories on planets | **10%** (0.1x, 10x remote-transfer loss) |
+
+If your platform has no laboratories of its own, the detector automatically transmits its tachyon telemetry to your planetary laboratories with a **10x remote-transfer data loss**, so you can still complete the research from home without shipping perishable science packs into deep space. Building laboratories directly on the detector platform (and supplying them with science packs, or producing them in orbit with [Beyond the Edge: Space Lab](../spacelab/README.md)) eliminates the transfer loss and delivers the full 100% signal to that ship's laboratories.
+
+### Tachyon Signal
+
+Tachyon density $T$ rises from **10** to **100 particles/s** across the inner solar system, climbs steeply through the first **500,000 km** past the Solar System Edge, and tapers to **10,000 particles/s** at the Shattered Planet:
+
+![Final route tachyon density curve](docs/tachyon-density-chart.svg)
+
+| Position in vanilla | Kilometres flown | Final stretch | Density ($T$) |
+| --- | ---: | ---: | ---: |
+| Nauvis, Vulcanus, Gleba, or Fulgora | 0 – 15,000 | — | 10 particles/s |
+| Aquilo | 45,000 | — | 30 particles/s |
+| Solar System Edge | 145,000 | 0 km | 100 particles/s |
+| 100,000 km into the final route | 245,000 | 100,000 km | ~1,000 particles/s |
+| 500,000 km into the final route | 645,000 | 500,000 km | ~5,000 particles/s |
+| Halfway through the final route | 2,145,000 | 2,000,000 km | ~9,100 particles/s |
+| Shattered Planet | 4,145,000 | 4,000,000 km | 10,000 particles/s |
+
+Each eligible laboratory receives a bonus research multiplier $B$ equal to the effective tachyon signal:
+
+```math
+B = T \cdot S \cdot P \cdot R
+```
+
+| Factor | How it scales | Range |
+| --- | --- | --- |
+| **Density ($T$)** | Route depth toward the deepest destination | 10 – 10,000 particles/s |
+| **Speed ($S$)** | 1x while stationary, plus 1x per 100 km/s of platform speed | 1.5x at 50 km/s, 2x at 100 km/s (uncapped) |
+| **Power ($P$)** | 1x per 100 MW of delivered detector power | 0x – 10x (at 1 GW) |
+| **Relay ($R$)** | 1x for onboard platform labs, or 0.1x for remote planetary labs | 0.1x or 1x |
+
+*(Enabling **Severely impatient mode** multiplies $B$ by an additional 1,000x.)*
+
+**Example:** At **500,000 km** past the Solar System Edge (~5,000 particles/s), **50 km/s** (1.5x), and **500 MW** (5x), each onboard laboratory receives a **~37,500x** research bonus (or **~3,750x** per planetary laboratory via remote transfer). At the Shattered Planet with **1 GW** and **50 km/s**, the bonus reaches **150,000x** locally (**15,000x** remotely).
+
+## General Science Tachyon Boost
+
+Once **Practical Warp Drive** is researched, the detector can boost any active technology while the drive is not in warp. It uses the exact same effective tachyon signal and laboratory routing, divided by 10,000:
+
+```math
+B_{science} = \frac{T \cdot S \cdot P \cdot R}{10000}
+```
+
+At the Shattered Planet (**10,000 particles/s**), **50 km/s** (1.5x), and **1 GW** (10x):
+
+- **Onboard platform laboratories ($R = 1$):** Adds **+1,500%** (**16x** research speed) to working laboratories on that platform.
+- **Remote planetary transfer ($R = 0.1$):** Adds **+150%** (**2.5x** research speed) to all working planetary laboratories per drive, and multiple remote drives add together.
+
+## Warp Travel
+
+After **Practical Warp Drive** is researched, the drive can propel its platform through subspace:
+
+- **Entry requirements:** The platform must be travelling along a connection (longer than `2,000 km`), more than `1,000 km` from both endpoints, moving at least `50 km/s`, and outside the re-entry lockout.
+- **Charging & reserve (`100 J/kg`):** Clicking **Engage warp drive** (or meeting the engage condition) charges the internal warp reserve at up to `10 W/kg` (10 seconds at full power). If any entry requirement is lost during charging, the reserve resets and a 5-second lockout begins.
+- **Warp levels & acceleration:** Entry spends 90% of the charge, retains 10% as the initial support reserve, and starts at **Warp-1** (`10x` speed boost). After a brief stabilization pause, the drive climbs by `0.5 levels/s` (1 level every 2 seconds) as long as engine speed and support power permit, with no scripted cap:
+
+```math
+L_{target} = \min\left(\frac{v_{engine}}{50\ \mathrm{km/s}},\ \frac{P_{available}}{m \cdot 10\ \mathrm{W/kg}}\right), \qquad v_{subspace} = 10 \cdot L_{current} \cdot v_{engine}
+```
+
+  Each warp level requires `50 km/s` of engine speed and `10 W/kg` of support power (plus up to `10 W/kg` of surplus power to replenish the support reserve back to 100%). Reaching **Warp-10** (`100x` speed) therefore requires `500 km/s`, `100 W/kg`, and about 18 seconds after stabilization.
+- **Worked example (`10,000 tonne` platform):** The reserve holds `1 GJ`, charging requests up to `100 MW` for 10 seconds, entry retains `100 MJ`, and replenishment restores the remaining `900 MJ` over 9 seconds. Sustaining Warp-1 needs `100 MW`; Warp-2 needs `200 MW`.
+- **Brownouts & low speed:** If engine speed drops below a level's requirement, the warp level drops immediately; falling below `50 km/s` starts a 5-second warning before warp exits. If power falls short, the drive holds its current level by draining the support reserve (bridging up to 1 second of total outage right after entry, or 10 seconds once replenished to 100%).
+- **Disengaging & lockout:** Each engagement is a single jump. Warp exits on **Disengage**, the disengage condition, reaching the final `1,000 km` endpoint zone, depletion of the support reserve, or 5 seconds below `50 km/s`, then enters a 10-second re-entry lockout.
+- **Subspace environment:** Entering warp sends an azure-and-violet shockwave across the platform that sweeps away existing asteroids, and no new asteroids appear until warp ends. Electric-blue streaks, slow-drifting pastel anomalies, and harmless local lightning surround the ship, accompanied by a rising capacitor whine, dimensional breach roar, and subspace hum on the game-effects volume slider.
+
+## Controls & Circuit Network
+
+Opening the Warp Drive shows a persistent status header and three tabs:
+
+- **Header:** Live camera view of the drive, current status or blocker, route and remaining distance, effective speed and ETA, and the main action buttons (**Start/Stop tachyon detector** before **Practical Warp Drive**; **Engage/Disengage** after). While warp is active, the platform's name also appends a cyan tag such as `WARP-2.4` so it is visible on the space map.
+- **Warp:** Entry requirement checklist, live warp-field metrics (reserve charge, outage cover, current vs. achievable warp level, power, and ramp state), and the engage/disengage circuit conditions.
+- **Tachyon Detector** (renamed **Science Boost** after **Practical Warp Drive**): Current tachyon density, a non-linear final-route density line chart (`Edge` to `4M km`) highlighting the platform's current position, speed and power signal multipliers, onboard vs. remote-transfer routing status, research progress and ETA (or general Science Boost controls after **Practical Warp Drive**), and the detector start/stop conditions. Hovering ⓘ shows the formula summary.
+- **Signals:** Connected Red and Green circuit network summaries with their live signal values displayed directly on the panel, alongside configurable output signals.
+
+### Circuit Conditions & Outputs
+
+Connect red or green wire to the terminal near the drive's top-left corner. Conditions read the sum of both networks, show a green indicator dot while true, and copy via blueprints or settings paste:
+
+| Condition | Behavior while true |
+| --- | --- |
+| **Engage if condition** | Engages whenever all entry requirements are met. Turning false does not disengage. |
+| **Disengage if condition** | Abandons charging or exits warp, and overrides the engage condition. |
+| **Start detector / boost if condition** | Switches the detector on; it stays on afterwards until stopped. |
+| **Stop detector / boost if condition** | Switches the detector off and overrides the start condition. |
+
+To automate a long expedition, set **Engage** when fuel/ammo reserves are high (e.g. `> 80%`) and **Disengage** when they run low (e.g. `< 20%`) so the platform pauses in normal space to harvest asteroids before jumping again.
+
+All five circuit outputs can be toggled individually and reassigned to any signal (`W`, `D`, and `S` unlock with **Practical Warp Drive**; `D` and `T` are opt-in by default):
+
+| Default | Output value |
+| --- | --- |
+| `W` | Completed integer warp level while engaged, otherwise `0` |
+| `D` | Whole kilometres remaining to the current connection destination |
+| `C` | Warp support reserve percentage (`0`–`100`) |
+| `S` | Effective travel speed in whole km/s |
+| `T` | Whole tachyon particles per second at the current route depth |
 
 ## Asset Attribution
 
 The Warp Drive building graphics (hull, shadow, status lamps, and the per-state core overlays), its item icon, and its technology icon are original art, rendered from Three.js models in this repository (`tools/sprites/models/warp-drive.js`, `warp-drive-icon.js`, and `warp-drive-technology.js`). The warp effects (the activation shockwave, the lightning's cloud, the background anomalies, and the subspace streaks) are original art from `tools/sprites/models/warp-field.js`. The lightning bolts themselves are drawn by the game from a harmless copy of Space Age's Fulgora lightning prototype, without copying its graphics. The sounds are synthesized locally; see [`AUDIO.md`](AUDIO.md). README GIFs and icons are generated too; `AGENTS.md` lists every generator.
 
-The item and technology icons in this README are extracted from Factorio and this mod by `tools/readme-icons.py` and are not part of the mod package.
+The item and technology icons in this README are extracted from Factorio and this mod by `tools/readme-icons.py`, and the final-route tachyon density chart is generated by `tools/tachyon-chart.py`; neither is part of the mod package.

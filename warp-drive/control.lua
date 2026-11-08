@@ -61,6 +61,18 @@ if script.active_mods["bte-warp-drive-runtime-test"] then
         shockwaves = record.shockwaves and #record.shockwaves or 0,
         anomalies = record.anomalies and #record.anomalies or 0
       }
+    end,
+    inject_legacy_travel_map = function()
+      storage.travel_map = {
+        by_location = {
+          nauvis = {
+            remaining = {nauvis = 4145000},
+            farthest = 4145000,
+            unit = 15000,
+            deepest_name = "shattered-planet"
+          }
+        }
+      }
     end
   })
 end

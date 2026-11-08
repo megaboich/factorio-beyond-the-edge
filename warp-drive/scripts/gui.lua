@@ -24,14 +24,19 @@ local GUI_OUTPUT_SPEED_SIGNAL = "bte_warp_drive_output_speed_signal"
 local GUI_OUTPUT_TACHYON_DENSITY_ENABLED = "bte_warp_drive_output_tachyon_density_enabled"
 local GUI_OUTPUT_TACHYON_DENSITY_SIGNAL = "bte_warp_drive_output_tachyon_density_signal"
 local GUI_CLOSE = "bte_warp_drive_close"
-local LAYOUT_VERSION = 15
+local LAYOUT_VERSION = 20
 -- Tabs in display order; the selected one is remembered per player in storage.gui_tabs.
 local TABS = {"warp", "detector", "signals"}
 local TAB_INDEX = {warp = 1, detector = 2, signals = 3}
 local LEFT_WIDTH = 520
-local CIRCUIT_PANEL_WIDTH = 272
+local CIRCUIT_PANEL_WIDTH = 256
+local CIRCUIT_PANEL_INNER_WIDTH = CIRCUIT_PANEL_WIDTH - 24
 local PAGE_GAP = 8
 local PAGE_WIDTH = LEFT_WIDTH + PAGE_GAP + CIRCUIT_PANEL_WIDTH
+-- `tabbed_pane_frame` adds 4 px of padding on each side (PAGE_WIDTH + 8), while `header_frame`
+-- (`inside_shallow_frame_with_padding`) adds 12 px on each side (24 px total). Matching their
+-- outer widths keeps the right edge of the tabs and Circuit control panel flush with the header.
+local HEADER_WIDTH = PAGE_WIDTH + 8
 local PREVIEW_SIZE = 156
 -- The header preview is a live camera rather than an entity-preview, because the drive's core
 -- animation is drawn as script render objects that an entity-preview never shows. The building's
@@ -40,7 +45,7 @@ local PREVIEW_SIZE = 156
 local PREVIEW_OFFSET_Y = -1.02
 local PREVIEW_ZOOM = PREVIEW_SIZE / (32 * 10.2)
 local HEADER_GAP = 12
-local HEADER_MAIN_WIDTH = PAGE_WIDTH - PREVIEW_SIZE - HEADER_GAP
+local HEADER_MAIN_WIDTH = HEADER_WIDTH - 24 - PREVIEW_SIZE - HEADER_GAP
 local CONTROL_BUTTON_GAP = 8
 local CONTROL_BUTTON_WIDTH = (HEADER_MAIN_WIDTH - CONTROL_BUTTON_GAP) / 2
 local CONTROL_BUTTON_HEIGHT = 40
@@ -48,6 +53,18 @@ local BOOST_BUTTON_WIDTH = (LEFT_WIDTH - 24 - CONTROL_BUTTON_GAP) / 2
 local BOOST_BUTTON_HEIGHT = 28
 local STATUS_LABEL_WIDTH = 190
 local STATUS_VALUE_WIDTH = LEFT_WIDTH - 24 - STATUS_LABEL_WIDTH - 12
+local NETWORK_SIGNALS_COLUMNS = 3
+local NETWORK_SIGNAL_CELL_WIDTH = math.floor((LEFT_WIDTH - 24 - 12 - 16) / NETWORK_SIGNALS_COLUMNS)
+local DENSITY_GRAPH_COLUMNS = 48
+local DENSITY_GRAPH_BAR_WIDTH = 10
+local DENSITY_GRAPH_HEIGHT = 44
+local DENSITY_GRAPH_LINE_THICKNESS = 4
+-- Non-linear horizontal axis (u = t^3): places 100k km near 30% width and 500k km right at the
+-- midpoint (t = 0.5, u = 1/8), compressing the 1M..4M km tail into the right side of the chart.
+local DENSITY_GRAPH_X_EXPONENT = 3
+local GRAPH_COLOR_ACTIVE = {1.0, 0.88, 0.25}
+local GRAPH_COLOR_PASSED = {0.25, 0.75, 1.0}
+local GRAPH_COLOR_AHEAD = {0.32, 0.42, 0.52}
 local PAGE_HEIGHT_MIN = 240
 local PAGE_HEIGHT_MAX = 440
 -- Display height left for the tab pages after the title, header, tab strip, and screen margin.
@@ -192,7 +209,7 @@ end
 local function format_km(value)
   local text = string.format("%.0f", value)
   while true do
-    local grouped, replaced = text:gsub("^(%d+)(%d%d%d)", "%1,%2")
+    local grouped, replaced = text:gsub("^(-?%d+)(%d%d%d)", "%1,%2")
     text = grouped
     if replaced == 0 then
       return text
@@ -271,9 +288,13 @@ local function player_circuit_network(record, wire_id)
   return network
 end
 
-local function update_circuit_network_row(element, record, color, wire_id)
+local function update_circuit_network_row(view, record, color, wire_id)
+  local element = view["bte_warp_drive_circuit_" .. color .. "_network"]
+  local signals_frame = view["bte_warp_drive_circuit_" .. color .. "_signals_frame"]
+  local signals_table = view["bte_warp_drive_circuit_" .. color .. "_signals"]
   local network = player_circuit_network(record, wire_id)
-  local signal_count = network and network.signals and #network.signals or 0
+  local signals = network and network.signals or {}
+  local signal_count = #signals
   local color_caption = {"bte-warp-drive.circuit-network-color-" .. color}
   if not network then
     element.caption = {"bte-warp-drive.circuit-network-disconnected", color_caption}
@@ -285,6 +306,18 @@ local function update_circuit_network_row(element, record, color, wire_id)
       network.network_id, network.connected_circuit_count}
   end
   element.tooltip = circuit_network_tooltip(network, color)
+  signals_table.clear()
+  signals_frame.visible = signal_count > 0
+  if signal_count > 0 then
+    for index, entry in ipairs(signals) do
+      local cell = signals_table.add({
+        type = "label",
+        name = "bte_warp_drive_circuit_" .. color .. "_signal_" .. index,
+        caption = signal_rich_text(entry.signal) .. "  " .. bold_number(format_km(entry.count))
+      })
+      cell.style.width = NETWORK_SIGNAL_CELL_WIDTH
+    end
+  end
 end
 
 local function condition_locale(key, practical)
@@ -333,6 +366,76 @@ local function add_button(parent, name, style, width, height, font)
   button.style.font = font
 end
 
+-- Plots the final-stretch tachyon density curve (from Solar System Edge to the deepest destination)
+-- as a continuous line chart on a non-linear distance axis (u = t^3), highlighting the platform's
+-- current position along the route.
+local function add_density_graph(parent)
+  local container = parent.add({type = "flow", name = "bte_warp_drive_density_graph", direction = "vertical"})
+  container.style.top_margin = 4
+  container.style.bottom_margin = 4
+  container.style.vertical_spacing = 2
+  local header = container.add({type = "flow", direction = "horizontal"})
+  header.style.width = LEFT_WIDTH - 24
+  local title = header.add({type = "label", caption = {"bte-warp-drive.density-graph-title"}})
+  title.style.font_color = {0.75, 0.75, 0.75}
+  local spacer = header.add({type = "empty-widget"})
+  spacer.style.horizontally_stretchable = true
+  header.add({type = "label", name = "bte_warp_drive_density_graph_position", caption = ""})
+
+  local plot_frame = container.add({type = "frame", style = "deep_frame_in_shallow_frame"})
+  local bars = plot_frame.add({type = "flow", name = "bte_warp_drive_density_graph_bars", direction = "horizontal"})
+  bars.style.horizontal_spacing = 0
+  bars.style.padding = 4
+  local usable_height = DENSITY_GRAPH_HEIGHT - DENSITY_GRAPH_LINE_THICKNESS
+  for index = 1, DENSITY_GRAPH_COLUMNS do
+    local u0 = ((index - 1) / DENSITY_GRAPH_COLUMNS) ^ DENSITY_GRAPH_X_EXPONENT
+    local u1 = (index / DENSITY_GRAPH_COLUMNS) ^ DENSITY_GRAPH_X_EXPONENT
+    local y0 = math.floor(Research.final_stretch_density(u0) / 10000 * usable_height + 0.5)
+    local y1 = math.floor(Research.final_stretch_density(u1) / 10000 * usable_height + 0.5)
+    local y_bottom = math.max(0, math.min(y0, y1))
+    local y_top = math.min(DENSITY_GRAPH_HEIGHT, math.max(y0, y1) + DENSITY_GRAPH_LINE_THICKNESS)
+    local seg_height = math.max(DENSITY_GRAPH_LINE_THICKNESS, y_top - y_bottom)
+    local column = bars.add({type = "flow", direction = "vertical"})
+    column.style.width = DENSITY_GRAPH_BAR_WIDTH
+    column.style.height = DENSITY_GRAPH_HEIGHT
+    column.style.vertical_spacing = 0
+    if y_top < DENSITY_GRAPH_HEIGHT then
+      local top = column.add({type = "empty-widget"})
+      top.style.width = DENSITY_GRAPH_BAR_WIDTH
+      top.style.height = DENSITY_GRAPH_HEIGHT - y_top
+    end
+    local bar = column.add({type = "progressbar", name = "bte_warp_drive_density_bar_" .. index, value = 1})
+    bar.style.width = DENSITY_GRAPH_BAR_WIDTH
+    bar.style.minimal_width = DENSITY_GRAPH_BAR_WIDTH
+    bar.style.height = seg_height
+    bar.style.bar_width = seg_height
+    bar.style.color = GRAPH_COLOR_AHEAD
+    if y_bottom > 0 then
+      local bottom = column.add({type = "empty-widget"})
+      bottom.style.width = DENSITY_GRAPH_BAR_WIDTH
+      bottom.style.height = y_bottom
+    end
+  end
+
+  local axis = container.add({type = "flow", direction = "horizontal"})
+  axis.style.width = LEFT_WIDTH - 24
+  local keys = {
+    "density-graph-axis-start",
+    "density-graph-axis-100k",
+    "density-graph-axis-knee",
+    "density-graph-axis-mid",
+    "density-graph-axis-end"
+  }
+  for index, key in ipairs(keys) do
+    if index > 1 then
+      local gap = axis.add({type = "empty-widget"})
+      gap.style.horizontally_stretchable = true
+    end
+    local label = axis.add({type = "label", caption = {"bte-warp-drive." .. key}})
+    label.style.font_color = {0.6, 0.6, 0.6}
+  end
+end
+
 -- One condition: a checkbox with a dot that lights green while the condition holds, then its
 -- signal, comparator, and signal-or-constant editor.
 local function add_condition_editor(parent, key, condition)
@@ -340,6 +443,7 @@ local function add_condition_editor(parent, key, condition)
   local header = parent.add({type = "flow", name = prefix .. "_header", direction = "horizontal"})
   header.style.vertical_align = "center"
   header.style.top_margin = 6
+  header.style.width = CIRCUIT_PANEL_INNER_WIDTH
   local checkbox = header.add({type = "checkbox", name = prefix .. "_enabled",
     caption = {condition_locale(key, true)}, state = condition.enabled})
   checkbox.style.horizontally_stretchable = true
@@ -359,7 +463,7 @@ local function add_condition_editor(parent, key, condition)
   local constant = editor.add({type = "textfield", name = prefix .. "_constant",
     text = tostring(condition.constant or 0), numeric = true, allow_decimal = false,
     allow_negative = true})
-  constant.style.width = 72
+  constant.style.width = 80
 end
 
 local function add_circuit_output(parent, output, record)
@@ -447,7 +551,7 @@ local function draw_gui(player, record)
   -- Header: what the drive is doing and the two main buttons, the same on every tab.
   local header_frame = frame.add({type = "frame", name = "bte_warp_drive_header",
     direction = "horizontal", style = "inside_shallow_frame_with_padding"})
-  header_frame.style.width = PAGE_WIDTH + 24
+  header_frame.style.width = HEADER_WIDTH
   local header = header_frame.add({type = "flow", direction = "horizontal"})
   header.style.horizontal_spacing = HEADER_GAP
   local preview_frame = header.add({type = "frame", style = "deep_frame_in_shallow_frame"})
@@ -507,7 +611,6 @@ local function draw_gui(player, record)
   add_status_row(field, "bte_warp_drive_reserve", {"bte-warp-drive.requirement-charge-label"})
   add_status_row(field, "bte_warp_drive_reserve_detail", "")
   add_status_row(field, "bte_warp_drive_charge_eta", {"bte-warp-drive.field-charge-eta-label"})
-  add_status_row(field, "bte_warp_drive_warp_level", {"bte-warp-drive.field-warp-level-label"})
   add_requirement(field, "bte_warp_drive_requirement_power", {"bte-warp-drive.requirement-power-label"})
   add_requirement(field, "bte_warp_drive_requirement_acceleration", {"bte-warp-drive.requirement-acceleration-label"})
   local field_idle = warp.add({type = "label", name = "bte_warp_drive_field_idle", caption = {"bte-warp-drive.field-idle"}})
@@ -533,9 +636,8 @@ local function draw_gui(player, record)
   add_button(boost_controls, GUI_BOOST_STOP, "red_button", BOOST_BUTTON_WIDTH, BOOST_BUTTON_HEIGHT, "default-bold")
   add_heading(detector, "bte_warp_drive_detector_heading", "")
   add_status_row(detector, "bte_warp_drive_detector_status", {"bte-warp-drive.detector-status"})
-  add_status_row(detector, "bte_warp_drive_detector_power", {"bte-warp-drive.detector-power"})
-  add_status_row(detector, "bte_warp_drive_detector_request", {"bte-warp-drive.detector-request"})
   add_status_row(detector, "bte_warp_drive_signal_multiplier", {"bte-warp-drive.signal-multiplier"})
+  add_density_graph(detector)
   local signal = detector.add({type = "flow", name = "bte_warp_drive_signal_section", direction = "vertical"})
   add_status_row(signal, "bte_warp_drive_detector_speed", {"bte-warp-drive.detector-speed"})
   add_status_row(signal, "bte_warp_drive_detector_power_multiplier", {"bte-warp-drive.detector-power-signal"})
@@ -545,10 +647,8 @@ local function draw_gui(player, record)
   add_status_row(detector, "bte_warp_drive_research_status", {"bte-warp-drive.research-status"})
   add_status_row(detector, "bte_warp_drive_research_branch", {"bte-warp-drive.research-branch"})
   add_status_row(detector, "bte_warp_drive_working_labs", {"bte-warp-drive.working-labs"})
-  add_status_row(detector, "bte_warp_drive_average_lab_rate", {"bte-warp-drive.average-lab-rate"})
   add_status_row(detector, "bte_warp_drive_research_bonus", {"bte-warp-drive.research-bonus"})
   add_status_row(detector, "bte_warp_drive_research_progress", {"bte-warp-drive.research-progress"})
-  add_status_row(detector, "bte_warp_drive_research_estimate", {"bte-warp-drive.research-estimate"})
   add_heading(detector_circuit, "bte_warp_drive_detector_circuit_heading", {"bte-warp-drive.circuit-control"})
   add_condition_editor(detector_circuit, "detector_start", record.detector_start)
   add_condition_editor(detector_circuit, "detector_stop", record.detector_stop)
@@ -560,6 +660,22 @@ local function draw_gui(player, record)
     local label = signals.add({type = "label", name = "bte_warp_drive_circuit_" .. color .. "_network", caption = ""})
     label.style.single_line = false
     label.style.width = LEFT_WIDTH - 24
+    local signals_frame = signals.add({
+      type = "frame",
+      name = "bte_warp_drive_circuit_" .. color .. "_signals_frame",
+      style = "deep_frame_in_shallow_frame"
+    })
+    signals_frame.style.top_margin = 2
+    signals_frame.style.bottom_margin = 6
+    signals_frame.style.width = LEFT_WIDTH - 24
+    local signals_table = signals_frame.add({
+      type = "table",
+      name = "bte_warp_drive_circuit_" .. color .. "_signals",
+      column_count = NETWORK_SIGNALS_COLUMNS
+    })
+    signals_table.style.padding = 6
+    signals_table.style.horizontal_spacing = 8
+    signals_table.style.vertical_spacing = 2
   end
   local hint = signals.add({type = "label", caption = {"bte-warp-drive.circuit-wiring-hint"}})
   hint.style.single_line = false
@@ -589,17 +705,20 @@ local REQUIRED_ELEMENTS = {
   "bte_warp_drive_tab_warp", "bte_warp_drive_tab_detector", "bte_warp_drive_tab_signals",
   "bte_warp_drive_warp_locked", "bte_warp_drive_requirements", "bte_warp_drive_field",
   "bte_warp_drive_field_idle", "bte_warp_drive_reserve", "bte_warp_drive_reserve_detail",
-  "bte_warp_drive_reserve_detail_label", "bte_warp_drive_charge_eta", "bte_warp_drive_warp_level",
+  "bte_warp_drive_reserve_detail_label", "bte_warp_drive_charge_eta",
   "bte_warp_drive_warp_right", "bte_warp_drive_warp_circuit_locked", "bte_warp_drive_boost_controls",
-  "bte_warp_drive_detector_heading", "bte_warp_drive_detector_status", "bte_warp_drive_detector_power",
-  "bte_warp_drive_detector_request", "bte_warp_drive_signal_multiplier", "bte_warp_drive_signal_section",
+  "bte_warp_drive_detector_heading", "bte_warp_drive_detector_status",
+  "bte_warp_drive_signal_multiplier",
+  "bte_warp_drive_density_graph", "bte_warp_drive_density_graph_position",
+  "bte_warp_drive_density_graph_bars", "bte_warp_drive_signal_section",
   "bte_warp_drive_detector_speed", "bte_warp_drive_detector_power_multiplier",
   "bte_warp_drive_tachyon_rate", "bte_warp_drive_research_heading", "bte_warp_drive_research_status",
   "bte_warp_drive_research_branch", "bte_warp_drive_research_branch_label",
-  "bte_warp_drive_working_labs", "bte_warp_drive_average_lab_rate",
-  "bte_warp_drive_research_bonus", "bte_warp_drive_research_progress",
-  "bte_warp_drive_research_estimate", "bte_warp_drive_circuit_red_network",
-  "bte_warp_drive_circuit_green_network"
+  "bte_warp_drive_working_labs", "bte_warp_drive_research_bonus",
+  "bte_warp_drive_research_progress", "bte_warp_drive_circuit_red_network",
+  "bte_warp_drive_circuit_red_signals_frame", "bte_warp_drive_circuit_red_signals",
+  "bte_warp_drive_circuit_green_network",
+  "bte_warp_drive_circuit_green_signals_frame", "bte_warp_drive_circuit_green_signals"
 }
 for _, name in ipairs({"travel", "clearance", "cooldown", "speed", "power", "acceleration"}) do
   local requirement = "bte_warp_drive_requirement_" .. name
@@ -617,6 +736,9 @@ for _, output in ipairs(OUTPUTS) do
   REQUIRED_ELEMENTS[#REQUIRED_ELEMENTS + 1] = output[1] .. "_row"
   REQUIRED_ELEMENTS[#REQUIRED_ELEMENTS + 1] = output[1]
   REQUIRED_ELEMENTS[#REQUIRED_ELEMENTS + 1] = output[2]
+end
+for index = 1, DENSITY_GRAPH_COLUMNS do
+  REQUIRED_ELEMENTS[#REQUIRED_ELEMENTS + 1] = "bte_warp_drive_density_bar_" .. index
 end
 
 local function index_elements(element, view)
@@ -832,19 +954,10 @@ local function render_warp(view, record, snapshot)
     set_status(view, "bte_warp_drive_charge_eta", delivered > 0
       and format_duration(missing / delivered) or {"bte-warp-drive.field-charge-eta-waiting"})
   end
-  set_row_visible(view, "bte_warp_drive_warp_level", not charging)
-  if not charging then
-    set_status(view, "bte_warp_drive_warp_level", {"bte-warp-drive.field-warp-level",
-      string.format("%.2f", record.warp_level or 1), string.format("%.2f", record.warp_target or 0),
-      string.format("%.2f", snapshot.engine_level_limit)})
-  end
   requirement(view, "bte_warp_drive_requirement_power",
     (charging or record.warp_ramp_state == "stabilizing") and "warning"
       or (snapshot.power_ready and "pass" or "fail"),
-    charging and {"bte-warp-drive.field-power-charging", format_power(delivered),
-      format_power(snapshot.demand_watts)}
-      or {"bte-warp-drive.field-power", format_power(delivered), format_power(snapshot.demand_watts),
-        format_power(snapshot.support_required)})
+    format_power(delivered))
   local ramp_state = record.warp_ramp_state or "inactive"
   set_row_visible(view, "bte_warp_drive_requirement_acceleration", record.state == "warp")
   requirement(view, "bte_warp_drive_requirement_acceleration",
@@ -853,12 +966,10 @@ local function render_warp(view, record, snapshot)
 end
 
 local function detector_help(snapshot, research_snapshot)
-  if snapshot.practical then
-    return {"bte-warp-drive.boost-help"}
-  end
   local best = research_snapshot.deepest_location
   local best_name = best and location_label(best) or {"bte-warp-drive.location-unknown"}
-  return {"bte-warp-drive.detector-help-" .. (research_snapshot.branch or "unknown"),
+  local stem = snapshot.practical and "boost-help-" or "detector-help-"
+  return {"bte-warp-drive." .. stem .. (research_snapshot.branch or "unknown"),
     {"", "[font=default-bold]", best_name, "[/font]"},
     string.format("%.0f", research_snapshot.maximum_density)}
 end
@@ -874,32 +985,57 @@ local function render_detector(view, record, snapshot, research_snapshot)
   view.bte_warp_drive_detector_heading.caption = {"", {"bte-warp-drive.detector-section"}, " [img=info]"}
   view.bte_warp_drive_detector_heading.tooltip = help
   local power = record.detector_power or 0
-  local state
+  -- Before Practical research, the window header already displays detector status; after Practical
+  -- research the header displays warp state, so the Science Boost tab shows detector status.
+  set_row_visible(view, "bte_warp_drive_detector_status", practical)
   if practical then
-    state = not record.detector_on and "boost-status-stopped"
+    local state = not record.detector_on and "boost-status-stopped"
       or (snapshot.detector_paused and "boost-status-paused"
         or ((record.detector_power_ratio or 0) > 0.01 and "boost-status-active" or "boost-status-offline"))
-  else
-    state = record.detector_on and "state-" .. record.state or "boost-status-stopped"
-  end
-  set_status(view, "bte_warp_drive_detector_status", {"bte-warp-drive." .. state})
-  set_status(view, "bte_warp_drive_detector_power", {"bte-warp-drive.power-value", format_power(power),
-    format_power(DETECTOR_MAX_POWER_WATTS), math.floor(power / DETECTOR_MAX_POWER_WATTS * 100)})
-  -- The header already draws delivered power as a bar; this row adds the adaptive demand behind it.
-  local requested = record.detector_on and record.detector_request_watts
-  set_row_visible(view, "bte_warp_drive_detector_request", requested ~= nil)
-  if requested then
-    set_status(view, "bte_warp_drive_detector_request", {"bte-warp-drive.detector-request-value",
-      format_power(requested), requested > 0 and math.floor(power / requested * 100) or 0})
+    set_status(view, "bte_warp_drive_detector_status", {"bte-warp-drive." .. state})
   end
   set_status(view, "bte_warp_drive_signal_multiplier", {"bte-warp-drive.boost-density-value",
     string.format("%.1f", research_snapshot.density), format_km(research_snapshot.maximum_density)})
-  view.bte_warp_drive_signal_section.visible = not practical
+  local final_length = research_snapshot.final_length or 0
+  local final_distance = research_snapshot.final_distance or 0
+  local on_final_stretch = research_snapshot.on_final_stretch == true and final_length > 0
+  local active_col
+  if on_final_stretch then
+    local u = math.max(0, math.min(1, final_distance / final_length))
+    local t = u ^ (1 / DENSITY_GRAPH_X_EXPONENT)
+    active_col = math.max(1, math.min(DENSITY_GRAPH_COLUMNS,
+      math.floor(t * DENSITY_GRAPH_COLUMNS) + 1))
+    view.bte_warp_drive_density_graph_position.caption = {"bte-warp-drive.density-graph-position-final",
+      format_km(final_distance), format_km(final_length)}
+  else
+    view.bte_warp_drive_density_graph_position.caption = {"bte-warp-drive.density-graph-position-inner",
+      format_km(research_snapshot.progress_km or 0)}
+  end
+  for index = 1, DENSITY_GRAPH_COLUMNS do
+    local bar = view["bte_warp_drive_density_bar_" .. index]
+    local fraction = ((index - 0.5) / DENSITY_GRAPH_COLUMNS) ^ DENSITY_GRAPH_X_EXPONENT
+    local sample_km = math.floor(fraction * (final_length > 0 and final_length or 4000000) + 0.5)
+    local sample_density = Research.final_stretch_density(fraction)
+    if active_col and index == active_col then
+      bar.style.color = GRAPH_COLOR_ACTIVE
+      bar.tooltip = {"bte-warp-drive.density-graph-bar-current-tooltip",
+        format_km(final_distance), string.format("%.0f", research_snapshot.density)}
+    elseif active_col and index < active_col then
+      bar.style.color = GRAPH_COLOR_PASSED
+      bar.tooltip = {"bte-warp-drive.density-graph-bar-tooltip",
+        format_km(sample_km), string.format("%.0f", sample_density)}
+    else
+      bar.style.color = GRAPH_COLOR_AHEAD
+      bar.tooltip = {"bte-warp-drive.density-graph-bar-tooltip",
+        format_km(sample_km), string.format("%.0f", sample_density)}
+    end
+  end
+  view.bte_warp_drive_signal_section.visible = true
   set_status(view, "bte_warp_drive_detector_speed", {"bte-warp-drive.detector-speed-value",
     string.format("%.2f", research_snapshot.detector_speed),
     string.format("%.2f", research_snapshot.detector_speed_factor)})
-  set_status(view, "bte_warp_drive_detector_power_multiplier", {"bte-warp-drive.multiplier-value",
-    string.format("%.2f", research_snapshot.power_ratio)})
+  set_status(view, "bte_warp_drive_detector_power_multiplier", {"bte-warp-drive.detector-power-signal-value",
+    string.format("%.2f", research_snapshot.power_ratio), format_power(power)})
   set_status(view, "bte_warp_drive_tachyon_rate", {"bte-warp-drive.tachyon-value",
     string.format("%.2f", research_snapshot.detector_signal)})
 
@@ -908,52 +1044,45 @@ local function render_detector(view, record, snapshot, research_snapshot)
   view.bte_warp_drive_research_heading.tooltip = help
   local research = research_snapshot.research
   local researching_practical = research_snapshot.researching_practical
+  set_row_visible(view, "bte_warp_drive_research_status", practical or not researching_practical)
   if practical then
     view.bte_warp_drive_research_status_label.caption = {"bte-warp-drive.boost-value-label"}
     local boost = research_snapshot.science_boost
-    set_status(view, "bte_warp_drive_research_status", {"bte-warp-drive.boost-value",
-      string.format("%.1f", boost * 100), string.format("%.2f", 1 + boost)})
+    local combined = research_snapshot.combined_science_boost
+    if math.abs(combined - boost) > 1e-4 then
+      set_status(view, "bte_warp_drive_research_status", {"bte-warp-drive.boost-value-combined",
+        string.format("%.1f", boost * 100), string.format("%.2f", 1 + boost),
+        string.format("%.1f", combined * 100), string.format("%.2f", 1 + combined)})
+    else
+      set_status(view, "bte_warp_drive_research_status", {"bte-warp-drive.boost-value",
+        string.format("%.1f", boost * 100), string.format("%.2f", 1 + boost)})
+    end
     view.bte_warp_drive_research_progress_label.caption = {"bte-warp-drive.boost-research-label"}
     set_status(view, "bte_warp_drive_research_progress", research
       and {"", "[technology=" .. research.name .. "] ", research.localised_name}
       or {"bte-warp-drive.boost-research-none"})
   else
     view.bte_warp_drive_research_status_label.caption = {"bte-warp-drive.research-status"}
-    set_status(view, "bte_warp_drive_research_status", researching_practical
-      and {"bte-warp-drive.research-status-active"} or {"bte-warp-drive.research-status-inactive"})
+    set_status(view, "bte_warp_drive_research_status", {"bte-warp-drive.research-status-inactive"})
     view.bte_warp_drive_research_progress_label.caption = {"bte-warp-drive.research-progress"}
-    set_status(view, "bte_warp_drive_research_progress", {"bte-warp-drive.percent-value",
-      string.format("%.6f", research_snapshot.progress * 100)})
+    local progress_pct = string.format("%.4f", research_snapshot.progress * 100)
+    set_status(view, "bte_warp_drive_research_progress", research_snapshot.total_rate > 0
+      and {"bte-warp-drive.research-progress-eta-value", progress_pct,
+        format_duration(research_snapshot.remaining_units / research_snapshot.total_rate)}
+      or {"bte-warp-drive.percent-value", progress_pct})
   end
   set_row_visible(view, "bte_warp_drive_research_progress", practical or researching_practical)
-  if practical then
-    -- Every boost reaches all of the force's laboratories, so this row shows what all drives
-    -- add together instead of where this one's observations go.
-    local combined = research_snapshot.combined_science_boost
-    view.bte_warp_drive_research_branch_label.caption = {"bte-warp-drive.boost-combined-label"}
-    set_status(view, "bte_warp_drive_research_branch", {"bte-warp-drive.boost-value",
-      string.format("%.1f", combined * 100), string.format("%.2f", 1 + combined)})
+  view.bte_warp_drive_research_branch_label.caption = {"bte-warp-drive.research-branch"}
+  set_status(view, "bte_warp_drive_research_branch", {"bte-warp-drive.branch-"
+    .. (research_snapshot.branch or "unknown")})
+  if not practical and researching_practical and research_snapshot.lab_count > 0 then
+    set_status(view, "bte_warp_drive_working_labs", {"bte-warp-drive.working-labs-value",
+      research_snapshot.lab_count, string.format("%.4f", research_snapshot.average_lab_rate)})
   else
-    view.bte_warp_drive_research_branch_label.caption = {"bte-warp-drive.research-branch"}
-    set_status(view, "bte_warp_drive_research_branch", {"bte-warp-drive.branch-"
-      .. (research_snapshot.branch or "unknown")})
-  end
-  set_status(view, "bte_warp_drive_working_labs", bold_number(research_snapshot.lab_count))
-  set_row_visible(view, "bte_warp_drive_average_lab_rate", not practical and researching_practical)
-  if not practical and researching_practical then
-    set_status(view, "bte_warp_drive_average_lab_rate", {"bte-warp-drive.research-rate-value",
-      string.format("%.4f", research_snapshot.average_lab_rate)})
+    set_status(view, "bte_warp_drive_working_labs", bold_number(research_snapshot.lab_count))
   end
   set_status(view, "bte_warp_drive_research_bonus", {"bte-warp-drive.research-rate-value",
     string.format("%.2f", practical and research_snapshot.science_boost_rate or research_snapshot.bonus_rate)})
-  set_row_visible(view, "bte_warp_drive_research_estimate", not practical and researching_practical)
-  if not practical and researching_practical then
-    set_status(view, "bte_warp_drive_research_estimate", research_snapshot.total_rate > 0
-      and {"bte-warp-drive.estimate-value",
-        format_duration(research_snapshot.remaining_units / research_snapshot.total_rate),
-        string.format("%.2f", research_snapshot.total_rate)}
-      or {"bte-warp-drive.estimate-unavailable"})
-  end
 end
 
 local function render_condition(view, key, condition, active, practical)
@@ -1000,9 +1129,9 @@ local function render_circuit(view, record, snapshot)
     view[signal_name].elem_value = record[field[1]] or field[2]
     view[signal_name].enabled = enabled
   end
-  update_circuit_network_row(view.bte_warp_drive_circuit_red_network, record, "red",
+  update_circuit_network_row(view, record, "red",
     defines.wire_connector_id.circuit_red)
-  update_circuit_network_row(view.bte_warp_drive_circuit_green_network, record, "green",
+  update_circuit_network_row(view, record, "green",
     defines.wire_connector_id.circuit_green)
 end
 

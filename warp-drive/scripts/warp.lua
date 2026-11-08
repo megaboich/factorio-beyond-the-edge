@@ -46,7 +46,7 @@ local FAILED_ACTIVATION_COOLDOWN_TICKS = 5 * 60
 local WARP_ACTIVATION_SOUND_TICKS = 5 * 60
 local WARP_BACKGROUND_TICKS = 6 * 60
 local POWER_NAME = "bte-warp-drive-power-interface"
-local DETECTOR_REFERENCE_POWER_WATTS = 200000000
+local DETECTOR_REFERENCE_POWER_WATTS = 100000000
 local DETECTOR_MAX_POWER_WATTS = 1000000000
 local DETECTOR_PROBE_WATTS = 10000000
 local DETECTOR_SHORTFALL_TOLERANCE_WATTS = 100000
@@ -517,9 +517,10 @@ end
 
 -- Streaks are particles the engine moves every tick, so they glide smoothly; each update only
 -- spawns enough at random places to keep about `count` alive. They always head south, the way
--- the starfield streams past a travelling platform, whichever way it is going. Spawn points
--- reach one particle's travel north of the field, so streaks are as dense at its north edge as
--- anywhere, and new streaks fade in (prototypes/entities.lua) rather than pop up.
+-- the starfield streams past a travelling platform, whichever way it is going, and their speed
+-- scales with the current warp level (1x at Warp-1, 4x at Warp-4). Spawn points reach one
+-- particle's travel north of the field, so streaks are as dense at its north edge as anywhere,
+-- and new streaks fade in (prototypes/entities.lua) rather than pop up.
 local function render_warp_streaks(record, platform)
   local bounds = record.lightning_bounds
   if not bounds then
@@ -530,7 +531,8 @@ local function render_warp_streaks(record, platform)
   local height = bounds.bottom - bounds.top
   local count = math.floor(width * height / WARP_STREAK_TILES)
   count = math.max(WARP_STREAK_MIN, math.min(WARP_STREAK_MAX, count))
-  local travel = WARP_STREAK_LIFE * WARP_STREAK_SPEED
+  local speed = WARP_STREAK_SPEED * math.max(1, record.warp_level or 1)
+  local travel = WARP_STREAK_LIFE * speed
   local spawns = random_count(count * UPDATE_TICKS / WARP_STREAK_LIFE * (height + travel) / height)
   local surface = platform.surface
   for _ = 1, spawns do
@@ -540,7 +542,7 @@ local function render_warp_streaks(record, platform)
         x = bounds.left + math.random() * width,
         y = bounds.top - travel + math.random() * (height + travel)
       },
-      movement = {0, WARP_STREAK_SPEED},
+      movement = {0, speed},
       height = 0,
       vertical_speed = 0,
       frame_speed = 1
@@ -901,11 +903,15 @@ function Warp.update(record)
 end
 
 --- Per-tick work, limited to what cannot wait for the 10-tick update: growing activation
--- shockwaves, and clearing asteroids while warp holds. Until the sweeping ring has passed, only
--- what its front has reached is cleared; afterwards, everything. Idle drives cost one state check.
+-- shockwaves, drifting background anomalies smoothly south, and clearing asteroids while warp
+-- holds. Until the sweeping ring has passed, only what its front has reached is cleared;
+-- afterwards, everything. Idle drives cost one state check.
 function Warp.tick(record)
   if record.shockwave_tick or record.shockwaves then
     Shockwaves.update(record)
+  end
+  if record.anomalies then
+    Anomalies.tick(record)
   end
   if record.state ~= "warp" then
     return

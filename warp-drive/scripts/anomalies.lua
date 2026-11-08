@@ -2,8 +2,9 @@
 --
 -- They are background, independent of the lightning: LuaRendering animations on the "under-tiles"
 -- layer, so the platform deck hides them and they show only in open space. Each anomaly draws two
--- cloud shapes from the warp-field anomaly sheet around one drifting centre. Every 10-tick update
--- moves it, swells or shrinks it, turns each shape, crossfades between the shapes so its form
+-- cloud shapes from the warp-field anomaly sheet around one drifting centre. Every tick moves it
+-- south at 1/20th of the subspace streak speed, scaled by the active warp level; every 10-tick
+-- update swells or shrinks it, turns each shape, crossfades between the shapes so its form
 -- changes, and shifts its hue, in steps too small to see, and it fades in and out over its life.
 -- The whole field fades in at warp entry and out after exit.
 --
@@ -16,14 +17,17 @@ local ANIMATION = "bte-warp-drive-anomaly"
 local SHAPES = 6
 local LAYER = "under-tiles"
 local TILES_PER_ANOMALY = 36 * 36
--- Each anomaly costs two render objects updated every 10 ticks; very large ships stop here.
+-- Each anomaly costs two render objects; very large ships stop here.
 local MAX_ANOMALIES = 250
 local LIFE_MIN = 30 * 60
 local LIFE_MAX = 60 * 60
 -- Fraction of its life an anomaly spends fading in, and again fading out.
 local FADE = 0.3
 local FIELD_FADE_TICKS = 120
--- Tiles per tick, about 0.3 tiles a second at most: small enough steps every 10 ticks.
+-- Downward speed in tiles per tick at Warp-1 (20x slower than WARP_STREAK_SPEED = 0.555 in
+-- scripts/warp.lua), scaled linearly with the current warp level.
+local SOUTH_SPEED = 0.555 / 20
+-- Small organic wander in tiles per tick around the main southward flow.
 local DRIFT = 0.005
 -- Scale of the sheet's roughly 5-tile shapes: anomalies span about 30 to 60 tiles.
 local SCALE_MIN = 6
@@ -79,7 +83,7 @@ local function spawn(surface, bounds, pre_aged)
     x = between(bounds.left, bounds.right),
     y = between(bounds.top, bounds.bottom),
     vx = speed * math.cos(angle),
-    vy = speed * math.sin(angle),
+    vy = SOUTH_SPEED + speed * math.sin(angle),
     scale_from = between(SCALE_MIN, SCALE_MAX),
     scale_to = between(SCALE_MIN, SCALE_MAX),
     hue_from = math.random(),
@@ -114,7 +118,7 @@ local function spawn(surface, bounds, pre_aged)
   return anomaly
 end
 
--- Moves, scales, turns, recolours, and fades one anomaly for the current tick.
+-- Scales, turns, recolours, and fades one anomaly for the current tick.
 local function pose(anomaly, field)
   local age = game.tick - anomaly.born
   local progress = age / anomaly.life
@@ -122,8 +126,8 @@ local function pose(anomaly, field)
   local scale = anomaly.scale_from + (anomaly.scale_to - anomaly.scale_from) * smoothstep(progress)
   local hue = anomaly.hue_from + anomaly.hue_shift * progress
   local morph = 0.5 + 0.5 * math.cos(anomaly.morph_phase + anomaly.morph_rate * age)
-  local x = anomaly.x + anomaly.vx * age
-  local y = anomaly.y + anomaly.vy * age
+  local x = anomaly.x
+  local y = anomaly.y
   for index, layer in pairs(anomaly.layers) do
     local weight = index == 1 and morph or 1 - morph
     local object = layer.object
@@ -141,13 +145,60 @@ function Anomalies.destroy(record)
     destroy_anomaly(anomaly)
   end
   record.anomalies = nil
+  record.anomaly_bounds = nil
+  record.anomaly_tick = nil
   record.anomaly_field_since = nil
   record.anomaly_field_until = nil
+end
+
+--- Advances anomaly positions every tick so clouds glide smoothly southward at a speed proportional
+-- to the active warp level, wrapping inside the off-screen effect margin.
+function Anomalies.tick(record)
+  local anomalies = record.anomalies
+  if not anomalies then
+    return
+  end
+  local tick = game.tick
+  local dt = tick - (record.anomaly_tick or tick)
+  record.anomaly_tick = tick
+  if dt <= 0 then
+    return
+  end
+  local bounds = record.anomaly_bounds or record.lightning_bounds
+  local width = bounds and (bounds.right - bounds.left) or 0
+  local height = bounds and (bounds.bottom - bounds.top) or 0
+  local step = dt * math.max(1, record.warp_level or 1)
+  for _, anomaly in pairs(anomalies) do
+    if anomaly.vy < SOUTH_SPEED * 0.5 then
+      anomaly.vy = SOUTH_SPEED
+    end
+    anomaly.x = anomaly.x + anomaly.vx * step
+    anomaly.y = anomaly.y + anomaly.vy * step
+    if width > 0 then
+      if anomaly.x < bounds.left then
+        anomaly.x = anomaly.x + width
+      elseif anomaly.x > bounds.right then
+        anomaly.x = anomaly.x - width
+      end
+    end
+    if height > 0 and anomaly.y > bounds.bottom then
+      anomaly.y = anomaly.y - height
+    end
+    for _, layer in pairs(anomaly.layers) do
+      local object = layer.object
+      if object.valid then
+        object.target = {anomaly.x + layer.dx, anomaly.y + layer.dy}
+      end
+    end
+  end
 end
 
 --- Keeps the field filled while `active` (warp holds) over `bounds`, and fades it out otherwise.
 function Anomalies.update(record, surface, bounds, active)
   local tick = game.tick
+  if bounds then
+    record.anomaly_bounds = bounds
+  end
   local field
   if active and bounds then
     record.anomaly_field_until = nil
@@ -169,6 +220,9 @@ function Anomalies.update(record, surface, bounds, active)
   local anomalies = record.anomalies or {}
   local first_fill = record.anomalies == nil
   record.anomalies = anomalies
+  if first_fill then
+    record.anomaly_tick = tick
+  end
   for index = #anomalies, 1, -1 do
     local anomaly = anomalies[index]
     local valid = anomaly.layers[1].object.valid and anomaly.layers[2].object.valid
@@ -184,6 +238,7 @@ function Anomalies.update(record, surface, bounds, active)
       anomalies[#anomalies + 1] = spawn(surface, bounds, first_fill)
     end
   end
+  Anomalies.tick(record)
   for _, anomaly in pairs(anomalies) do
     pose(anomaly, field)
   end

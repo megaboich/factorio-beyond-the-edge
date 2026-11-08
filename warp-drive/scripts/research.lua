@@ -3,33 +3,30 @@ local Research = {}
 local PRACTICAL_TECH = "bte-practical-warp-drive"
 local IMPATIENT_SETTING = "bte-warp-drive-severely-impatient"
 local IMPATIENT_MULTIPLIER = 1000
-local BASE_TACHYONS_PER_SECOND = 2
-local LOCATION_MULTIPLIER_MINIMUM = 10
-local LOCATION_MULTIPLIER_MAXIMUM = 5000
+local MINIMUM_DENSITY = 10
+local EDGE_DENSITY = 100
+local MAXIMUM_DENSITY = 10000
+-- Along the final connection into the deepest destination, tachyon density rises steeply through
+-- the first 500,000 km (~1,000 particles/s at 100,000 km and ~5,000 particles/s at 500,000 km)
+-- before tapering toward MAXIMUM_DENSITY across the remaining distance.
+local FINAL_CURVE_EXPONENT = 1.4
+local FINAL_CURVE_HALF_SCALE = 1 / 16
 local DETECTOR_SPEED_REFERENCE = 100
--- Scales the research bonus before Practical research only; density and the boost are unaffected.
-local DETECTOR_BONUS_MULTIPLIER = 2
-local MAXIMUM_DENSITY = BASE_TACHYONS_PER_SECOND * LOCATION_MULTIPLIER_MAXIMUM
--- After Practical research the detector powers the Tachyon Science Boost: an extra share of each
--- eligible laboratory's ordinary rate, up to this much at maximum density and full power.
-local SCIENCE_BOOST_MAXIMUM = 1
-local DETECTOR_MAXIMUM_POWER_RATIO = 5
+-- When no laboratories exist on the drive's platform, tachyon observations are relayed to
+-- planetary laboratories with a 10x telemetry loss (0.1x signal efficiency).
+local RELAY_TRANSFER_FACTOR = 0.1
+-- After Practical research the detector powers the Tachyon Science Boost: the same effective
+-- tachyon signal (T * S * P * R) divided by this reference signal (10,000 particles/s), giving
+-- +1,500% (16x) locally or +150% (2.5x) via remote planetary transfer at 10,000 particles/s,
+-- 50 km/s (1.5x), and 1 GW (10x).
+local SCIENCE_BOOST_SIGNAL_DIVISOR = 10000
 local RESEARCH_UPDATE_TICKS = 60
 local TICKS_PER_SECOND = 60
-local CRAFTING_MACHINE_TYPES = {
-  ["assembling-machine"] = true,
-  ["furnace"] = true,
-  ["rocket-silo"] = true
-}
 local SPACELAB_INTEGRATION_ENABLED = false -- Temporary standalone testing switch.
-
-local function init_storage()
-  storage.research_branches = storage.research_branches or {}
-end
 
 function Research.reset_caches()
   storage.research_branch = nil
-  storage.research_branches = {}
+  storage.research_branches = nil
   storage.travel_map = nil
 end
 
@@ -37,10 +34,13 @@ local function platform_speed_km_per_second(platform)
   return (platform.speed or 0) * TICKS_PER_SECOND
 end
 
+local TRAVEL_MAP_VERSION = 2
 -- Tachyon density follows kilometres actually travelled through each connected route graph.
 -- Space-location distance is only a starmap drawing radius and cannot represent route depth.
 local function travel_maps()
-  if storage.travel_map and storage.travel_map.by_location then
+  if storage.travel_map
+      and storage.travel_map.version == TRAVEL_MAP_VERSION
+      and storage.travel_map.by_location then
     return storage.travel_map
   end
   local neighbours = {}
@@ -54,7 +54,7 @@ local function travel_maps()
       table.insert(neighbours[to], {name = from, length = length})
     end
   end
-  local maps = {by_location = {}}
+  local maps = {version = TRAVEL_MAP_VERSION, by_location = {}}
   local visited = {}
   for start in pairs(neighbours) do
     if not visited[start] then
@@ -109,11 +109,22 @@ local function travel_maps()
           farthest = value
         end
       end
+      local final_length = 0
+      for _, edge in pairs(neighbours[deepest_name] or {}) do
+        if edge.length > final_length then
+          final_length = edge.length
+        end
+      end
+      if final_length <= 0 then
+        final_length = farthest
+      end
       local map = {
         remaining = remaining,
         farthest = farthest,
         unit = unit or 1,
-        deepest_name = deepest_name
+        deepest_name = deepest_name,
+        final_length = final_length,
+        edge_depth = math.max(0, farthest - final_length)
       }
       for _, name in pairs(names) do
         maps.by_location[name] = map
@@ -127,7 +138,8 @@ end
 local function travel_map(platform)
   local name = platform.space_location and platform.space_location.name
     or (platform.space_connection and platform.space_connection.from.name)
-  return travel_maps().by_location[name] or {remaining = {}, farthest = 0, unit = 1}
+  return travel_maps().by_location[name]
+    or {remaining = {}, farthest = 0, unit = 1, final_length = 0, edge_depth = 0}
 end
 
 local function travel_depth(platform)
@@ -152,27 +164,39 @@ local function travel_depth(platform)
   return math.max(0, map.farthest - remaining)
 end
 
-local function travel_ratio(platform)
-  local map = travel_map(platform)
-  local depth = travel_depth(platform)
-  if not depth or map.farthest <= map.unit then
-    return 0
+function Research.final_stretch_density(fraction)
+  local clamped = math.max(0, math.min(1, fraction or 0))
+  if clamped <= 0 then
+    return EDGE_DENSITY
   end
-  local span = math.log(map.farthest / map.unit)
-  if span <= 0 then
-    return 0
-  end
-  local ratio = math.log(math.max(depth, map.unit) / map.unit) / span
-  return math.max(0, math.min(1, ratio))
-end
-
-local function location_multiplier(platform)
-  return LOCATION_MULTIPLIER_MINIMUM
-    * (LOCATION_MULTIPLIER_MAXIMUM / LOCATION_MULTIPLIER_MINIMUM) ^ travel_ratio(platform)
+  local u = clamped ^ FINAL_CURVE_EXPONENT
+  local curved = (1 + FINAL_CURVE_HALF_SCALE) * u / (u + FINAL_CURVE_HALF_SCALE)
+  return EDGE_DENSITY + (MAXIMUM_DENSITY - EDGE_DENSITY) * curved
 end
 
 function Research.tachyon_density(platform)
-  return platform and BASE_TACHYONS_PER_SECOND * location_multiplier(platform) or 0
+  if not platform then
+    return 0
+  end
+  local map = travel_map(platform)
+  local depth = travel_depth(platform)
+  if not depth or map.farthest <= 0 then
+    return MINIMUM_DENSITY
+  end
+  if depth <= map.edge_depth then
+    if map.edge_depth <= map.unit then
+      return MINIMUM_DENSITY
+    end
+    local span = math.log(map.edge_depth / map.unit)
+    if span <= 0 then
+      return MINIMUM_DENSITY
+    end
+    local ratio = math.log(math.max(depth, map.unit) / map.unit) / span
+    ratio = math.max(0, math.min(1, ratio))
+    return MINIMUM_DENSITY * (EDGE_DENSITY / MINIMUM_DENSITY) ^ ratio
+  end
+  local final_length = math.max(1, map.final_length)
+  return Research.final_stretch_density((depth - map.edge_depth) / final_length)
 end
 
 local function spacelab_multiplier(surface)
@@ -201,6 +225,19 @@ local function working_lab_metrics(surface, force)
   return count, total_rate
 end
 
+local function planetary_lab_metrics(force)
+  local count = 0
+  local total_rate = 0
+  for _, surface in pairs(game.surfaces) do
+    if not surface.platform then
+      local surface_count, surface_rate = working_lab_metrics(surface, force)
+      count = count + surface_count
+      total_rate = total_rate + surface_rate
+    end
+  end
+  return count, total_rate
+end
+
 local function force_lab_metrics(force)
   local count = 0
   local total_rate = 0
@@ -212,83 +249,22 @@ local function force_lab_metrics(force)
   return count, total_rate
 end
 
-local function surface_conditions_met(conditions, surface)
-  if not conditions or surface.ignore_surface_conditions then
-    return true
-  end
-  for _, condition in pairs(conditions) do
-    local value = surface.get_property(condition.property)
-    if not value or value < condition.min or value > condition.max then
-      return false
-    end
-  end
-  return true
-end
-
--- Select capability rather than a named integration. Relay is required whenever any science
--- pack cannot be produced by an applicable machine and recipe on this platform surface.
-local function compute_branch(surface)
-  local technology = prototypes.technology[PRACTICAL_TECH]
-  if not technology then
-    return "relay"
-  end
-  local categories = {}
-  for _, machine in pairs(prototypes.entity) do
-    if CRAFTING_MACHINE_TYPES[machine.type]
-        and surface_conditions_met(machine.surface_conditions, surface) then
-      for category in pairs(machine.crafting_categories or {}) do
-        categories[category] = true
-      end
-    end
-  end
-  local craftable = {}
-  for _, recipe in pairs(prototypes.recipe) do
-    if surface_conditions_met(recipe.surface_conditions, surface) then
-      local supported = false
-      for _, category in pairs(recipe.categories) do
-        if categories[category] then
-          supported = true
-          break
-        end
-      end
-      if supported then
-        -- Recycling consumes the same pack it returns, so it is not a source of that pack.
-        local consumed = {}
-        for _, ingredient in pairs(recipe.ingredients) do
-          consumed[ingredient.name] = true
-        end
-        for _, product in pairs(recipe.products) do
-          if product.type == "item" and not consumed[product.name] then
-            craftable[product.name] = true
-          end
-        end
-      end
-    end
-  end
-  for _, ingredient in pairs(technology.research_unit_ingredients) do
-    if not craftable[ingredient.name] then
-      return "relay"
-    end
-  end
-  return "local"
-end
-
-function Research.branch(surface)
+-- Selects "local" when any laboratory building exists on this platform surface (delivering 100%
+-- of the tachyon signal exclusively to laboratories on this platform), or "relay" when no
+-- laboratories are built on this platform (relaying the signal to planetary laboratories with a
+-- 10x remote-transfer loss).
+function Research.branch(surface, force)
   if not surface or not surface.valid or not surface.platform then
     return nil
   end
-  init_storage()
-  local cached = storage.research_branches[surface.index]
-  if not cached or cached.surface ~= surface
-      or cached.ignore_surface_conditions ~= surface.ignore_surface_conditions then
-    cached = {
-      surface = surface,
-      ignore_surface_conditions = surface.ignore_surface_conditions,
-      branch = compute_branch(surface)
-    }
-    storage.research_branches[surface.index] = cached
+  local filter = {type = "lab", limit = 1}
+  if force then
+    filter.force = force
   end
-  return cached.branch
+  if surface.count_entities_filtered(filter) > 0 then
+    return "local"
+  end
+  return "relay"
 end
 
 local function detector_speed_factor(platform)
@@ -300,17 +276,20 @@ local function tachyon_bonus_factor()
   return setting and setting.value and IMPATIENT_MULTIPLIER or 1
 end
 
-local function detector_signal(record, power_ratio)
+local function detector_signal(record, power_ratio, branch)
   local entity = record.entity
   local platform = entity and entity.valid and entity.surface.platform
   if not platform then
     return 0, 0
   end
-  local signal = BASE_TACHYONS_PER_SECOND
-    * location_multiplier(platform)
+  branch = branch or Research.branch(entity.surface, entity.force)
+  local transfer = branch == "relay" and RELAY_TRANSFER_FACTOR or 1
+  local base_signal = Research.tachyon_density(platform)
     * detector_speed_factor(platform)
     * spacelab_multiplier(entity.surface)
-  return signal, DETECTOR_BONUS_MULTIPLIER * signal * power_ratio * tachyon_bonus_factor()
+    * transfer
+  local effective_signal = base_signal * power_ratio
+  return effective_signal, effective_signal * tachyon_bonus_factor()
 end
 
 local function practical_complete(force)
@@ -318,15 +297,13 @@ local function practical_complete(force)
   return technology ~= nil and technology.researched
 end
 
--- The Tachyon Science Boost share for one drive: tachyon density relative to its maximum times
--- delivered detector power relative to 1 GW. Speed and the impatient-mode multiplier do not
--- apply.
-local function science_boost(record, platform)
-  if not platform then
-    return 0
-  end
-  local power = math.min(1, (record.detector_power_ratio or 0) / DETECTOR_MAXIMUM_POWER_RATIO)
-  return SCIENCE_BOOST_MAXIMUM * Research.tachyon_density(platform) / MAXIMUM_DENSITY * power
+-- The Tachyon Science Boost share for one drive: uses the same effective tachyon signal
+-- (T * S * P * R) divided by SCIENCE_BOOST_SIGNAL_DIVISOR (10,000), so at 10,000 particles/s,
+-- 50 km/s (1.5x), and 1 GW (10x), onboard platform labs receive +1,500% (16x) and remotely
+-- boosted planetary labs receive +150% (2.5x). Impatient mode does not apply.
+local function science_boost(record, branch)
+  local effective_signal = detector_signal(record, record.detector_power_ratio or 0, branch)
+  return effective_signal / SCIENCE_BOOST_SIGNAL_DIVISOR
 end
 
 -- research_unit_energy is ticks, despite technology unit time being authored in seconds.
@@ -335,11 +312,12 @@ local function research_seconds(research)
 end
 
 -- Both GUI estimates and progress updates use this aggregation. Relay signals are summed
--- before one force-wide lab scan; local signals use only labs on their detector surfaces.
+-- before one planetary lab scan; local signals use only labs on their detector surfaces.
 --
--- Before Practical research, detector signals accelerate only that research and add up across
--- drives. Afterwards every research receives the Tachyon Science Boost: each drive adds up to
--- 100% of the ordinary rate of every laboratory the force owns, wherever it is, so drives combine.
+-- In both Practical Warp Drive research mode and post-Practical General Science Tachyon Boost
+-- mode, each drive checks whether laboratories exist on its platform: if so ("local"), 100% of its
+-- signal applies exclusively to working laboratories on that platform; if not ("relay"), 10% (10x
+-- remote-transfer loss) applies to working planetary laboratories.
 local function aggregate_bonus_rates(target_force, target_research)
   local buckets = {}
   for _, record in pairs(storage.drives or {}) do
@@ -352,11 +330,12 @@ local function aggregate_bonus_rates(target_force, target_research)
       local research = target_force and target_research or force.current_research
       local boost = practical_complete(force)
       if research and (boost or research.name == PRACTICAL_TECH) then
+        local branch = Research.branch(entity.surface, force)
         local bonus_multiplier
         if boost then
-          bonus_multiplier = science_boost(record, platform)
+          bonus_multiplier = science_boost(record, branch)
         else
-          local _, signal = detector_signal(record, power_ratio)
+          local _, signal = detector_signal(record, power_ratio, branch)
           bonus_multiplier = signal
         end
         if bonus_multiplier > 0 then
@@ -366,10 +345,11 @@ local function aggregate_bonus_rates(target_force, target_research)
               relay_signal = 0}
             buckets[force.index] = bucket
           end
-          if boost or Research.branch(entity.surface) == "relay" then
+          if branch == "relay" then
             bucket.relay_signal = bucket.relay_signal + bonus_multiplier
           else
-            bucket.local_signals[entity.surface] = bonus_multiplier
+            bucket.local_signals[entity.surface] = (bucket.local_signals[entity.surface] or 0)
+              + bonus_multiplier
           end
         end
       end
@@ -382,8 +362,8 @@ local function aggregate_bonus_rates(target_force, target_research)
       work = work + platform_rate * signal
     end
     if bucket.relay_signal > 0 then
-      local _, force_rate = force_lab_metrics(bucket.force)
-      work = work + force_rate * bucket.relay_signal
+      local _, planetary_rate = planetary_lab_metrics(bucket.force)
+      work = work + planetary_rate * bucket.relay_signal
     end
     bucket.rate = work / research_seconds(bucket.research)
   end
@@ -399,43 +379,52 @@ function Research.snapshot(record)
   local force = entity.force
   local practical = force.technologies[PRACTICAL_TECH]
   local complete = practical ~= nil and practical.researched
-  local branch = Research.branch(entity.surface)
-  local power_ratio = complete and 0 or (record.detector_power_ratio or 0)
-  local _, bonus_multiplier = detector_signal(record, power_ratio)
+  local branch = Research.branch(entity.surface, force)
+  local power_ratio = record.detector_power_ratio or 0
+  local effective_signal, bonus_multiplier = detector_signal(record, power_ratio, branch)
   local lab_count, lab_rate
-  if complete or branch == "relay" then
-    lab_count, lab_rate = force_lab_metrics(force)
+  if branch == "relay" then
+    lab_count, lab_rate = planetary_lab_metrics(force)
   else
     lab_count, lab_rate = working_lab_metrics(entity.surface, force)
   end
   local research = force.current_research
   local researching_practical = research ~= nil and research.name == PRACTICAL_TECH
-  local seconds = researching_practical and research_seconds(research) or 0
-  local bonus_rate = researching_practical and lab_rate * bonus_multiplier / seconds or 0
+  local seconds = research ~= nil and research_seconds(research) or 0
+  local bonus_rate = (not complete and researching_practical and seconds > 0)
+    and lab_rate * bonus_multiplier / seconds or 0
   local ordinary_lab_rate = 0
   local force_bonus_rate = 0
   local total_rate = 0
-  if researching_practical then
+  if research ~= nil and (complete or researching_practical) then
     _, ordinary_lab_rate = force_lab_metrics(force)
     local bucket = aggregate_bonus_rates(force, research)[force.index]
     force_bonus_rate = bucket and bucket.rate or 0
-    total_rate = ordinary_lab_rate / seconds + force_bonus_rate
+    total_rate = seconds > 0 and (ordinary_lab_rate / seconds + force_bonus_rate) or 0
   end
-  local boost = complete and science_boost(record, platform) or 0
-  -- Every powered drive of the force adds its own boost; the GUI shows this drive's share and
-  -- the force-wide total.
+  local boost = complete and science_boost(record, branch) or 0
+  -- Sum the boost of all drives targeting the same laboratory pool (onboard labs on this surface
+  -- when local, or all relay drives when relaying to planetary laboratories).
   local combined_boost = 0
   if complete then
-    for _, other in pairs(storage.drives or {}) do
-      local other_entity = other.entity
-      if other_entity and other_entity.valid and other_entity.force == force then
-        combined_boost = combined_boost + science_boost(other, other_entity.surface.platform)
+    if branch == "local" then
+      combined_boost = boost
+    else
+      for _, other in pairs(storage.drives or {}) do
+        local other_entity = other.entity
+        if other_entity and other_entity.valid and other_entity.force == force
+            and Research.branch(other_entity.surface, force) == "relay" then
+          combined_boost = combined_boost + science_boost(other, "relay")
+        end
       end
     end
   end
   local map = travel_map(platform)
   local progress_km = travel_depth(platform) or 0
   local deepest_name = map.deepest_name
+  local final_length = map.final_length or 0
+  local edge_depth = map.edge_depth or 0
+  local final_distance = math.max(0, math.min(final_length, progress_km - edge_depth))
   return {
     branch = branch,
     practical = complete,
@@ -443,7 +432,8 @@ function Research.snapshot(record)
     researching_practical = researching_practical,
     research_seconds = seconds,
     power_ratio = power_ratio,
-    detector_signal = bonus_multiplier,
+    effective_signal = effective_signal,
+    detector_signal = complete and effective_signal or bonus_multiplier,
     detector_speed = math.max(0, platform_speed_km_per_second(platform)),
     detector_speed_factor = detector_speed_factor(platform),
     density = Research.tachyon_density(platform),
@@ -456,15 +446,17 @@ function Research.snapshot(record)
     force_bonus_rate = force_bonus_rate,
     total_rate = total_rate,
     progress = force.research_progress,
-    remaining_units = researching_practical
+    remaining_units = research ~= nil
       and research.research_unit_count * (1 - force.research_progress) or 0,
     progress_km = progress_km,
     progress_ratio = map.farthest > 0 and progress_km / map.farthest or 0,
+    final_distance = final_distance,
+    final_length = final_length,
+    on_final_stretch = progress_km >= edge_depth and final_length > 0,
     deepest_location = deepest_name and prototypes.space_location[deepest_name] or nil,
     science_boost = boost,
     combined_science_boost = combined_boost,
-    science_boost_rate = combined_boost > 0 and research ~= nil
-      and lab_rate * combined_boost / research_seconds(research) or 0
+    science_boost_rate = complete and seconds > 0 and lab_rate * combined_boost / seconds or 0
   }
 end
 

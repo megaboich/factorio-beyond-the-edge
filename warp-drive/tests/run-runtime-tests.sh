@@ -90,9 +90,8 @@ if ! grep -qE 'WARP_TEST_PASS: .*invariants hold' "$TEST_ROOT/api.log"; then
   exit 1
 fi
 
-# The two research-branch runs differ only by bte-warp-drive-space-science-test, which removes
-# the four vanilla planetary science pack surface conditions. Warp Drive must switch from
-# the force-wide relay to platform-local acceleration on capability alone.
+# Keep the local-branch fixture's tiny laboratory load ahead of the 1 GW detector request.
+# This changes only the local test run and avoids adding generation that would alter detector power.
 run_branch_test() {
   local mods_dir="$1"
   local label="$2"
@@ -120,7 +119,7 @@ run_branch_test() {
 }
 
 run_branch_test "$RELAY_MODS" relay \
-  'WARP_TEST_PASS: relay research branch accelerated force-wide laboratories'
+  'WARP_TEST_PASS: relay research branch accelerated planetary laboratories with 10x transfer loss'
 run_branch_test "$LOCAL_MODS" local \
   'WARP_TEST_PASS: local research branch accelerated platform laboratories only' \
   bte-warp-drive-space-science-test

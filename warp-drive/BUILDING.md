@@ -89,7 +89,7 @@ The symmetric footprint reuses one circuit connection definition in all directio
 | `output_*_enabled`, `output_*_signal` | Independent circuit output toggles and signal assignments; legacy outputs default enabled and distance defaults disabled |
 | `state`, `cooldown_until` | Composite state and lockout |
 | `last_distance`, `direction` | Travel samples used by movement logic |
-| `detector_power`, `detector_power_ratio`, `detector_request_watts` | Latest detector sample, factor relative to `200 MW`, and adaptive next demand |
+| `detector_power`, `detector_power_ratio`, `detector_request_watts` | Latest detector sample, factor relative to `100 MW` (`0` to `10`), and adaptive next demand |
 | `warp_level`, `requested_warp_level`, `warp_target` | Current, probed, and sustainable warp levels |
 | `reserve_energy`, `migrated_reserve_energy` | Authoritative private reserve and one-time legacy energy capture |
 | `support_power`, `power_sample_watts`, `power_sample_support_watts`, `support_demand_watts`, `support_check_after` | Delivered power, interface request, logical warp demand, and startup grace |
@@ -118,13 +118,13 @@ Each 10-tick update sets the platform's name to whatever precedes the ` [color=c
 
 ### Detector
 
-The `detector_on` latch gates the shared power interface before Practical research, and while the drive is `idle` after it. After Practical research each powered drive's boost is added to one force-wide total applied to every working laboratory the force owns, regardless of the research branch. While enabled, it adaptively requests up to `1 GW`. Every 10 ticks, runtime takes the delta of the interface prototype's cumulative electric-network input and converts those consumed joules to average delivered watts:
+The `detector_on` latch gates the shared power interface before Practical research, and while the drive is `idle` after it. In both modes, each powered drive checks whether any laboratory buildings exist on its own platform surface: when laboratories exist on the platform (`local`), `100%` of the drive's signal applies exclusively to working laboratories on that platform; when no laboratories exist on the platform (`relay`), `10%` (`10x` remote-transfer loss) applies to working planetary laboratories. While enabled, it adaptively requests up to `1 GW`. Every 10 ticks, runtime takes the delta of the interface prototype's cumulative electric-network input and converts those consumed joules to average delivered watts:
 
 ```text
 delivered watts = consumed joules * 60 / elapsed ticks
 ```
 
-The result is capped at `1 GW`. After a shortfall greater than `0.1 MW`, the next request drops to measured delivery. When the request is fully supplied within that absolute tolerance, it increases by `10 MW`. This feedback converges near generation left over after ordinary ship demand while continuing to probe changing capacity. Research scales against a `200 MW` reference, so the power factor ranges continuously from `0` to `5`. The interface's zero output limit prevents sampled energy from powering the ship.
+The result is capped at `1 GW`. After a shortfall greater than `0.1 MW`, the next request drops to measured delivery. When the request is fully supplied within that absolute tolerance, it increases by `10 MW`. This feedback converges near generation left over after ordinary ship demand while continuing to probe changing capacity. Research scales against a `100 MW` reference, so the power factor ranges continuously from `0` to `10`. The interface's zero output limit prevents sampled energy from powering the ship.
 
 ### Charge
 

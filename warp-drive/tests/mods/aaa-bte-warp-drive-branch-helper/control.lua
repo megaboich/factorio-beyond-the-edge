@@ -15,7 +15,7 @@ local DEEP_TICK = 650
 local FAST_TICK = 770
 local DETECTOR_REFERENCE_WATTS = 200000000
 local DETECTOR_MAX_WATTS = 1000000000
-local NEAR_DISTANCE = 0.05
+local NEAR_DISTANCE = 0.025
 local DEEP_DISTANCE = 0.999
 
 local function ensure_power_source(platform)
