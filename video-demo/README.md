@@ -49,6 +49,10 @@ The save is not in the repository. Both `record.sh` and `thumbnail.sh` load the 
 
 After a narration change, run `voice.py` then `mux.py pointer`; after a new recording, run `master.py`, `pointer.py`, `voice.py`, then `mux.py pointer`.
 
+## Reddit copies
+
+`./reddit.sh` renders both videos for Reddit into `reddit-post/` (git-ignored): 1920x1080 at 30 fps, about 12 Mbit/s, with the narration and the subtitles burned in. Reddit accepts no subtitle files, re-encodes to at most about 1080p30, and its own scaling and frame-rate conversion are poor, so upscaled or 60 fps uploads gain nothing there. The post text, images, and posting notes are in `reddit-post/post.md`.
+
 ## Lessons Learned
 
 - Factorio ignores the cutscene controller on space platforms; the director moves the remote-view camera with `set_controller` every tick instead.
