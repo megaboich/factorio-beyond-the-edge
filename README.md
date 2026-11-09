@@ -13,9 +13,16 @@ Both mods require Factorio 2.1 with the Space Age expansion.
 
 ## Beyond the Edge: Space Lab
 
-<p align="center">
-  <img src="spacelab/docs/growth-facility-pentapod-egg.gif" alt="Growth Facility hatching Pentapods" width="200">
-</p>
+<table>
+  <tr>
+    <th width="50%">New building: Growth Facility</th>
+    <th width="50%">YouTube demo video (1.7 min)</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="spacelab/docs/growth-facility-pentapod-egg.gif" alt="Growth Facility hatching Pentapods" width="200"></td>
+    <td align="center"><a href="https://www.youtube.com/watch?v=JVCqwXjkNm8"><img src="https://img.youtube.com/vi/JVCqwXjkNm8/maxresdefault.jpg" alt="Watch the Space Lab demo on YouTube" height="194"></a></td>
+  </tr>
+</table>
 
 Space Lab extends the endgame into orbit. Asteroid chunks become broad chemical feedstock, a rare new mineral unlocks high-tier chemistry, and a new Growth Facility cultivates Gleba crops and incubates eggs on the platform. The planetary science packs can be crafted in space with their standard machines, so a platform can run a complete late-game science chain on its own.
 
@@ -23,9 +30,16 @@ See the Space Lab manual [for all details](spacelab/README.md).
 
 ## Beyond the Edge: Warp Drive
 
-<p align="center">
-  <img src="warp-drive/docs/warp-drive-warp.gif" alt="Warp Drive at warp" width="200">
-</p>
+<table>
+  <tr>
+    <th width="50%">New building: Warp Drive</th>
+    <th width="50%">YouTube demo video (3.5 min)</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="warp-drive/docs/warp-drive-warp.gif" alt="Warp Drive at warp" width="200"></td>
+    <td align="center"><a href="https://www.youtube.com/watch?v=FKd6wIzOH2k"><img src="https://img.youtube.com/vi/FKd6wIzOH2k/maxresdefault.jpg" alt="Watch the Warp Drive demo on YouTube" height="182"></a></td>
+  </tr>
+</table>
 
 Warp Drive adds one platform-only building and two technologies. At first the drive is a detector: the deeper a platform travels into space, the more it speeds up research of its own final technology. Once that research completes, the same building becomes an engine that moves the platform through subspace. It speeds up travel but does not teleport, and engine thrust, platform weight, and power still matter. Asteroids disappear in subspace, so fast travel also cuts off asteroid collection.
 

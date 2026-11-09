@@ -1,0 +1,47 @@
+Title:
+Factorio Space Age mod: Warp Drive – escape the asteroids on the way to the Shattered Planet
+
+Description:
+A Factorio: Space Age post-game mod that adds a Warp Drive to space platforms. Once researched, it pulls the platform into subspace: no asteroids, and many times the normal travel speed on the long route to the Shattered Planet and back.
+
+⚠️ The mod is not published on the Factorio Mod Portal yet. It is in final testing, and the source is on GitHub. For now you can try it by packaging it from the repository yourself.
+
+🔗 Warp Drive manual: https://github.com/megaboich/factorio-beyond-the-edge/tree/main/warp-drive
+🔗 Beyond the Edge (all mods): https://github.com/megaboich/factorio-beyond-the-edge
+🐞 Issues and feedback: https://github.com/megaboich/factorio-beyond-the-edge/issues
+
+In this demo:
+• A platform stuck at 20 km/s in a dense asteroid field
+• Engaging warp automatically with a circuit condition
+• Charging for warp entry (energy depends on platform mass) and the jump into subspace
+• Raising engine speed to climb warp levels
+• Warp status on the space map
+• Slowing down and disengaging safely
+• A failed re-entry, then a second jump through heavy asteroids
+
+How it works:
+• Requires Factorio 2.1 with Space Age. One Warp Drive per space platform.
+• Researching Practical Warp Drive unlocks warp travel. Before that, the drive detects tachyons in deep space to speed up that research.
+• Warp needs at least 50 km/s and power to charge. Each warp level needs 50 km/s of engine speed and 10 W/kg of support power.
+• Warp-1 is 10x engine speed, and each level adds another 10x.
+• Can be engaged and disengaged by hand or by circuit conditions, and reports warp level, distance and speed to the circuit network.
+• While not in warp, the drive boosts general science research.
+
+Chapters:
+0:00 Intro: stuck among asteroids
+0:13 The Warp Drive dialog
+0:18 Circuit control
+0:43 Charging for warp entry
+0:56 Jump into subspace
+1:06 Warp dialog and effective speed
+1:20 Going faster: warp levels
+1:42 Space map
+1:59 Leaving warp safely
+2:25 Back in normal space
+2:40 A failed re-entry
+2:46 Second jump
+3:18 Wrap-up
+
+Part of Beyond the Edge, a set of independent post-game mods for Factorio: Space Age.
+
+#Factorio #FactorioSpaceAge #FactorioMods

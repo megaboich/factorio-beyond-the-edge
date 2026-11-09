@@ -1,0 +1,35 @@
+Hey, welcome to factorio space warp demo
+
+This is my factorio save, it has one space platform currently flying in the middle of the route to the shattered planet, actually returning back.
+And it is a bit stuck there at the speed of 20km/s - there are lots of asteroids there, the ship can’t really go faster without damage.
+
+Lets see what war drive can do now - here it is - the dialog shows that warp cannot be activated just yet, because it requires the minimum speed of 50km/s, which I guess I can try to temporarily increase before platform gets heavily damaged. For the demonstration and better timing in this situation I would also set automatic warp activation by circuit condition. I am going to set the condition that is always true - so warp drive will activate as soon as all requirements are fulfilled - minimum required speed is reached and the required energy for the jump is accumulated.
+
+Lets try this. I have this circuit condition limiting maximum speed, lets set it to 55 km/s and see what’s going to happen.
+
+
+Immediately speed of the platform increased and warp activation got triggered, but before the jump happens there is energy build-up, which depends on the platform mass.
+
+Lets zoom out to see the jump. As soon as ship breached subspace barrier all the asteroids disappear and ship travels in complete safety in the subspace, which has also nice graphic and sound effects. 
+
+The warp drive building dialog now shows current warp speed and all the detailed information. The standard game UI still shows ship speed based on engine output, mod cannot change that unfortunately.
+
+Lets increase the speed a little bit more.
+
+As you can see engine speed affects warp mode multiplication which provides much greater effective speed.
+
+If we switch to space map now - we see our platform moving significantly faster, the ship movement even noticeable by eye.
+Also to indicate that ship is in warp - the platform name gets this WARP suffix in cyan color.
+
+Now lets see how warp deactivation works - the best way is to reduce the speed before jumping to regular space, in order to accommodate asteroid which going to appear straight back.
+
+As speed drops down we can either wait until ship disengages warp automatically because of not enough speed, or just use manual control button in the dialog.
+
+The platform now is back to normal space - so all asteroids start to appear as usual.
+
+At the same moment the warp drive started to activate again, because ship speed increased over 50 (my circuit setup is a bit wobbly). But then because speed got reduced back the jump did not happen in time required to fully charge energy buffer.
+
+Lets change speed back to over 50, to see how warp jump happens again. 
+Yes! The ship made it, even with sever damage, corner cannons are destroyed.
+
+This concludes the demonstration of warp drive, thanks for watching!

@@ -12,6 +12,7 @@ This repository holds independent Factorio: Space Age post-game mods. They share
 - `tools/sprites/`: sprite renderer for buildings, icons, and effects. Three.js models in `models/` (shared helpers in `lib/`) are rendered by headless Chrome (`node render.mjs`, after `npm install`) into Factorio sheets under the git-ignored `out/`: main, shadow, model-defined extra layers (such as per-variant specimens with their own frame count and speed), and additive `glow-*` layers with their `shift` metadata, plus an animated day/night preview (`<name>-preview.html`, with a no-recipe mode) beside the current and vanilla art. `gif.mjs` records README GIFs from that preview (needs `ffmpeg` and `gifsicle`). Lives outside every mod root, so it is never packaged.
 - `spacelab/`: Space Lab mod root (`info.json` name `bte-spacelab`, title `Beyond the Edge: Space Lab`).
 - `warp-drive/`: Warp Drive mod root (`info.json` name `bte-warp-drive`, title `Beyond the Edge: Warp Drive`).
+- `video-demo/`: scripts, narration, subtitles, descriptions, and thumbnails for the YouTube demo videos, with instructions in its `README.md`. Recordings, masters, and audio go to the git-ignored `video-demo-output/`.
 
 Each mod directory is a complete Factorio mod root. Directory names are repository paths only; the published mod name always comes from `info.json`. Run commands from the repository root unless stated otherwise.
 

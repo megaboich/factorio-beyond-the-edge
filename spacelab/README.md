@@ -2,7 +2,9 @@
 
 **Beyond the Edge: Space Lab** is a standalone Factorio: Space Age post-game mod. It adds one advanced orbital biotechnology building (<img src="docs/icons/bte-growth-facility.png" width="24" height="24" alt=""> **Growth Facility**), one trace asteroid mineral (<img src="docs/icons/bte-flurolite.png" width="24" height="24" alt=""> **Flurolite**), three post-game technologies (**Asteroid Stone Processing**, **Flurolite Processing**, and **Growth Facility**), and surface-condition overrides that let a space platform craft every planetary science pack in orbit.
 
-<!-- Demo video TBD -->
+### Demo video on YouTube (1.7 min)
+
+[![Watch the Space Lab demo on YouTube](https://img.youtube.com/vi/JVCqwXjkNm8/maxresdefault.jpg)](https://www.youtube.com/watch?v=JVCqwXjkNm8)
 
 The mod requires `base >= 2.1.0` and `space-age >= 2.1.0`. [Beyond the Edge: Warp Drive](../warp-drive/README.md) is optional.
 

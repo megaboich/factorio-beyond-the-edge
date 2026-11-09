@@ -1,0 +1,40 @@
+Title:
+Factorio Space Age mod: Space Lab - a self-sufficient research ship with full science in orbit
+
+Description:
+A Factorio: Space Age post-game mod that turns a space platform into a self-sufficient orbital factory. Asteroids supply stone, ammonia, lithium, fluorine, holmium and tungsten; a new Growth Facility grows Gleba crops and incubates eggs on board; and all four planetary science packs can be made in space. In this demo, the research ship Stargazer builds its whole science chain on the way to the Shattered Planet.
+
+The mod is not published on the Factorio Mod Portal yet. It is in final testing, and the source is on GitHub. For now you can try it by packaging it from the repository yourself.
+
+Space Lab manual: https://github.com/megaboich/factorio-beyond-the-edge/tree/main/spacelab
+Source code (GitHub repository): https://github.com/megaboich/factorio-beyond-the-edge
+Issues and feedback: https://github.com/megaboich/factorio-beyond-the-edge/issues
+Warp Drive demo video (companion mod): https://www.youtube.com/watch?v=FKd6wIzOH2k
+
+In this demo:
+- Asteroid collectors and crushers on a large research platform
+- Stone-focused crushing: stone from regular asteroid chunks
+- Shattered Synthesis: tungsten, holmium and the new mineral Flurolite from promethium chunks
+- Cryogenic chemistry: ammonia from stone, lithium brine and fluorine from Flurolite
+- The Growth Facility incubating biter eggs and growing Yumako and Jellynut
+- Agricultural, cryogenic, electromagnetic and metallurgic science made in orbit
+- Twenty-four labs running a complete science chain in deep space
+
+How it works:
+- Requires Factorio 2.1 with Space Age.
+- Three technologies: Asteroid Stone Processing, Flurolite Processing, and Growth Facility.
+- New Crusher and Cryogenic Plant recipes recover stone, ammonia, Flurolite, lithium brine, fluorine, holmium, tungsten and trace uranium from asteroid chunks.
+- The Growth Facility (9x9, 100 MW) grows 57 Yumako or Jellynut from one seed, or turns one biter or pentapod egg into 19. Products don't spoil while they stay inside the machine.
+- Planetary surface conditions are removed from the agricultural, cryogenic, electromagnetic and metallurgic science pack recipes, so the standard machines can make them on a platform.
+
+Chapters:
+0:00 Intro: the research ship Stargazer
+0:13 Asteroid crushing and stone
+0:24 Shattered Synthesis and Flurolite
+0:46 The Growth Facility
+1:05 Planetary science in orbit
+1:31 Labs and wrap-up
+
+Part of Beyond the Edge, a set of independent post-game mods for Factorio: Space Age.
+
+#Factorio #FactorioSpaceAge #FactorioMods

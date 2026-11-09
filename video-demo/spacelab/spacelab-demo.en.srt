@@ -1,0 +1,106 @@
+1
+00:00:00,400 --> 00:00:02,056
+Welcome to the Space Lab demo.
+
+2
+00:00:02,156 --> 00:00:05,663
+This is Stargazer, my research ship
+on its way to the Shattered Planet.
+
+3
+00:00:05,763 --> 00:00:08,676
+It produces all the resources it needs
+from asteroids.
+
+4
+00:00:09,517 --> 00:00:11,910
+Collectors on the front edge
+catch asteroid chunks.
+
+5
+00:00:13,517 --> 00:00:17,081
+Asteroids are processed separately by type,
+for easier management.
+
+6
+00:00:18,433 --> 00:00:22,688
+Space Lab adds a new recipe that also
+gives stone from regular asteroids.
+
+7
+00:00:24,933 --> 00:00:28,643
+A new recipe, Shattered Synthesis,
+crushes the red promethium chunks.
+
+8
+00:00:28,743 --> 00:00:31,834
+It yields tungsten, holmium,
+and a new mineral: Flurolite.
+
+9
+00:00:33,550 --> 00:00:36,811
+Cryogenic plants make ammonia
+from stone, water and steam.
+
+10
+00:00:40,050 --> 00:00:42,690
+Flurolite is split into
+lithium brine and fluorine.
+
+11
+00:00:46,550 --> 00:00:48,785
+This is the Growth Facility,
+the new building.
+
+12
+00:00:48,885 --> 00:00:50,360
+It incubates eggs in orbit.
+
+13
+00:00:53,017 --> 00:00:56,207
+One biter egg becomes nineteen,
+and they don't spoil inside.
+
+14
+00:00:59,517 --> 00:01:02,308
+It also grows Yumako
+and Jellynut from seeds.
+
+15
+00:01:02,408 --> 00:01:04,580
+Biochambers turn them into nutrients.
+
+16
+00:01:06,300 --> 00:01:08,925
+Agricultural science
+can now be made in space.
+
+17
+00:01:12,800 --> 00:01:16,485
+Cryogenic science no longer needs
+Aquilo's special conditions.
+
+18
+00:01:19,300 --> 00:01:22,920
+Electromagnetic science can also
+be produced without limitations.
+
+19
+00:01:25,800 --> 00:01:29,293
+Metallurgic science no longer
+needs to be made on Vulcanus.
+
+20
+00:01:32,300 --> 00:01:34,723
+These locally made packs
+feed twenty-four labs.
+
+21
+00:01:34,823 --> 00:01:36,911
+It's a complete science chain
+in deep space.
+
+22
+00:01:38,600 --> 00:01:40,633
+That's Space Lab.
+Thanks for watching!

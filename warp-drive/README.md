@@ -2,9 +2,11 @@
 
 **Beyond the Edge: Warp Drive** is a standalone Factorio: Space Age post-game mod. It adds one platform-only building and two technologies: **Theoretical Warp Drive** and **Practical Warp Drive**. Before the final technology is complete, the experimental drive acts as a deep-space tachyon detector that dramatically accelerates its own research; once complete, the same building becomes a warp engine that multiplies platform travel speed and can boost general science when idle.
 
-<!-- Demo video TBD -->
+### Demo video on YouTube (3.5 min)
 
-The mod requires `base >= 2.1.0` and `space-age >= 2.1.0`. [Beyond the Edge: Space Lab](../spacelab/README.md) is optional.
+[![Watch the Warp Drive demo on YouTube](https://img.youtube.com/vi/FKd6wIzOH2k/maxresdefault.jpg)](https://www.youtube.com/watch?v=FKd6wIzOH2k)
+
+The mod requires `base >= 2.1.0` and `space-age >= 2.1.0`. [Beyond the Edge: Space Lab](../spacelab/README.md) is optional but recommended.
 
 ## Overview
 

@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+# Builds warp-drive-demo.en.srt from the cue list; times are seconds in the edited video
+# (video-demo-output/warp-drive/warp-drive-demo-video.mp4, see render.sh).
+# Event anchors (checked at 0.25 s): building 13.0, dialog 14.75, combinator 33.5, drive 42.0,
+# charging dialog 43.25, first shockwave 56.25, subspace 57.5, drive 64.75, warp dialog 66.0,
+# dialog closed 80.25, combinator ~83, drive 88.75, dialog ~92, map 102.25, map exit 119.0,
+# dialog 122.0, combinator 127.75, warp dialog 140.5, Disengage hover 141.25, click 142.75,
+# normal space 145.5, asteroids 150.75, charging dialog 160.0, lockout 162.25,
+# combinator 166.25, charging dialog 173.5, second shockwave 181.25, subspace 182.5,
+# final dialog 197.75, end 208.
+CUES = [
+    (0.3, 3.0, "Hi, and welcome to the Warp Drive demo."),
+    (3.0, 6.0, "This is my Factorio save,\nwith one space platform."),
+    (6.0, 9.0, "It's halfway to the Shattered Planet,\non its way back."),
+    (9.0, 12.9, "It's stuck at 20 km/s:\ntoo many asteroids."),
+    (12.9, 14.7, "Here is the Warp Drive."),
+    (14.7, 18.0, "Not ready yet:\nwarp needs 50 km/s."),
+    (18.0, 21.5, "For better timing, I let the\ncircuit network engage the drive."),
+    (21.5, 25.0, "The condition is always true…"),
+    (25.0, 29.5, "…so the drive engages as soon as\nevery requirement is met."),
+    (29.5, 33.4, "Only speed is missing."),
+    (33.4, 36.5, "This circuit caps\nthe platform's speed."),
+    (36.5, 41.9, "I raise the cap to 55 km/s."),
+    (41.9, 43.2, "Back to the drive."),
+    (43.2, 46.5, "It's already charging\nfor warp entry."),
+    (46.5, 49.5, "Jump energy depends\non the platform's mass."),
+    (49.5, 53.0, "Let's zoom out to watch the jump."),
+    (53.0, 56.2, "Still in normal space,\nsurrounded by asteroids…"),
+    (56.2, 57.5, "…jump!"),
+    (57.5, 61.0, "The ship has breached\nthe subspace barrier."),
+    (61.0, 64.7, "No asteroids here:\nit travels in complete safety."),
+    (64.7, 66.0, "Let's check the drive."),
+    (66.0, 70.0, "The dialog shows the warp level\nand the effective speed."),
+    (70.0, 74.5, "The game's own UI still shows\nonly the engine speed."),
+    (74.5, 80.2, "That's a game limitation:\na mod can't change it."),
+    (80.2, 83.0, "Let's go faster."),
+    (83.0, 88.7, "I raise the speed cap\nin the circuit again."),
+    (88.7, 92.0, "Engine speed feeds\nthe warp multiplier."),
+    (92.0, 96.0, "The warp level climbs…"),
+    (96.0, 102.2, "…and effective speed grows\nmuch faster than engine speed."),
+    (102.2, 105.0, "Now the space map."),
+    (105.0, 109.5, "While in warp, the platform's name\ngets a cyan WARP suffix."),
+    (109.5, 114.0, "It moves so fast you can see it\nwith the naked eye."),
+    (114.0, 119.0, "Even on the full route view."),
+    (119.0, 122.0, "Next: leaving warp."),
+    (122.0, 124.3, "Warp is still active."),
+    (124.3, 127.7, "Before leaving, you usually\nwant to slow down."),
+    (127.7, 132.5, "So I lower the speed cap\nbelow 50 km/s."),
+    (132.5, 136.5, "Leave at full speed, and the ship lands\nin normal space at a very high speed…"),
+    (136.5, 140.4, "…right into the asteroids."),
+    (140.4, 142.7, "Wait, or press Disengage."),
+    (142.7, 145.4, "Disengaged."),
+    (145.4, 150.7, "Back in normal space."),
+    (150.7, 154.5, "And the asteroids appear again."),
+    (154.5, 159.9, "That's why you slow down\nbefore you drop out of warp."),
+    (159.9, 162.2, "The drive is charging again!"),
+    (162.2, 164.5, "My circuit wobbled\nabove 50."),
+    (164.5, 166.2, "It dropped back,\nso no jump."),
+    (166.2, 169.5, "Let's push the speed\nback above 50 km/s."),
+    (169.5, 173.4, "Asteroids hit hard at this speed…"),
+    (173.4, 177.0, "…while the drive charges\nfor the jump."),
+    (177.0, 181.2, "Almost there…"),
+    (181.2, 182.5, "Jump!"),
+    (182.5, 186.0, "Yes! The ship made it."),
+    (186.0, 190.0, "Back in subspace,\nbut not unscathed."),
+    (190.0, 194.0, "The corner turrets were destroyed."),
+    (194.0, 197.7, "But the warp holds,\nand the ship is safe."),
+    (197.7, 202.5, "That's the Warp Drive: engaged,\ndisengaged, and engaged again."),
+    (202.5, 207.5, "Thanks for watching!"),
+]
+
+def ts(x):
+    return f"00:{int(x // 60):02d}:{x % 60:06.3f}".replace(".", ",")
+
+out = "\n".join(f"{i}\n{ts(a)} --> {ts(b)}\n{t}\n" for i, (a, b, t) in enumerate(CUES, 1))
+import os
+open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "warp-drive-demo.en.srt"), "w").write(out)
+print(len(CUES), "cues")

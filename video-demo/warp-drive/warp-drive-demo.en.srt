@@ -1,0 +1,262 @@
+1
+00:00:00,300 --> 00:00:03,000
+Hi, and welcome to the Warp Drive demo.
+
+2
+00:00:03,000 --> 00:00:06,000
+This is my Factorio save,
+with one space platform.
+
+3
+00:00:06,000 --> 00:00:09,000
+It's halfway to the Shattered Planet,
+on its way back.
+
+4
+00:00:09,000 --> 00:00:12,900
+It's stuck at 20 km/s:
+too many asteroids.
+
+5
+00:00:12,900 --> 00:00:14,700
+Here is the Warp Drive.
+
+6
+00:00:14,700 --> 00:00:18,000
+Not ready yet:
+warp needs 50 km/s.
+
+7
+00:00:18,000 --> 00:00:21,500
+For better timing, I let the
+circuit network engage the drive.
+
+8
+00:00:21,500 --> 00:00:25,000
+The condition is always true…
+
+9
+00:00:25,000 --> 00:00:29,500
+…so the drive engages as soon as
+every requirement is met.
+
+10
+00:00:29,500 --> 00:00:33,400
+Only speed is missing.
+
+11
+00:00:33,400 --> 00:00:36,500
+This circuit caps
+the platform's speed.
+
+12
+00:00:36,500 --> 00:00:41,900
+I raise the cap to 55 km/s.
+
+13
+00:00:41,900 --> 00:00:43,200
+Back to the drive.
+
+14
+00:00:43,200 --> 00:00:46,500
+It's already charging
+for warp entry.
+
+15
+00:00:46,500 --> 00:00:49,500
+Jump energy depends
+on the platform's mass.
+
+16
+00:00:49,500 --> 00:00:53,000
+Let's zoom out to watch the jump.
+
+17
+00:00:53,000 --> 00:00:56,200
+Still in normal space,
+surrounded by asteroids…
+
+18
+00:00:56,200 --> 00:00:57,500
+…jump!
+
+19
+00:00:57,500 --> 00:01:01,000
+The ship has breached
+the subspace barrier.
+
+20
+00:01:01,000 --> 00:01:04,700
+No asteroids here:
+it travels in complete safety.
+
+21
+00:01:04,700 --> 00:01:06,000
+Let's check the drive.
+
+22
+00:01:06,000 --> 00:01:10,000
+The dialog shows the warp level
+and the effective speed.
+
+23
+00:01:10,000 --> 00:01:14,500
+The game's own UI still shows
+only the engine speed.
+
+24
+00:01:14,500 --> 00:01:20,200
+That's a game limitation:
+a mod can't change it.
+
+25
+00:01:20,200 --> 00:01:23,000
+Let's go faster.
+
+26
+00:01:23,000 --> 00:01:28,700
+I raise the speed cap
+in the circuit again.
+
+27
+00:01:28,700 --> 00:01:32,000
+Engine speed feeds
+the warp multiplier.
+
+28
+00:01:32,000 --> 00:01:36,000
+The warp level climbs…
+
+29
+00:01:36,000 --> 00:01:42,200
+…and effective speed grows
+much faster than engine speed.
+
+30
+00:01:42,200 --> 00:01:45,000
+Now the space map.
+
+31
+00:01:45,000 --> 00:01:49,500
+While in warp, the platform's name
+gets a cyan WARP suffix.
+
+32
+00:01:49,500 --> 00:01:54,000
+It moves so fast you can see it
+with the naked eye.
+
+33
+00:01:54,000 --> 00:01:59,000
+Even on the full route view.
+
+34
+00:01:59,000 --> 00:02:02,000
+Next: leaving warp.
+
+35
+00:02:02,000 --> 00:02:04,300
+Warp is still active.
+
+36
+00:02:04,300 --> 00:02:07,700
+Before leaving, you usually
+want to slow down.
+
+37
+00:02:07,700 --> 00:02:12,500
+So I lower the speed cap
+below 50 km/s.
+
+38
+00:02:12,500 --> 00:02:16,500
+Leave at full speed, and the ship lands
+in normal space at a very high speed…
+
+39
+00:02:16,500 --> 00:02:20,400
+…right into the asteroids.
+
+40
+00:02:20,400 --> 00:02:22,700
+Wait, or press Disengage.
+
+41
+00:02:22,700 --> 00:02:25,400
+Disengaged.
+
+42
+00:02:25,400 --> 00:02:30,700
+Back in normal space.
+
+43
+00:02:30,700 --> 00:02:34,500
+And the asteroids appear again.
+
+44
+00:02:34,500 --> 00:02:39,900
+That's why you slow down
+before you drop out of warp.
+
+45
+00:02:39,900 --> 00:02:42,200
+The drive is charging again!
+
+46
+00:02:42,200 --> 00:02:44,500
+My circuit wobbled
+above 50.
+
+47
+00:02:44,500 --> 00:02:46,200
+It dropped back,
+so no jump.
+
+48
+00:02:46,200 --> 00:02:49,500
+Let's push the speed
+back above 50 km/s.
+
+49
+00:02:49,500 --> 00:02:53,400
+Asteroids hit hard at this speed…
+
+50
+00:02:53,400 --> 00:02:57,000
+…while the drive charges
+for the jump.
+
+51
+00:02:57,000 --> 00:03:01,200
+Almost there…
+
+52
+00:03:01,200 --> 00:03:02,500
+Jump!
+
+53
+00:03:02,500 --> 00:03:06,000
+Yes! The ship made it.
+
+54
+00:03:06,000 --> 00:03:10,000
+Back in subspace,
+but not unscathed.
+
+55
+00:03:10,000 --> 00:03:14,000
+The corner turrets were destroyed.
+
+56
+00:03:14,000 --> 00:03:17,700
+But the warp holds,
+and the ship is safe.
+
+57
+00:03:17,700 --> 00:03:22,500
+That's the Warp Drive: engaged,
+disengaged, and engaged again.
+
+58
+00:03:22,500 --> 00:03:27,500
+Thanks for watching!
