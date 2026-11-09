@@ -1,0 +1,10 @@
+---------------------------------------------------------------------------------------------------
+Version: 0.1.0
+Date: 2026-11-09
+  Major Features:
+    - First public release.
+  Features:
+    - Added the Growth Facility, a 9x9 orbital building that grows Yumako and Jellynut and incubates biter and pentapod eggs.
+    - Added Flurolite, a trace mineral recovered from asteroid chunks.
+    - Added stone-focused and Flurolite-focused crushing, Shattered Synthesis, Ammonia Extraction, and lithium and fluorine condensation recipes.
+    - Agricultural, cryogenic, electromagnetic and metallurgic science packs can be crafted on space platforms.

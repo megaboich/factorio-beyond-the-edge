@@ -1,0 +1,9 @@
+---------------------------------------------------------------------------------------------------
+Version: 0.1.0
+Date: 2026-11-09
+  Major Features:
+    - First public release.
+  Features:
+    - Added the Warp Drive, a platform-only building that detects deep-space tachyons and carries the platform through subspace.
+    - Added the Theoretical Warp Drive and Practical Warp Drive technologies.
+    - Added circuit control for engaging and disengaging warp and for the tachyon detector, with telemetry signals.
