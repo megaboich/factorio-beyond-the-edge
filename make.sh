@@ -26,10 +26,12 @@ from pathlib import Path
 
 mods_dir = Path(sys.argv[1]).expanduser()
 excluded_names = {".git", ".claude", ".DS_Store", "tests", "docs"}
+# The Mod Portal rejects archives containing executables, such as the audio generator script.
+excluded_suffixes = (".zip", ".exe", ".bat", ".ps1", ".sh", ".py")
 
 
 def ignore(_directory, names):
-    return {name for name in names if name in excluded_names or name.endswith(".zip")}
+    return {name for name in names if name in excluded_names or name.endswith(excluded_suffixes)}
 
 
 mods_dir.mkdir(parents=True, exist_ok=True)

@@ -171,7 +171,7 @@ The user mod directory is `~/Library/Application Support/factorio/mods`. Set `FA
 ./make.sh warp-drive spacelab
 ```
 
-For each mod, `make.sh` reads the name and version from that mod's `info.json`, creates the required `<name>_<version>` top-level zip directory, excludes `tests/`, `docs/`, `.git`, `.claude`, `.DS_Store`, and ZIPs, and installs the archive.
+For each mod, `make.sh` reads the name and version from that mod's `info.json`, creates the required `<name>_<version>` top-level zip directory, excludes `tests/`, `docs/`, `.git`, `.claude`, `.DS_Store`, ZIPs, and the script files the Mod Portal rejects (`.exe`, `.bat`, `.ps1`, `.sh`, `.py`), and installs the archive.
 
 ## Validation
 
