@@ -66,7 +66,11 @@ Both mods are published on the Factorio Mod Portal and are in their first public
 
 ## Links
 
-- Factorio Mod Portal: [Beyond the Edge: Space Lab](https://mods.factorio.com/mod/bte-spacelab), [Beyond the Edge: Warp Drive](https://mods.factorio.com/mod/bte-warp-drive)
+- Factorio Mod Portal:
+  - [Beyond the Edge: Space Lab](https://mods.factorio.com/mod/bte-spacelab)
+  - [Beyond the Edge: Warp Drive](https://mods.factorio.com/mod/bte-warp-drive)
 - Release thread on the Factorio forums: <https://forums.factorio.com/viewtopic.php?t=136909>
 - Reddit discussion on r/factorio: <https://www.reddit.com/r/factorio/comments/1xs3eze/the_shattered_planet_was_4000000_km_of_waiting/>
-- Demo videos on YouTube: [Space Lab](https://www.youtube.com/watch?v=JVCqwXjkNm8), [Warp Drive](https://www.youtube.com/watch?v=FKd6wIzOH2k)
+- Demo videos on YouTube:
+  - [Space Lab](https://www.youtube.com/watch?v=JVCqwXjkNm8)
+  - [Warp Drive](https://www.youtube.com/watch?v=FKd6wIzOH2k)
