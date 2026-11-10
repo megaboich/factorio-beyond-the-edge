@@ -8,6 +8,8 @@
 
 The mod requires `base >= 2.1.0` and `space-age >= 2.1.0`. [Beyond the Edge: Warp Drive](../warp-drive/README.md) is optional.
 
+Safe to add to an existing late-game save: the mod only adds new recipes, technologies, and a building. The one vanilla change removes the surface conditions from four science pack recipes, which only allows more, so existing factories keep running exactly as before.
+
 ## Overview
 
 Once a Space Age factory reaches the Solar System Edge, planetary production is established, but space platforms still depend on planet-side rockets for stone, ammonia, lithium, fluorine, Gleba crops, eggs, and the four planetary science packs.

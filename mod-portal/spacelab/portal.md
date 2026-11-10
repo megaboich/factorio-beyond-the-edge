@@ -48,6 +48,6 @@ https://github.com/megaboich/factorio-beyond-the-edge/tree/main/spacelab
 
 - Requires Factorio 2.1 with Space Age.
 - Standalone. Works well with its companion mod [Beyond the Edge: Warp Drive](https://mods.factorio.com/mod/bte-warp-drive).
-- Changes only the surface conditions of the four planetary science pack recipes; all other vanilla content is untouched.
+- Safe to add to an existing late-game save: it only adds new recipes, technologies and a building. The one vanilla change removes the surface conditions from the four planetary science pack recipes, which only allows more, so existing factories keep running as before.
 
 Bug reports and ideas are welcome on [GitHub Issues](https://github.com/megaboich/factorio-beyond-the-edge/issues) or the Discussion tab.

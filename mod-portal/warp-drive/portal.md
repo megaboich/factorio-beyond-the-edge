@@ -48,6 +48,7 @@ https://github.com/megaboich/factorio-beyond-the-edge/tree/main/warp-drive
 
 - Requires Factorio 2.1 with Space Age.
 - Standalone. Pairs well with [Beyond the Edge: Space Lab](https://mods.factorio.com/mod/bte-spacelab) for a fully self-sufficient research ship.
+- Safe to add to an existing late-game save: it changes no existing recipe, technology or building, and does nothing until you research it and place a drive.
 - Adds no new labs, science packs or items besides the drive itself.
 
 Bug reports and ideas are welcome on [GitHub Issues](https://github.com/megaboich/factorio-beyond-the-edge/issues) or the Discussion tab.

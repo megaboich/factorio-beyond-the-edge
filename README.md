@@ -47,7 +47,7 @@ See the Warp Drive manual [for all details](warp-drive/README.md).
 
 ## Playing Them Together
 
-The two mods complement each other: Space Lab makes platforms self-sufficient, and Warp Drive gives them a reason to travel deep into space. Neither mod requires the other — Warp Drive adapts its research routing depending on whether laboratories are run in space or on planets, keeping the progression engaging either way.
+Both are safe to add to an existing late-game save: they change no existing recipes or buildings (apart from Space Lab lifting the surface restriction on four science packs) and leave running factories untouched. The two mods complement each other: Space Lab makes platforms self-sufficient, and Warp Drive gives them a reason to travel deep into space. Neither mod requires the other — Warp Drive adapts its research routing depending on whether laboratories are run in space or on planets, keeping the progression engaging either way.
 
 ## Building
 

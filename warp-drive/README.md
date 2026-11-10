@@ -8,6 +8,8 @@
 
 The mod requires `base >= 2.1.0` and `space-age >= 2.1.0`. [Beyond the Edge: Space Lab](../spacelab/README.md) is optional but recommended.
 
+Safe to add to an existing late-game save: the mod changes no existing recipe, technology, or building, and does nothing until you research it and place a drive.
+
 ## Overview
 
 The Shattered Planet route is `4,000,000 km` long. Its rising asteroid density turns the post-game into an open-ended platform-engineering challenge, but eventually progress becomes waiting at a pace the factory cannot improve.
