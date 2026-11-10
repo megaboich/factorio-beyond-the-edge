@@ -66,6 +66,9 @@ Both mods are published on the Factorio Mod Portal and are in their first public
 
 ## Links
 
+- Full mod manuals:
+  - [Beyond the Edge: Space Lab](spacelab/README.md)
+  - [Beyond the Edge: Warp Drive](warp-drive/README.md)
 - Factorio Mod Portal:
   - [Beyond the Edge: Space Lab](https://mods.factorio.com/mod/bte-spacelab)
   - [Beyond the Edge: Warp Drive](https://mods.factorio.com/mod/bte-warp-drive)
