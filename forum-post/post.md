@@ -1,5 +1,7 @@
 # Factorio forum post
 
+Posted on 2026-11-10: https://forums.factorio.com/viewtopic.php?t=136909
+
 Where: forums.factorio.com, Mods → Mods (https://forums.factorio.com/viewforum.php?f=190), where release threads use titles like "[MOD 2.1] Name". The forum uses phpBB BBCode, not Markdown: paste the body below into the editor as is. External images and GIFs load from GitHub. The forum has no video embedding (posts with YouTube videos only show links), so each video is a clickable thumbnail: the YouTube thumbnail at 416x234 (`<mod>-video-thumbnail.jpg` here, made with ffmpeg from `video-demo/<mod>/thumbnail.jpg`), loaded from GitHub, so it must be pushed before posting. Screenshots work the same way: `shot-*.jpg` here are 416x234 previews of the full-size `reddit-post/*.jpg` they link to. Technical details are left to the GitHub manuals and source.
 
 ## Title
@@ -9,7 +11,11 @@ Where: forums.factorio.com, Mods → Mods (https://forums.factorio.com/viewforum
 ## Body
 
 ```bbcode
-Reaching the Shattered Planet in vanilla Space Age felt underwhelming: a 4,000,000 km trip that is mostly waiting, and nothing worth having at the end. [b]Beyond the Edge[/b] is a pair of independent post-game mods that give the trip a purpose and a faster way to make it.
+[size=200][b]Factorio: Beyond the Edge[/b][/size]
+
+Post-game mods for Factorio: Space Age, for factories that have already reached the Solar System Edge and want something to build toward other than more science for its own sake.
+
+In vanilla, the next step is the Shattered Planet, and reaching it felt underwhelming: a 4,000,000 km trip that is mostly waiting, and nothing worth having at the end. These two independent mods give that trip a purpose and a faster way to make it.
 
 [size=150][b]Warp Drive[/b][/size]
 
@@ -45,11 +51,22 @@ Demo video (1.7 min, click to watch on YouTube):
 Screenshots (click for full size):
 [url=https://raw.githubusercontent.com/megaboich/factorio-beyond-the-edge/main/reddit-post/3-space-lab-shattered-synthesis.jpg][img]https://raw.githubusercontent.com/megaboich/factorio-beyond-the-edge/main/forum-post/shot-3-space-lab-shattered-synthesis.jpg[/img][/url] [url=https://raw.githubusercontent.com/megaboich/factorio-beyond-the-edge/main/reddit-post/4-space-lab-growth-facilities.jpg][img]https://raw.githubusercontent.com/megaboich/factorio-beyond-the-edge/main/forum-post/shot-4-space-lab-growth-facilities.jpg[/img][/url]
 
-[b]Together[/b] they make an endgame challenge: a fully autonomous research station parked at the Shattered Planet, making every science pack from asteroids, with its labs boosted where the tachyons are densest.
+[size=150][b]Together[/b][/size]
+
+The two mods make an endgame challenge: a fully autonomous research station parked at the Shattered Planet, making every science pack from asteroids, with its labs boosted where the tachyons are densest.
 
 Both require Factorio 2.1 with Space Age and work on their own. They are designed to be safe to add to an existing late-game save: they change no existing recipes or buildings (apart from Space Lab lifting the surface restriction on four science packs) and leave running factories untouched. All art and sounds are original and generated from scripts in the repository.
 
-[b]Under the hood[/b] (details in the GitHub manuals and source, if you're curious)
+[size=150][b]Under the hood[/b][/size]
+
+The most notable implementation details. The GitHub manuals and source have the rest, if you're curious.
+
+[i]How it was made[/i]
+[list]
+[*][b]All of the code was written by AI agents.[/b] I was able to delegate all of the coding; my role was mostly writing specifications, directing the design, reviewing the code and results, and testing in game.
+[*][b]The agents' knowledge is on GitHub too.[/b] AGENTS.md holds the development rules and the Factorio engine quirks discovered along the way.
+[*][b]Numerous other docs cover the rest.[/b] Each mod has a full manual, the Warp Drive has design notes for its composite building and its audio, and the demo-video workflow is documented as well.
+[/list]
 
 [i]Warp Drive[/i]
 [list]
@@ -77,7 +94,8 @@ Both require Factorio 2.1 with Space Age and work on their own. They are designe
 
 This is the first release, so feedback is very welcome, especially on balance and compatibility with other space mods.
 
-[b]Links[/b]
+[size=150][b]Links[/b][/size]
+
 [list]
 [*]Mod Portal: [url=https://mods.factorio.com/mod/bte-warp-drive]Warp Drive[/url], [url=https://mods.factorio.com/mod/bte-spacelab]Space Lab[/url]
 [*]Source, full manuals and issues: [url]https://github.com/megaboich/factorio-beyond-the-edge[/url]

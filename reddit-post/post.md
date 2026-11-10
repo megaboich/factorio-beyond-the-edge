@@ -1,6 +1,6 @@
 # Reddit post (r/factorio)
 
-Posted on r/factorio as a Text post with the Modded flair, with both videos and the four images inline.
+Posted on r/factorio (https://www.reddit.com/r/factorio/comments/1xs3eze/the_shattered_planet_was_4000000_km_of_waiting/) as a Text post with the Modded flair, with both videos and the four images inline.
 
 ## How to post
 
