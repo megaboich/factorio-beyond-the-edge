@@ -1,6 +1,6 @@
 # Demo Videos
 
-Sources, scripts, and notes for the mods' YouTube demo videos. Large media (recordings, masters, audio, uploads, screenshots) lives in the git-ignored `video-demo-output/` next to this folder, under the same per-video names; every script here reads and writes there.
+Sources, scripts, and notes for the mods' YouTube demo videos. Large media (recordings, masters, audio, uploads, screenshots) lives in the git-ignored `../video-demo-output/` next to this folder (`media-posts/video-demo-output/` from the repository root), under the same per-video names; every script here reads and writes there.
 
 | Video | Published | Folder |
 | --- | --- | --- |
@@ -51,7 +51,7 @@ After a narration change, run `voice.py` then `mux.py pointer`; after a new reco
 
 ## Reddit copies
 
-`./reddit.sh` renders both videos for Reddit into `reddit-post/` (git-ignored): 1920x1080 at 30 fps, about 12 Mbit/s, with the narration and the subtitles burned in. Reddit accepts no subtitle files, re-encodes to at most about 1080p30, and its own scaling and frame-rate conversion are poor, so upscaled or 60 fps uploads gain nothing there. The post text, images, and posting notes are in `reddit-post/post.md`.
+`./reddit.sh` renders both videos for Reddit into `../reddit-post/` (only the generated MP4s are git-ignored): 1920x1080 at 30 fps, about 12 Mbit/s, with the narration and the subtitles burned in. Reddit accepts no subtitle files, re-encodes to at most about 1080p30, and its own scaling and frame-rate conversion are poor, so upscaled or 60 fps uploads gain nothing there. See the [post text, images, and posting notes](../reddit-post/post.md).
 
 ## Lessons Learned
 

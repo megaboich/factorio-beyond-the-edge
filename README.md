@@ -1,15 +1,18 @@
 # Factorio: Beyond the Edge
 
-Post-game mods for **Factorio: Space Age**, for factories that have already reached the Solar System Edge and want something to build toward other than more science for its own sake.
+Mods for **Factorio: Space Age**, extending planetary exploration, interplanetary logistics, and the post-game factory with something to build toward other than more science for its own sake.
 
-Each mod is standalone and published separately. Install either one alone, or both together.
+Each mod is packaged and published separately. Space Lab and Warp Drive are available now. Three more are planned: independent Mechanoids and Stargate mods, and Homecoming Journey, a campaign requiring all four other family mods.
 
 | Mod | Factorio name | In one line | Details |
 | --- | --- | --- | --- |
 | **Beyond the Edge: Space Lab** | `bte-spacelab` | Turns space platforms into self-sufficient orbital industry. | [Space Lab manual](spacelab/README.md) |
 | **Beyond the Edge: Warp Drive** | `bte-warp-drive` | Turns deep-space distance into research, then into faster-than-normal platform travel. | [Warp Drive manual](warp-drive/README.md) |
+| **Beyond the Edge: Mechanoids — Guardians of the Ruins** *(planned)* | `bte-mechanoids` | Mechanical ruin defenders, provisionally on Fulgora in standalone play. | [Mechanoids vision](mechanoids/VISION.md) |
+| **Beyond the Edge: Stargate** *(planned)* | `bte-stargate` | Experimental gate construction, paired player travel, then interplanetary trains. | [Stargate vision](stargate/VISION.md) |
+| **Beyond the Edge: Homecoming Journey** *(planned)* | `bte-homecoming-journey` | Combines the family into an ancient-gate campaign and a journey home. | [Homecoming vision](homecoming-journey/VISION.md) |
 
-Both mods require Factorio 2.1 with the Space Age expansion.
+The collection targets Factorio 2.1 with the Space Age expansion.
 
 ## Beyond the Edge: Space Lab
 
@@ -45,30 +48,47 @@ Warp Drive adds one platform-only building and two technologies. At first the dr
 
 See the Warp Drive manual [for all details](warp-drive/README.md).
 
+## Upcoming Mods
+
+These are documentation-only placeholders, not installable mods yet:
+
+- **Mechanoids — Guardians of the Ruins:** independent robotic enemies and finite ruin encounters. Standalone placement is provisionally Fulgora-only; detailed placement and rewards remain open. [Vision](mechanoids/VISION.md) · [Plan](mechanoids/PLAN.md).
+- **Stargate:** an accessible experimental gate kit grows into a material-built gate, an uncontrolled first jump, controllable paired travel, and finally train passage. No enemy or campaign mod required. [Vision](stargate/VISION.md) · [Plan](stargate/PLAN.md).
+- **Homecoming Journey:** requires Space Lab, Warp Drive, Mechanoids, and Stargate. It owns the ancient ruins, artifact hunt, enormous research effort, and orbital gate that brings the engineer home. [Vision](homecoming-journey/VISION.md) · [Plan](homecoming-journey/PLAN.md).
+
 ## Playing Them Together
 
-Both are safe to add to an existing late-game save: they change no existing recipes or buildings (apart from Space Lab lifting the surface restriction on four science packs) and leave running factories untouched. The two mods complement each other: Space Lab makes platforms self-sufficient, and Warp Drive gives them a reason to travel deep into space. Neither mod requires the other — Warp Drive adapts its research routing depending on whether laboratories are run in space or on planets, keeping the progression engaging either way.
+Space Lab and Warp Drive are safe to add to an existing late-game save: they change no existing recipes or buildings (apart from Space Lab lifting the surface restriction on four science packs) and leave running factories untouched. The two mods complement each other: Space Lab makes platforms self-sufficient, and Warp Drive gives them a reason to travel deep into space. Neither mod requires the other — Warp Drive adapts its research routing depending on whether laboratories are run in space or on planets, keeping the progression engaging either way.
+
+The planned Mechanoids and Stargate mods will also work independently, including without each other. Homecoming Journey is the deliberate exception: it brings all four together as hard dependencies. Installing Mechanoids and Stargate without Homecoming will not enable campaign rules or objectives.
 
 ## Building
 
-Package and install the mods into the local Factorio mod directory:
+Package and install the released mods into the local Factorio mod directory:
 
 ```sh
-./make.sh              # every mod
+./make.sh              # every released mod
 ./make.sh spacelab     # one mod
 ```
 
 Development rules, validation steps, and tests are described in [AGENTS.md](AGENTS.md).
 
+Publishing copy, screenshots, and demo-video sources are grouped under [media-posts/](media-posts/README.md).
+
 ## Status
 
-Both mods are published on the Factorio Mod Portal and are in their first public release. See each mod's **Asset Attribution** section for the origin of its art and sounds.
+Space Lab and Warp Drive are published on the Factorio Mod Portal and are in their first public release. See each mod's **Asset Attribution** section for the origin of its art and sounds.
+
+Mechanoids, Stargate, and Homecoming Journey are in planning, each with a separate vision and development plan linked above. Their mod identifiers are planned; no gameplay implementation or in-game verification exists yet.
 
 ## Links
 
-- Full mod manuals:
+- Mod documentation:
   - [Beyond the Edge: Space Lab](spacelab/README.md)
   - [Beyond the Edge: Warp Drive](warp-drive/README.md)
+  - [Beyond the Edge: Mechanoids — vision](mechanoids/VISION.md) *(planned)*
+  - [Beyond the Edge: Stargate — vision](stargate/VISION.md) *(planned)*
+  - [Beyond the Edge: Homecoming Journey — vision](homecoming-journey/VISION.md) *(planned)*
 - Factorio Mod Portal:
   - [Beyond the Edge: Space Lab](https://mods.factorio.com/mod/bte-spacelab)
   - [Beyond the Edge: Warp Drive](https://mods.factorio.com/mod/bte-warp-drive)

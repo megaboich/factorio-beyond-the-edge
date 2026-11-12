@@ -4,5 +4,5 @@ __pycache__/
 tools/sprites/node_modules
 tools/sprites/out/
 tmp/
-video-demo-output/
-reddit-post/*.mp4
+/media-posts/video-demo-output/
+/media-posts/reddit-post/*.mp4

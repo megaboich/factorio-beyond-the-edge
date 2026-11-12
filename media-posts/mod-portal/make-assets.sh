@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Mod Portal assets: the 144x144 mod thumbnails (packaged as <mod>/thumbnail.png) and the gallery
-# screenshots in mod-portal/<mod>/gallery/, cut from the demo-video recordings and in-game
-# screenshots in the git-ignored video-demo-output/ (see video-demo/README.md).
+# screenshots in media-posts/mod-portal/<mod>/gallery/, cut from the demo-video recordings and in-game
+# screenshots in media-posts/video-demo-output/ (see ../video-demo/README.md).
 set -euo pipefail
-HERE="$(cd "$(dirname "$0")" && pwd)"; ROOT="$HERE/.."; SRC="$ROOT/video-demo-output"
+HERE="$(cd "$(dirname "$0")" && pwd)"; ROOT="$HERE/../.."; SRC="$HERE/../video-demo-output"
 FF=/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg
 FONT='/System/Library/Fonts/Supplemental/Arial Black.ttf'
 SL_VIDEO="$SRC/spacelab/master-1440p-pointer.mp4"; WD_VIDEO="$SRC/warp-drive/warp-drive-demo-youtube-1440p.mp4"

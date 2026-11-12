@@ -4,7 +4,7 @@ Posted on r/factorio (https://www.reddit.com/r/factorio/comments/1xs3eze/the_sha
 
 ## How to post
 
-- Reddit takes no subtitle files and plays at most about 1080p30, so the videos are 1080p30 copies with burned-in subtitles, made by `video-demo/reddit.sh` (git-ignored, about 300 MB and 150 MB).
+- Reddit takes no subtitle files and plays at most about 1080p30, so the videos are 1080p30 copies with burned-in subtitles, made by `../video-demo/reddit.sh` (`media-posts/video-demo/reddit.sh` from the repository root; the generated MP4s are git-ignored, about 300 MB and 150 MB).
 - Videos and images can be placed inline only in a Text post in the rich text editor, and only where the subreddit allows media in text posts.
 - The rich text editor does not convert pasted Markdown; it keeps it as raw text, which showed up as one long unwrapped code-like block. Either paste the body in Markdown mode and then switch back to rich text to insert media, or format it with the editor's toolbar.
 - Layout used: intro, Warp Drive paragraph, `warp-drive-demo-reddit.mp4`, images 1-2, Space Lab paragraph, `spacelab-demo-reddit.mp4`, images 3-4, the Together paragraph, then the links.

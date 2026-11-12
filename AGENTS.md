@@ -1,21 +1,23 @@
 # Factorio: Beyond the Edge Development Guide
 
-This repository holds independent Factorio: Space Age post-game mods. They share one repository, one rule set, and one build script, but each mod is packaged, versioned, and published separately.
+This repository holds a family of Factorio: Space Age mods. Space Lab, Warp Drive, and the planned Mechanoids and Stargate mods are independent; the planned Homecoming Journey campaign requires all four. They share one repository, one rule set, and one build script, but each mod is packaged, versioned, and published separately.
 
 ## Repository Map
 
 - `README.md`: umbrella overview with a short summary of each mod and links to its documentation.
 - `AGENTS.md`: the single development rule set for every mod in this repository.
 - `make.sh`: packages and installs one or more mods.
-- `tests/`: cross-mod test tooling. `run-prototype-tests.sh` loads vanilla Space Age, each mod alone, and all mods together, then runs every mod's `tests/prototypes.py` through the shared `prototype_checks.py` helpers.
+- `tests/`: cross-mod test tooling. `run-prototype-tests.sh` currently loads vanilla Space Age, each released mod alone, and both together, then runs their `tests/prototypes.py` through the shared `prototype_checks.py` helpers. Extend dependency-set handling before enrolling Homecoming Journey.
 - `tools/readme-icons.py`: extracts the item, fluid, and technology icons each mod README references (`docs/icons/<prototype-name>.png`, `docs/icons/technology/<prototype-name>.png`) from the game and the mods into that mod's `docs/icons/`, and removes unreferenced ones. Run `python3 tools/readme-icons.py` after changing README icon references.
 - `tools/sprites/`: sprite renderer for buildings, icons, and effects. Three.js models in `models/` (shared helpers in `lib/`) are rendered by headless Chrome (`node render.mjs`, after `npm install`) into Factorio sheets under the git-ignored `out/`: main, shadow, model-defined extra layers (such as per-variant specimens with their own frame count and speed), and additive `glow-*` layers with their `shift` metadata, plus an animated day/night preview (`<name>-preview.html`, with a no-recipe mode) beside the current and vanilla art. `gif.mjs` records README GIFs from that preview (needs `ffmpeg` and `gifsicle`). Lives outside every mod root, so it is never packaged.
 - `spacelab/`: Space Lab mod root (`info.json` name `bte-spacelab`, title `Beyond the Edge: Space Lab`).
 - `warp-drive/`: Warp Drive mod root (`info.json` name `bte-warp-drive`, title `Beyond the Edge: Warp Drive`).
-- `mod-portal/`: Mod Portal page texts, gallery screenshots, and `make-assets.sh`, which also generates each mod's packaged `thumbnail.png`; see its `README.md`. Never packaged.
-- `video-demo/`: scripts, narration, subtitles, descriptions, and thumbnails for the YouTube demo videos, with instructions in its `README.md`. Recordings, masters, and audio go to the git-ignored `video-demo-output/`.
+- `mechanoids/`: documentation-only placeholder for Mechanoids — Guardians of the Ruins (planned name `bte-mechanoids`); owns enemies and finite ruin encounters. Contains `VISION.md` and `PLAN.md`.
+- `stargate/`: documentation-only placeholder for Stargate (planned name `bte-stargate`); owns experimental construction, player transfer, pairing, and train passage. Contains `VISION.md` and `PLAN.md`.
+- `homecoming-journey/`: documentation-only placeholder for Homecoming Journey (planned name `bte-homecoming-journey`); owns the all-family campaign, artifacts, and orbital ending. Contains `VISION.md` and `PLAN.md`.
+- `media-posts/`: all publishing/media campaigns; see its `README.md`. `forum-post/` and `reddit-post/` keep post text and images; `mod-portal/` keeps descriptions, gallery images, and `make-assets.sh` (also generates each mod's packaged `thumbnail.png`); `video-demo/` keeps YouTube scripts, narration, subtitles, descriptions, and thumbnails. Recordings, masters, and audio go to the git-ignored `media-posts/video-demo-output/`. Never packaged.
 
-Each mod directory is a complete Factorio mod root. Directory names are repository paths only; the published mod name always comes from `info.json`. Run commands from the repository root unless stated otherwise.
+Each implemented mod directory is a complete Factorio mod root. The three planned directories have no metadata or gameplay yet and are not enrolled in packaging/tests. Directory names are repository paths only; the published mod name always comes from `info.json`. Run commands from the repository root unless stated otherwise.
 
 ### Space Lab
 
@@ -45,7 +47,7 @@ Each mod directory is a complete Factorio mod root. Directory names are reposito
 - Warp Drive also keeps maintainer references with fixed roles:
   - `BUILDING.md`: composite-entity composition, ownership, electrical lifecycle, wiring, and rendering only.
   - `AUDIO.md`: sound assets, synthesis, runtime playback, scheduling state, and regeneration.
-- Do not keep speculative design proposals or planning documents in the repository; implemented behavior belongs in the README.
+- The user-requested `VISION.md` and `PLAN.md` pairs in the three planned mod directories describe intended experience and implementation respectively. Keep unresolved proposals marked as such; move authoritative implemented behavior into each mod's README and tests as it ships. Do not add additional speculative design documents.
 
 ## Naming
 
@@ -60,10 +62,11 @@ All mods in this repository share the prefix, so a new name must also be unique 
 
 ## Mod Independence
 
-- Every mod requires only `base >= 2.1.0` and `space-age >= 2.1.0`. Read each mod's current version from its own `info.json` rather than hard-coding it.
-- Every mod must load, run, and pass validation on its own.
-- Cross-mod integration is optional only (`? <mod>` dependencies) and must never become a required runtime dependency. Prefer checking live entities or capabilities over checking mod names.
+- Independent mods require only `base >= 2.1.0` and `space-age >= 2.1.0`. Homecoming Journey is the explicit exception: it also hard-requires `bte-spacelab`, `bte-warp-drive`, `bte-mechanoids`, and `bte-stargate`. Read implemented versions from each `info.json`; planned identifiers are not existing metadata.
+- Every independent mod must load, run, and pass validation on its own. Validate Homecoming Journey with its full dependency set and reject missing required dependencies; do not treat it as standalone.
+- Integration between independent mods remains optional (`? <mod>` dependencies where needed). Mechanoids and Stargate must not require each other or the campaign. Homecoming owns campaign policy while the siblings own combat, transport, orbital production, and warp behavior. Prefer checking live capabilities over mod names; use explicit supported APIs/events across mod boundaries, never another mod's private `storage`.
 - Mods are packaged in isolation and cannot reference each other's files (`__bte-spacelab__/...` from Warp Drive, or the reverse) or share Lua code. Duplicate small helpers instead of adding a shared library mod.
+- Homecoming's required integrations do not change these packaging boundaries or justify copying the siblings' feature implementations.
 
 ## References
 
@@ -132,7 +135,7 @@ Every image and sound the mods ship, and every README image, is generated by a s
 | `warp-drive/graphics/icons/warp-drive.png`, `warp-drive/graphics/technology/warp-drive.png` | `tools/sprites/models/warp-drive-icon.js`, `warp-drive-technology.js` | `node render.mjs warp-drive-icon warp-drive-technology --export` |
 | `warp-drive/resources/audio/*.ogg` | `warp-drive/resources/audio/generate.py` (see `warp-drive/AUDIO.md`) | `python3 warp-drive/resources/audio/generate.py [--only NAME...]` |
 | `<mod>/docs/*.gif` | `tools/sprites/gif.mjs`, from the model's preview | `node render.mjs <model> && node gif.mjs <model> --out=../../<mod>/docs` |
-| `<mod>/thumbnail.png`, `mod-portal/<mod>/gallery/` | `mod-portal/make-assets.sh`, from `video-demo-output/` | `./mod-portal/make-assets.sh` |
+| `<mod>/thumbnail.png`, `media-posts/mod-portal/<mod>/gallery/` | `media-posts/mod-portal/make-assets.sh`, from `media-posts/video-demo-output/` | `./media-posts/mod-portal/make-assets.sh` |
 | `warp-drive/docs/tachyon-density-chart.svg` | `tools/tachyon-chart.py` | `python3 tools/tachyon-chart.py` |
 | `<mod>/docs/icons/` | `tools/readme-icons.py`, from the game and the mods | `python3 tools/readme-icons.py` |
 
@@ -166,7 +169,7 @@ Every image and sound the mods ship, and every README image, is generated by a s
 The user mod directory is `~/Library/Application Support/factorio/mods`. Set `FACTORIO_MODS_DIR` to override the destination.
 
 ```sh
-./make.sh                 # build and install every mod
+./make.sh                 # build and install every enrolled mod (currently the two released mods)
 ./make.sh spacelab        # build and install one mod, by directory name
 ./make.sh warp-drive spacelab
 ```
@@ -183,7 +186,7 @@ After every prototype change, run:
 ./tests/run-prototype-tests.sh
 ```
 
-It dumps resolved prototypes (`--dump-data`) and their displayed names and descriptions (`--dump-prototype-locale`) for vanilla Space Age, each mod alone, and all mods together, using temporary mod and write-data directories so installed mods and `script-output` are untouched. Each mod's `tests/prototypes.py` asserts the README's player-facing values: recipes, results and probabilities, recipe categories, technology costs, prerequisites and unlocks, building stats, weights, surface conditions, and vanilla overrides compared against the unmodded baseline. Every `bte-` prototype must also have a name that resolves, so no "Unknown key" reaches the game. Loading each mod alone also verifies that no mod depends on another.
+It currently dumps resolved prototypes (`--dump-data`) and their displayed names and descriptions (`--dump-prototype-locale`) for vanilla Space Age, each released mod alone, and both together, using temporary mod and write-data directories so installed mods and `script-output` are untouched. Each mod's `tests/prototypes.py` asserts the README's player-facing values: recipes, results and probabilities, recipe categories, technology costs, prerequisites and unlocks, building stats, weights, surface conditions, and vanilla overrides compared against the unmodded baseline. Every `bte-` prototype must also have a name that resolves, so no "Unknown key" reaches the game. Load each independent mod alone to verify independence. Before enrolling Homecoming Journey, extend the runner to load its required dependency closure and test missing-dependency rejection rather than expecting the campaign to load alone.
 
 `README.md` remains the source of truth. When gameplay changes, update the mod's README and its `tests/prototypes.py` in the same change; a failing prototype test means one of them is out of date. Add expectations for every new player-facing prototype. Use `FACTORIO_BIN` to override the Factorio executable and `KEEP_TEST_ARTIFACTS=1` to keep dumps and logs.
 
