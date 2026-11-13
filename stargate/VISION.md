@@ -4,7 +4,7 @@
 
 Stargate is a standalone transport mod for Factorio: Space Age. It starts with an engineer-built experiment rather than a guarded ancient ruin, then grows into dependable paired gates and interplanetary train logistics.
 
-> Planning only. The implementation roadmap and unresolved choices live in [PLAN.md](PLAN.md). Stargate requires Factorio and Space Age, not Mechanoids, Warp Drive, Space Lab, or Homecoming Journey.
+> Only construction is implemented so far (see the [manual](README.md)); the rest is planning. The implementation roadmap and unresolved choices live in [PLAN.md](PLAN.md). Stargate requires Factorio and Space Age, not Mechanoids, Warp Drive, Space Lab, or Homecoming Journey.
 
 ## 1. Build the first experiment
 

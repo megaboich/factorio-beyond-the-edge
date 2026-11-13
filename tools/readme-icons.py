@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Extracts the item, fluid, and technology icons each mod README references into <mod>/docs/icons/.
+"""Extracts the item, fluid, and technology icons the mod READMEs reference into docs/icons/ at the repository root.
 
-READMEs reference item and fluid icons as `docs/icons/<prototype-name>.png` and technology icons
-as `docs/icons/technology/<prototype-name>.png`. This script finds every such reference, loads the
+READMEs reference item and fluid icons as `../docs/icons/<prototype-name>.png` and technology icons
+as `../docs/icons/technology/<prototype-name>.png`, so every mod shares one copy of each icon. This script finds every such reference, loads the
 resolved prototypes from a --dump-data run of every mod together (so mod prototypes resolve with
 their runtime tints and layers), and composites each icon as the game's GUI draws it: every
 layer scaled, shifted, and tinted, and the whole stack fitted to the square. Items are written
 at 64 px and technologies at 128 px. Icons no README references any more are removed.
 
-    python3 tools/readme-icons.py [--dump data-raw-dump.json] [mod ...]
+    python3 tools/readme-icons.py [--dump data-raw-dump.json]
 
 Without --dump it runs Factorio in temporary mod and write-data directories, like
 tests/run-prototype-tests.sh. FACTORIO_BIN and FACTORIO_DATA override the default install.
@@ -30,7 +30,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 FACTORIO_BIN = os.environ.get("FACTORIO_BIN", "/Applications/factorio.app/Contents/MacOS/factorio")
 FACTORIO_DATA = Path(os.environ.get("FACTORIO_DATA", "/Applications/factorio.app/Contents/data"))
-MODS = ["spacelab", "warp-drive"]
+MODS = ["spacelab", "warp-drive", "stargate"]
 REFERENCE = re.compile(r"docs/icons/((?:technology/)?[a-z0-9-]+)\.png")
 # kind: (expected_icon_size, output size)
 SIZES = {"item": (64, 64), "technology": (256, 128)}
@@ -203,7 +203,6 @@ def dump_data():
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--dump", type=Path)
-    parser.add_argument("mods", nargs="*", default=MODS)
     args = parser.parse_args()
     raw = json.loads(args.dump.read_text()) if args.dump else dump_data()
     # Items of every item-like type (capsules, tools, ...) carry a stack size; fluids are separate.
@@ -212,19 +211,19 @@ def main():
         for name, prototype in entries.items():
             if "stack_size" in prototype or kind == "fluid":
                 prototypes.setdefault(name, prototype)
-    for mod in args.mods:
-        names = sorted(set(REFERENCE.findall((REPO / mod / "README.md").read_text())))
-        target = REPO / mod / "docs" / "icons"
-        (target / "technology").mkdir(parents=True, exist_ok=True)
-        missing = [n for n in names if n not in prototypes]
-        if missing:
-            sys.exit(f"{mod}: no item, fluid, or technology named {', '.join(missing)}")
-        for name in names:
-            write_png(target / f"{name}.png", icon(prototypes[name], "technology" if name.startswith("technology/") else "item"))
-        for stale in target.glob("**/*.png"):
-            if stale.relative_to(target).with_suffix("").as_posix() not in names:
-                stale.unlink()
-        print(f"{mod}: {len(names)} icons in {target.relative_to(REPO)}")
+    # One shared set, so the names come from every mod's README and nothing is removed while any still uses it.
+    names = sorted({name for mod in MODS for name in REFERENCE.findall((REPO / mod / "README.md").read_text())})
+    target = REPO / "docs" / "icons"
+    (target / "technology").mkdir(parents=True, exist_ok=True)
+    missing = [n for n in names if n not in prototypes]
+    if missing:
+        sys.exit(f"no item, fluid, or technology named {', '.join(missing)}")
+    for name in names:
+        write_png(target / f"{name}.png", icon(prototypes[name], "technology" if name.startswith("technology/") else "item"))
+    for stale in target.glob("**/*.png"):
+        if stale.relative_to(target).with_suffix("").as_posix() not in names:
+            stale.unlink()
+    print(f"{len(names)} icons in {target.relative_to(REPO)}")
 
 
 if __name__ == "__main__":

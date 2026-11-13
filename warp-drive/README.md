@@ -24,7 +24,7 @@ The mod adds no new laboratories, science packs, or particle items. Exactly one 
 
 ## Building And Technologies
 
-<img src="docs/icons/bte-warp-drive.png" width="24" height="24" alt=""> **Warp Drive:** An `8x8` platform-only drive core, the same size as the space platform hub. It operates across five stages:
+<img src="../docs/icons/bte-warp-drive.png" width="24" height="24" alt=""> **Warp Drive:** An `8x8` platform-only drive core, the same size as the space platform hub. It operates across five stages:
 
 | Standby | Detecting tachyons | Charging |
 | --- | --- | --- |
@@ -40,18 +40,18 @@ The mod adds no new laboratories, science packs, or particle items. Exactly one 
 
 The Warp Drive takes 120 seconds to craft from:
 
-- <img src="docs/icons/quantum-processor.png" width="24" height="24" alt=""> 200 Quantum Processors
-- <img src="docs/icons/superconductor.png" width="24" height="24" alt=""> 500 Superconductors
-- <img src="docs/icons/tungsten-plate.png" width="24" height="24" alt=""> 1,000 Tungsten Plates
-- <img src="docs/icons/carbon-fiber.png" width="24" height="24" alt=""> 500 Carbon Fibers
-- <img src="docs/icons/supercapacitor.png" width="24" height="24" alt=""> 500 Supercapacitors
+- <img src="../docs/icons/quantum-processor.png" width="24" height="24" alt=""> 200 Quantum Processors
+- <img src="../docs/icons/superconductor.png" width="24" height="24" alt=""> 500 Superconductors
+- <img src="../docs/icons/tungsten-plate.png" width="24" height="24" alt=""> 1,000 Tungsten Plates
+- <img src="../docs/icons/carbon-fiber.png" width="24" height="24" alt=""> 500 Carbon Fibers
+- <img src="../docs/icons/supercapacitor.png" width="24" height="24" alt=""> 500 Supercapacitors
 
 | Technology | Cost | Unlock |
 | --- | --- | --- |
-| <img src="docs/icons/technology/bte-theoretical-warp-drive.png" width="48" height="48" alt=""><br>**Theoretical Warp Drive** | `10,000` units at 120 seconds each | Unlocks the <img src="docs/icons/bte-warp-drive.png" width="24" height="24" alt=""> **Warp Drive** building in experimental detector mode, allowing platforms to observe deep-space tachyons, accelerate **Practical Warp Drive** research, and automate detector operation via circuit signals (`C` and `T`). |
-| <img src="docs/icons/technology/bte-practical-warp-drive.png" width="48" height="48" alt=""><br>**Practical Warp Drive** | `1,000,000,000` units at 120 seconds each | Upgrades every installed **Warp Drive** to full operational mode: unlocks subspace warp travel, warp engage/disengage circuit conditions and telemetry outputs (`W`, `D`, and `S`), and converts the detector into a general science boost (e.g. `+1,500%` for onboard platform labs or `+150%` remotely to planetary labs at `50 km/s` and `1 GW`) while not in warp. |
+| <img src="../docs/icons/technology/bte-theoretical-warp-drive.png" width="48" height="48" alt=""><br>**Theoretical Warp Drive** | `10,000` units at 120 seconds each | Unlocks the <img src="../docs/icons/bte-warp-drive.png" width="24" height="24" alt=""> **Warp Drive** building in experimental detector mode, allowing platforms to observe deep-space tachyons, accelerate **Practical Warp Drive** research, and automate detector operation via circuit signals (`C` and `T`). |
+| <img src="../docs/icons/technology/bte-practical-warp-drive.png" width="48" height="48" alt=""><br>**Practical Warp Drive** | `1,000,000,000` units at 120 seconds each | Upgrades every installed **Warp Drive** to full operational mode: unlocks subspace warp travel, warp engage/disengage circuit conditions and telemetry outputs (`W`, `D`, and `S`), and converts the detector into a general science boost (e.g. `+1,500%` for onboard platform labs or `+150%` remotely to planetary labs at `50 km/s` and `1 GW`) while not in warp. |
 
-Both technologies use <img src="docs/icons/automation-science-pack.png" width="24" height="24" alt=""> Automation, <img src="docs/icons/logistic-science-pack.png" width="24" height="24" alt=""> Logistic, <img src="docs/icons/military-science-pack.png" width="24" height="24" alt=""> Military, <img src="docs/icons/chemical-science-pack.png" width="24" height="24" alt=""> Chemical, <img src="docs/icons/production-science-pack.png" width="24" height="24" alt=""> Production, <img src="docs/icons/utility-science-pack.png" width="24" height="24" alt=""> Utility, <img src="docs/icons/space-science-pack.png" width="24" height="24" alt=""> Space, <img src="docs/icons/metallurgic-science-pack.png" width="24" height="24" alt=""> Metallurgic, <img src="docs/icons/electromagnetic-science-pack.png" width="24" height="24" alt=""> Electromagnetic, <img src="docs/icons/agricultural-science-pack.png" width="24" height="24" alt=""> Agricultural, <img src="docs/icons/cryogenic-science-pack.png" width="24" height="24" alt=""> Cryogenic, and <img src="docs/icons/promethium-science-pack.png" width="24" height="24" alt=""> Promethium science packs. **Practical Warp Drive** is intentionally prohibitive without the detector bonus.
+Both technologies use <img src="../docs/icons/automation-science-pack.png" width="24" height="24" alt=""> Automation, <img src="../docs/icons/logistic-science-pack.png" width="24" height="24" alt=""> Logistic, <img src="../docs/icons/military-science-pack.png" width="24" height="24" alt=""> Military, <img src="../docs/icons/chemical-science-pack.png" width="24" height="24" alt=""> Chemical, <img src="../docs/icons/production-science-pack.png" width="24" height="24" alt=""> Production, <img src="../docs/icons/utility-science-pack.png" width="24" height="24" alt=""> Utility, <img src="../docs/icons/space-science-pack.png" width="24" height="24" alt=""> Space, <img src="../docs/icons/metallurgic-science-pack.png" width="24" height="24" alt=""> Metallurgic, <img src="../docs/icons/electromagnetic-science-pack.png" width="24" height="24" alt=""> Electromagnetic, <img src="../docs/icons/agricultural-science-pack.png" width="24" height="24" alt=""> Agricultural, <img src="../docs/icons/cryogenic-science-pack.png" width="24" height="24" alt=""> Cryogenic, and <img src="../docs/icons/promethium-science-pack.png" width="24" height="24" alt=""> Promethium science packs. **Practical Warp Drive** is intentionally prohibitive without the detector bonus.
 
 ## Researching Practical Warp Drive
 

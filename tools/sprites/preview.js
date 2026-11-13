@@ -9,8 +9,8 @@
 // the layer's strength from 0 to 3, starting at `preview.gain` (default 1), for tuning glows. The
 // model's `labels` rename the variant picker ({variant, idle}), and `night: false` drops the night
 // panel for buildings that are only ever seen in daylight.
-// "Use real background" (on by default) lays space platform floor tiles under every panel instead
-// of the plain tile grid and footprint outline.
+// "Use real background" (on by default) lays space platform floor tiles (or the model's `ground`
+// terrain) under every panel instead of the plain tile grid and footprint outline.
 // "No recipe" shows the idle building as the game does with no recipe set: no variant layers, no
 // tinted or glow layers, and the building frozen on its first frame.
 // URL options: ?frame=n freezes one building frame, ?variant=name picks the variant (none for no
@@ -146,6 +146,18 @@
     let seed = 12345;
     const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     const used = new Set();
+    if (meta.background.texture) {
+      // A terrain sheet: `count` square variants of `size` px side by side in the row at `y`,
+      // laid at random on a grid of that size (64 px per tile, as in game).
+      const { texture, y, size, count } = meta.background;
+      for (let top = y0; top < H; top += size) {
+        for (let left = x0; left < W; left += size) {
+          ctx.drawImage(texture, Math.floor(random() * count) * size, y, size, size, left, top, size, size);
+        }
+      }
+      floors.set(odd, canvas);
+      return canvas;
+    }
     const { small, large, variants } = meta.background;
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < columns; col++) {
@@ -254,7 +266,9 @@
   }
 
   const backgroundImages = meta.background
-    ? Promise.all([load(meta.background.small), load(meta.background.large)]).then(([small, large]) => Object.assign(meta.background, { small, large }))
+    ? (meta.background.texture
+      ? load(meta.background.texture).then((texture) => Object.assign(meta.background, { texture }))
+      : Promise.all([load(meta.background.small), load(meta.background.large)]).then(([small, large]) => Object.assign(meta.background, { small, large })))
     : Promise.resolve();
   Promise.all([backgroundImages, ...panels.flatMap((p) => p.layers).map(async (layer) => (layer.image = await load(layer.url)))])
     .then(() => {

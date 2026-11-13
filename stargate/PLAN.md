@@ -1,6 +1,6 @@
 # Beyond the Edge: Stargate — development plan
 
-**Status:** documentation-only placeholder. **Restructured:** 2026-11-12.
+**Status:** construction implemented (`bte-stargate` 0.1.0: kit, construction site, finished gate); everything else below is still a plan. **Restructured:** 2026-11-12.
 
 [VISION.md](VISION.md) describes the standalone experience. This plan owns construction and transport; [Mechanoids](../mechanoids/PLAN.md) owns enemies, and [Homecoming Journey](../homecoming-journey/PLAN.md) owns the ancient-network campaign and ending. Candidate values and API observations below are not implemented mechanics.
 
@@ -11,7 +11,9 @@
 - No hard dependency on any other family mod. Mechanoids + Stargate without Homecoming remains two standalone experiences.
 - Own experimental kits, material-fed assembly, gate records/lifecycle, power, player transfer, endpoint pairing, rail upgrades, train transfer, and transport GUI.
 - Do not own guardian AI, artifact rewards, fifteen-site discovery, campaign route restrictions, enormous capstone research, orbital finale, or victory state.
-- No `info.json` or loadable scaffold yet. Add these only with real prototypes and validation; do not enroll this directory in default packaging yet.
+- Implemented so far: the loadable mod scaffold, the construction kit, the filtered construction site that becomes a finished gate when the bill of materials is delivered, and the Experimental Gates technology. Their behaviour lives in [README.md](README.md) and is tested by `tests/prototypes.py` and `tests/run-runtime-tests.sh`. The gate has no travel, power, or GUI yet, and the delivery is checked by a 30-tick poll rather than the staged commit described in section 5. The build then runs as a one-minute script timer in three picture phases (the first the construction site's own look) with a progress bar and no power requirement.
+- Implemented layout and art: the site, the gate under construction, and the finished gate share a 14x14 footprint on the rails' 2x2 grid, offset so the building's edges fall on rail cell edges and its two lanes (4 | rail | gap | rail | 4) on rail positions. The art is the modern, human-built gate: a steel ring standing in a concrete basin with a trench under it, so the whole ring shows while its opening clears a train on either lane, between two support towers with machinery housings in the lower corners. The portal is still empty and the collision box solid: rail lanes through the gate, and the bridges and tracks drawn by `tools/sprites/models/stargate-rail.js` (previewed, not exported), belong to train passage.
+- Planned art: an ancient Fulgoran gate of the same footprint for Homecoming Journey's ancient network, built as a separate model later.
 
 ## 2. Standalone progression
 

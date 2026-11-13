@@ -314,8 +314,8 @@ window.renderSprite = async function (name, options = {}) {
     if (result) sheets[layer] = result;
   }
   renderer.dispose();
-  const { tiles, references = [], export: exportPath = null, fps = 12, variants = [], variantColors = {}, loop = frameCount, labels = {}, night = true } = model;
-  return { sheets, model: { tiles, references, variants, variantColors, exportPath, fps, loop, labels, night } };
+  const { tiles, ground: groundTexture = null, references = [], export: exportPath = null, fps = 12, variants = [], variantColors = {}, loop = frameCount, labels = {}, night = true } = model;
+  return { sheets, model: { tiles, ground: groundTexture, references, variants, variantColors, exportPath, fps, loop, labels, night } };
 };
 
 /**

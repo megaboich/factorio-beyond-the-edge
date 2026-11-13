@@ -92,6 +92,7 @@ async function renderIcon(page, name) {
     if (!result.exportPath) throw new Error(`${name} has no export path`);
     const target = resolve(REPO, result.exportPath);
     if (!target.startsWith(REPO + sep)) throw new Error(`${name} export path leaves the repository`);
+    mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, png);
     console.log(`exported ${result.exportPath}`);
   }
@@ -166,17 +167,36 @@ try {
       meta.sheets[layer] = fields;
     }
     writeFileSync(join(out, `${name}.json`), JSON.stringify(meta, null, 2) + "\n");
-    if ("export" in opt) exportSheets(name, model.exportPath, sheets);
+    // Models with `export: null` are previewed only.
+    if ("export" in opt && model.exportPath) exportSheets(name, model.exportPath, sheets);
 
-    const references = model.references.map((ref) => ({
-      ...ref, layers: ref.layers.map(({ file, ...layer }) => ({ ...layer, url: copyReference(file) }))
-    }));
-    // Space platform floor for the preview's "real background": 16 one-tile and 16 two-tile variants.
-    const background = {
-      small: copyReference("factorio:space-age/graphics/terrain/space-platform/space-platform-1x1.png"),
-      large: copyReference("factorio:space-age/graphics/terrain/space-platform/space-platform-2x2.png"),
-      variants: 16
-    };
+    // A reference `{model: "<name>"}` shows another model's last render beside this one, such as a
+    // building's construction stages; render that model first.
+    const references = model.references.flatMap((ref) => {
+      if (!ref.model) return [{ ...ref, layers: ref.layers.map(({ file, ...layer }) => ({ ...layer, url: copyReference(file) })) }];
+      const path = join(out, `${ref.model}.json`);
+      if (!existsSync(path)) {
+        console.warn(`${name}: no render of ${ref.model} to preview; render it first`);
+        return [];
+      }
+      const other = JSON.parse(readFileSync(path, "utf8"));
+      const order = (layer) => (layer === "shadow" ? 0 : layer === "main" ? 1 : 2);
+      const layers = Object.entries(other.sheets).sort(([a], [b]) => order(a) - order(b)).map(([layer, { width, height, shift }]) => ({
+        width, height, shift, url: `${ref.model}-${layer}.png`,
+        blend: layer === "shadow" ? "shadow" : layer.startsWith("glow-") ? "additive" : "normal"
+      }));
+      return [{ label: ref.label ?? ref.model, tiles: other.tiles, layers }];
+    });
+    // The preview's "real background": space platform floor (16 one-tile and 16 two-tile variants),
+    // or a model's `ground`: a terrain sheet with `count` square variants of `size` px in the row at
+    // `y`, such as Nauvis grass.
+    const background = model.ground
+      ? { ...model.ground, texture: copyReference(model.ground.file) }
+      : {
+        small: copyReference("factorio:space-age/graphics/terrain/space-platform/space-platform-1x1.png"),
+        large: copyReference("factorio:space-age/graphics/terrain/space-platform/space-platform-2x2.png"),
+        variants: 16
+      };
     writeFileSync(join(out, `${name}.meta.js`), `window.SPRITE_META = ${JSON.stringify({ ...meta, references, background }, null, 2)};\n`);
     const previewScript = relative(out, join(HERE, "preview.js")).split(sep).join("/");
     writeFileSync(join(out, `${name}-preview.html`), `<!doctype html>

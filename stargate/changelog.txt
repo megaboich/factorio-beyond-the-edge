@@ -1,0 +1,9 @@
+---------------------------------------------------------------------------------------------------
+Version: 0.1.0
+Date: 2026-11-12
+  Features:
+    - Added the Stargate construction kit, which holds the scarce high-end parts of a gate and some structural material.
+    - Added the 14x14 Stargate construction site, which takes exactly the bulk materials, a whole number of stacks each.
+    - Added the Stargate, built over a minute in three phases with a progress bar, starting from the construction site's own look. It can only be destroyed.
+    - Added the Experimental gates technology.
+    - The gate is a modern steel ring between two support towers, standing in a concrete basin with a trench that keeps the whole ring visible.

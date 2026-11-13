@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODS_DIR="${FACTORIO_MODS_DIR:-$HOME/Library/Application Support/factorio/mods}"
-ALL_MODS=(spacelab warp-drive)
+ALL_MODS=(spacelab warp-drive stargate)
 
 if [[ $# -eq 0 ]]; then
   set -- "${ALL_MODS[@]}"
@@ -25,7 +25,8 @@ import zipfile
 from pathlib import Path
 
 mods_dir = Path(sys.argv[1]).expanduser()
-excluded_names = {".git", ".claude", ".DS_Store", "tests", "docs"}
+# VISION.md and PLAN.md are repository planning documents (stargate/), not part of a mod.
+excluded_names = {".git", ".claude", ".DS_Store", "tests", "docs", "VISION.md", "PLAN.md"}
 # The Mod Portal rejects archives containing executables, such as the audio generator script.
 excluded_suffixes = (".zip", ".exe", ".bat", ".ps1", ".sh", ".py")
 

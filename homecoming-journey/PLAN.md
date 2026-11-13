@@ -26,7 +26,7 @@ Mechanoids owns enemy behavior/rosters. Stargate owns gate companions, construct
 
 ## 2. Campaign versus standalone progression
 
-The campaign's ancient ruins are not Stargate's easy standalone experimental kit route. The family mods retain useful independent play; installing Homecoming deliberately adds a harder authored journey.
+The campaign's ancient ruins are not Stargate's easy standalone experimental kit route. Ancient gates get their own Fulgoran-style art on the same 14x14 footprint as Stargate's modern gate, so ancient and player-built gates stay compatible. The family mods retain useful independent play; installing Homecoming deliberately adds a harder authored journey.
 
 | Without Homecoming | With Homecoming |
 | --- | --- |

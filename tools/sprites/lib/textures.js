@@ -215,3 +215,24 @@ export function clouds(seed, low = 0.4, high = 1, size = 256) {
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
   return texture;
 }
+
+/**
+ * A MeshStandardMaterial wearing a texture from Factorio's data directory (served by render.mjs at
+ * /__factorio__/), such as vanilla terrain, so a model's floor matches the tiles around it in game.
+ * `crop` is the [x, y, size] square of the source image to use, since terrain sheets hold several
+ * variants side by side; `scale` is how many tiles one repeat covers; `tint` multiplies its colour.
+ */
+export async function factorioTexture(path, { crop, scale, tint = 0xffffff, roughness = 0.95 }) {
+  const image = await createImageBitmap(await (await fetch(`/__factorio__/${path}`)).blob());
+  const [x, y, size] = crop ?? [0, 0, Math.min(image.width, image.height)];
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  canvas.getContext("2d").drawImage(image, x, y, size, size, 0, 0, size, size);
+  const map = new THREE.CanvasTexture(canvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  map.anisotropy = 8;
+  const material = new THREE.MeshStandardMaterial({ map, color: tint, metalness: 0, roughness });
+  material.userData.uvScale = scale;
+  return material;
+}

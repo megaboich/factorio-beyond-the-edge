@@ -8,7 +8,7 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FACTORIO_BIN="${FACTORIO_BIN:-/Applications/factorio.app/Contents/MacOS/factorio}"
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/bte-prototype-tests.XXXXXX")"
-ALL_MODS=(spacelab warp-drive)
+ALL_MODS=(spacelab warp-drive stargate)
 
 cleanup() {
   if [[ "${KEEP_TEST_ARTIFACTS:-0}" == "1" ]]; then
