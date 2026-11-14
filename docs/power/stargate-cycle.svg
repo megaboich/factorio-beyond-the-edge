@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 538" width="760" height="538" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="20" y="26" fill="#1f2328" font-size="15" font-weight="600">Stargate: charge closed, open, refill while open (1.5 GW to spare)</text>
+<rect x="64.0" y="54" width="135.2" height="200" fill="#f6f8fa"/>
+<text x="131.6" y="68" text-anchor="middle" fill="#656d76" font-size="11">closed: charging</text>
+<rect x="199.2" y="54" width="540.8" height="200" fill="#f6f8fa"/>
+<text x="469.6" y="68" text-anchor="middle" fill="#656d76" font-size="11">open: 1 GW upkeep from the store</text>
+<line x1="64" x2="740" y1="254.0" y2="254.0" stroke="#d0d7de"/>
+<text x="58" y="258.0" text-anchor="end" fill="#656d76" font-size="11">0</text>
+<line x1="64" x2="740" y1="218.3" y2="218.3" stroke="#d0d7de"/>
+<text x="58" y="222.3" text-anchor="end" fill="#656d76" font-size="11">250</text>
+<line x1="64" x2="740" y1="182.6" y2="182.6" stroke="#d0d7de"/>
+<text x="58" y="186.6" text-anchor="end" fill="#656d76" font-size="11">500</text>
+<line x1="64" x2="740" y1="146.9" y2="146.9" stroke="#d0d7de"/>
+<text x="58" y="150.9" text-anchor="end" fill="#656d76" font-size="11">750</text>
+<line x1="64" x2="740" y1="96.1" y2="96.1" stroke="#d0d7de"/>
+<text x="58" y="100.1" text-anchor="end" fill="#656d76" font-size="11">1105</text>
+<line x1="64" x2="740" y1="66.0" y2="66.0" stroke="#d0d7de"/>
+<text x="58" y="70.0" text-anchor="end" fill="#656d76" font-size="11">1316</text>
+<text x="64.0" y="270" text-anchor="middle" fill="#656d76" font-size="11">0</text>
+<text x="109.1" y="270" text-anchor="middle" fill="#656d76" font-size="11">5</text>
+<text x="154.1" y="270" text-anchor="middle" fill="#656d76" font-size="11">10</text>
+<text x="199.2" y="270" text-anchor="middle" fill="#656d76" font-size="11">15</text>
+<text x="244.3" y="270" text-anchor="middle" fill="#656d76" font-size="11">20</text>
+<text x="289.3" y="270" text-anchor="middle" fill="#656d76" font-size="11">25</text>
+<text x="334.4" y="270" text-anchor="middle" fill="#656d76" font-size="11">30</text>
+<text x="379.5" y="270" text-anchor="middle" fill="#656d76" font-size="11">35</text>
+<text x="424.5" y="270" text-anchor="middle" fill="#656d76" font-size="11">40</text>
+<text x="469.6" y="270" text-anchor="middle" fill="#656d76" font-size="11">45</text>
+<text x="514.7" y="270" text-anchor="middle" fill="#656d76" font-size="11">50</text>
+<text x="559.7" y="270" text-anchor="middle" fill="#656d76" font-size="11">55</text>
+<text x="604.8" y="270" text-anchor="middle" fill="#656d76" font-size="11">60</text>
+<text x="649.9" y="270" text-anchor="middle" fill="#656d76" font-size="11">65</text>
+<text x="694.9" y="270" text-anchor="middle" fill="#656d76" font-size="11">70</text>
+<text x="740.0" y="270" text-anchor="middle" fill="#656d76" font-size="11">75</text>
+<line x1="64" x2="740" y1="254" y2="254" stroke="#1f2328"/>
+<text transform="translate(16 154.0) rotate(-90)" text-anchor="middle" fill="#1f2328" font-size="12">Draw (MW)</text>
+<polyline points="64.0,246.9 67.2,96.9 67.3,96.1 153.4,96.1 153.5,244.4 153.7,246.5 199.0,246.5 199.2,89.7 199.7,68.3 199.8,66.0 527.9,66.0 528.0,89.9 528.2,96.1 739.8,96.1" fill="none" stroke="#0969da" stroke-width="2"/>
+<line x1="72" x2="90" y1="84" y2="84" stroke="#0969da" stroke-width="2"/>
+<text x="94" y="88" fill="#1f2328" font-size="11">draw from the network</text>
+<rect x="64.0" y="294" width="135.2" height="200" fill="#f6f8fa"/>
+<text x="131.6" y="308" text-anchor="middle" fill="#656d76" font-size="11">closed: charging</text>
+<rect x="199.2" y="294" width="540.8" height="200" fill="#f6f8fa"/>
+<text x="469.6" y="308" text-anchor="middle" fill="#656d76" font-size="11">open: 1 GW upkeep from the store</text>
+<line x1="64" x2="740" y1="494.0" y2="494.0" stroke="#d0d7de"/>
+<text x="58" y="498.0" text-anchor="end" fill="#656d76" font-size="11">0</text>
+<line x1="64" x2="740" y1="444.0" y2="444.0" stroke="#d0d7de"/>
+<text x="58" y="448.0" text-anchor="end" fill="#656d76" font-size="11">25</text>
+<line x1="64" x2="740" y1="394.0" y2="394.0" stroke="#d0d7de"/>
+<text x="58" y="398.0" text-anchor="end" fill="#656d76" font-size="11">50</text>
+<line x1="64" x2="740" y1="344.0" y2="344.0" stroke="#d0d7de"/>
+<text x="58" y="348.0" text-anchor="end" fill="#656d76" font-size="11">75</text>
+<line x1="64" x2="740" y1="294.0" y2="294.0" stroke="#d0d7de"/>
+<text x="58" y="298.0" text-anchor="end" fill="#656d76" font-size="11">100</text>
+<text x="64.0" y="510" text-anchor="middle" fill="#656d76" font-size="11">0</text>
+<text x="109.1" y="510" text-anchor="middle" fill="#656d76" font-size="11">5</text>
+<text x="154.1" y="510" text-anchor="middle" fill="#656d76" font-size="11">10</text>
+<text x="199.2" y="510" text-anchor="middle" fill="#656d76" font-size="11">15</text>
+<text x="244.3" y="510" text-anchor="middle" fill="#656d76" font-size="11">20</text>
+<text x="289.3" y="510" text-anchor="middle" fill="#656d76" font-size="11">25</text>
+<text x="334.4" y="510" text-anchor="middle" fill="#656d76" font-size="11">30</text>
+<text x="379.5" y="510" text-anchor="middle" fill="#656d76" font-size="11">35</text>
+<text x="424.5" y="510" text-anchor="middle" fill="#656d76" font-size="11">40</text>
+<text x="469.6" y="510" text-anchor="middle" fill="#656d76" font-size="11">45</text>
+<text x="514.7" y="510" text-anchor="middle" fill="#656d76" font-size="11">50</text>
+<text x="559.7" y="510" text-anchor="middle" fill="#656d76" font-size="11">55</text>
+<text x="604.8" y="510" text-anchor="middle" fill="#656d76" font-size="11">60</text>
+<text x="649.9" y="510" text-anchor="middle" fill="#656d76" font-size="11">65</text>
+<text x="694.9" y="510" text-anchor="middle" fill="#656d76" font-size="11">70</text>
+<text x="740.0" y="510" text-anchor="middle" fill="#656d76" font-size="11">75</text>
+<line x1="64" x2="740" y1="494" y2="494" stroke="#1f2328"/>
+<text transform="translate(16 394.0) rotate(-90)" text-anchor="middle" fill="#1f2328" font-size="12">Store (%)</text>
+<text x="402.0" y="528" text-anchor="middle" fill="#1f2328" font-size="12">Seconds</text>
+<polyline points="64.0,494.0 64.2,494.0 64.3,493.9 64.5,493.8 64.6,493.8 64.8,493.7 64.9,493.6 65.1,493.4 65.2,493.3 65.4,493.1 65.5,493.0 65.7,492.8 65.8,492.6 66.0,492.3 66.1,492.1 66.3,491.8 66.4,491.6 66.6,491.3 66.7,491.0 66.9,490.7 67.0,490.3 71.7,479.5 76.0,469.4 80.4,459.3 84.7,449.3 89.1,439.3 93.4,429.2 97.8,419.3 102.2,409.3 106.5,399.4 110.9,389.5 115.2,379.6 119.6,369.7 123.9,359.9 128.3,350.1 132.7,340.3 137.0,330.5 141.4,320.8 145.7,311.0 150.1,301.3 153.4,294.0 199.0,294.0 199.2,454.0 199.4,453.9 199.5,453.9 210.3,448.1 219.3,443.4 228.3,438.6 237.5,433.8 246.7,429.1 255.8,424.3 265.0,419.6 274.2,414.9 283.3,410.3 292.6,405.5 302.0,400.8 311.3,396.2 320.6,391.5 329.9,386.9 339.2,382.3 348.5,377.7 358.0,373.1 367.4,368.5 376.9,363.9 386.4,359.3 395.8,354.8 405.3,350.3 414.9,345.8 424.5,341.2 434.1,336.7 443.8,332.2 453.4,327.8 463.0,323.3 472.8,318.9 482.5,314.4 492.3,310.0 502.0,305.6 511.8,301.2 521.7,296.8 527.9,294.0 528.0,294.0 739.8,294.0" fill="none" stroke="#0969da" stroke-width="2"/>
+<line x1="72" x2="90" y1="324" y2="324" stroke="#0969da" stroke-width="2"/>
+<text x="94" y="328" fill="#1f2328" font-size="11">store charge</text>
+</svg>

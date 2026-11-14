@@ -572,7 +572,7 @@ function Drive.update_output_signals(record, platform, tachyon_density)
   if not section then
     return
   end
-  local charge = record.reserve_energy or 0
+  local charge = record.bank and record.bank.charge or record.reserve_energy or 0
   local required = platform.weight * CHARGE_JOULES_PER_KG
   local charge_percent = required > 0 and math.min(100, math.floor(charge / required * 100)) or 0
   local remaining_distance = 0

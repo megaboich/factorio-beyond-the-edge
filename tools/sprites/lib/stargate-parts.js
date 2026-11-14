@@ -11,13 +11,17 @@
 // lanes over the trench; the `tracks` option lays rails along them.
 //
 // One build covers every state of the gate (STATES below):
-//   site      the basin and trench dug in raw concrete, formwork, stacked steel, and a crane mast
-//   stage1    the floor finished, the tower frames up, the lower half of the ring, the crane at work
-//   stage2    the towers clad, the ring all but its top, the bridges in, scaffolding at the gap
-//   complete  the finished gate: clamps and lights on the ring, fans, cable trays, and markings
+//   site      the finished floor, the control cabinet, the front east capacitor rack, and the bottom
+//             of the ring (8 tiles wide), inside hazard tape round the perimeter
+//   stage1-5  each adds to the last: more ring, the machinery housings, the clad towers,
+//             the west and east capacitor banks, then the towers' fans and a whole ring
+//   complete  the finished gate: clamps and lights on the ring, lights on, markings; the tape is gone
+// Nothing but the finished gate lights up: before that its lamps are dark.
 // Lit parts carry `userData.glow = {layer: "lights"}`, exported as `glow-lights`; the earlier states have none.
+// Their material is also tagged "light", so the finished model can re-render them red (glow-lights-red).
+// The finished gate also holds the veil, the active portal's light (tag "veil", see veil() and drawVeil()).
 import * as THREE from "three";
-import { factorioTexture, random, textured } from "./textures.js";
+import { factorioTexture, textured } from "./textures.js";
 import { beam, part, tube } from "./geometry.js";
 
 const TAU = Math.PI * 2;
@@ -43,13 +47,17 @@ const CLAMPS = 12;
 const CYAN = 0x2fd2ff;
 
 // Ring arcs are lists of [from, to] in degrees, counter-clockwise from east (90 is the top, 270 the
-// bottom). `level` is how finished the platform is: 0 raw concrete, 1 finished, 2 with bridges and
-// markings. `towers` is 0 none, 1 bare frames, 2 clad, 3 finished.
+// bottom); the site's [225, 315] spans the outer edge 8 tiles across. `towers` is 0 none, 1 bare
+// frames, 2 clad, 3 finished; `housing` is 0 none, 2 bare casing, 3 finished. `banks` lists the
+// capacitor groups in place: the front east rack, and the west and east banks along the back walls.
 const STATES = {
-  site: { level: 0, towers: 0, ring: [], crane: "mast", stacks: 3, seed: 11 },
-  stage1: { level: 1, towers: 1, ring: [[200, 340]], crane: "boom", stacks: 2, seed: 12 },
-  stage2: { level: 2, towers: 2, ring: [[130, 410]], scaffold: true, crane: "boom", stacks: 1, seed: 13 },
-  complete: { level: 3, towers: 3, ring: [[0, 360]], seed: 5 }
+  site: { towers: 0, housing: 0, ring: [[225, 315]], banks: ["front"] },
+  stage1: { towers: 0, housing: 2, ring: [[205, 335]], banks: ["front"] },
+  stage2: { towers: 2, housing: 2, ring: [[180, 360]], banks: ["front"] },
+  stage3: { towers: 2, housing: 2, ring: [[150, 390]], banks: ["front", "west"] },
+  stage4: { towers: 2, housing: 3, ring: [[115, 425]], banks: ["front", "west", "east"] },
+  stage5: { towers: 3, housing: 3, ring: [[0, 360]], banks: ["front", "west", "east"] },
+  complete: { towers: 3, housing: 3, ring: [[0, 360]], banks: ["front", "west", "east"] }
 };
 
 // Vanilla refined concrete for the finished floor (plain concrete for the raw site), so it matches tiles laid around the gate: one 512 px variant of the
@@ -67,9 +75,10 @@ export async function materials() {
     grating: textured({ color: 0x3a3d40, holes: 12, grime: 0.4, rust: 0.05, scale: 1.2, metalness: 0.6, seed: 81 }),
     hazard: textured({ color: 0xc9a227, stripes: true, grime: 0.4, scratches: 0.4, scale: 1, metalness: 0.2, seed: 83 }),
     rubber: textured({ color: 0x232427, grime: 0.2, scale: 1, metalness: 0.2, roughness: 0.8, seed: 85 }),
-    wood: textured({ color: 0x7a5a38, panels: 2, grime: 0.4, scale: 1.5, metalness: 0, roughness: 0.9, seed: 87 }),
+    ceramic: textured({ color: 0xd9d4c8, grime: 0.25, scratches: 0.15, scale: 1, metalness: 0.05, roughness: 0.35, seed: 89 }),
+    frost: textured({ color: 0xa9c4cf, panels: 1, grime: 0.15, scratches: 0.2, scale: 1, metalness: 0.55, roughness: 0.3, seed: 91 }),
     glow: Object.assign(new THREE.MeshStandardMaterial({ color: 0x0c2b33, emissive: CYAN, emissiveIntensity: 1.4, roughness: 0.4 }), {
-      userData: { glow: { layer: "lights" } }
+      userData: { glow: { layer: "lights" }, tag: "light" }
     })
   };
 }
@@ -98,10 +107,10 @@ function floor(root, material, options) {
   const position = geometry.attributes.position;
   for (let i = 0; i < position.count; i++) position.setY(i, floorHeight(position.getX(i), position.getZ(i), options));
   geometry.computeVertexNormals();
-  part(root, geometry, material);
+  part(root, geometry, material).userData.floor = true;
   // A kerb along the border, so the slab has an edge rather than a paper-thin rim.
   for (const [w, d, x, z] of [[HALF * 2, 0.2, 0, -HALF + 0.1], [HALF * 2, 0.2, 0, HALF - 0.1], [0.2, HALF * 2, -HALF + 0.1, 0], [0.2, HALF * 2, HALF - 0.1, 0]]) {
-    part(root, new THREE.BoxGeometry(w, 0.3, d), material, [x, GROUND - 0.14, z]);
+    part(root, new THREE.BoxGeometry(w, 0.3, d), material, [x, GROUND - 0.14, z]).userData.floor = true;
   }
 }
 
@@ -209,12 +218,8 @@ function towers(root, m, level) {
       part(root, new THREE.BoxGeometry(width - 0.3, 0.7, 0.04), m.grating, [x, y, RING_Z + depth / 2 + 0.02]);
     }
     part(root, new THREE.BoxGeometry(0.04, top - 1.6, depth - 0.5), m.grating, [x - side * (width / 2 + 0.02), (top + 0.4) / 2 + 0.4, RING_Z]);
-    if (level < 3) {
-      housing(root, m, side, level);
-      continue;
-    }
+    if (level < 3) continue;
     // Two ventilators on the south face, a roof cooling unit with fans facing up, and clamp arms.
-    housing(root, m, side, level);
     for (const y of [1.1, 2.9]) fan(root, m, [x, y, RING_Z + depth / 2 + 0.06], [0, 0, 1], 0.45);
     part(root, new THREE.BoxGeometry(width - 0.1, 0.4, depth - 0.3), m.plate, [x, top + 0.36, RING_Z]);
     for (const dz of [-0.6, 0.6]) fan(root, m, [x, top + 0.58, RING_Z + dz], [0, 1, 0], 0.42);
@@ -333,6 +338,74 @@ function markings(root, m, lit) {
   }
 }
 
+/**
+ * One superconducting capacitor can standing at (x, z) on `base`: a steel body with a tungsten foot
+ * collar and cryostat ribs, a lit charge band, a ceramic insulator stack on top, and a terminal cap.
+ */
+function capacitorCan(root, m, x, z, base, height) {
+  const r = 0.3;
+  part(root, new THREE.CylinderGeometry(r + 0.05, r + 0.08, 0.18, 16), m.tungsten, [x, base + 0.09, z]);
+  part(root, new THREE.CylinderGeometry(r, r, height, 16), m.steel, [x, base + height / 2, z]);
+  for (const f of [0.3, 0.55]) {
+    part(root, new THREE.CylinderGeometry(r + 0.025, r + 0.025, 0.05, 16), m.plate, [x, base + height * f, z]);
+  }
+  part(root, new THREE.CylinderGeometry(r + 0.012, r + 0.012, 0.1, 16), m.glow, [x, base + height * 0.8, z]);
+  part(root, new THREE.CylinderGeometry(r * 0.75, r, 0.08, 16), m.plate, [x, base + height + 0.04, z]);
+  // The insulator: a stack of ceramic sheds under a steel terminal.
+  for (let i = 0; i < 3; i++) {
+    part(root, new THREE.CylinderGeometry(0.15, 0.17, 0.06, 12), m.ceramic, [x, base + height + 0.12 + i * 0.09, z]);
+  }
+  part(root, new THREE.CylinderGeometry(0.06, 0.06, 0.32, 8), m.ceramic, [x, base + height + 0.2, z]);
+  part(root, new THREE.CylinderGeometry(0.08, 0.08, 0.06, 8), m.steel, [x, base + height + 0.39, z]);
+  return base + height + 0.42;
+}
+
+/**
+ * The gate's power bank (docs/power.md): superconducting capacitor cans in rows along the west and
+ * east walls, behind the towers, and a lower rack in the front east corner. Each row stands on a
+ * steel plinth over a grated cable trench, carries a copper-dark busbar along its terminals into
+ * the tower, and has frosted coolant lines from a cryo cooler at its north end. The lanes and the
+ * apron in front of the ring stay clear, so vehicles and walkers are not hidden.
+ */
+function capacitors(root, m, banks, wired = true) {
+  const towerNorth = RING_Z - TOWER.depth / 2;
+  for (const side of [-1, 1]) {
+    if (!banks.includes(side < 0 ? "west" : "east")) continue;
+    // The back bank: two rows of four cans between the north wall and the tower.
+    const rows = [4.75, 6.05];
+    const zs = [-5.0, -3.7, -2.4, -1.1];
+    const plinthX = (rows[0] + rows[1]) / 2;
+    part(root, new THREE.BoxGeometry(2.3, 0.22, 5.6), m.plate, [side * plinthX, GROUND + 0.11, -3.3]);
+    part(root, new THREE.BoxGeometry(0.5, 0.04, 5.4), m.grating, [side * plinthX, GROUND + 0.24, -3.3]);
+    for (const x of rows) {
+      let top = 0;
+      for (const z of zs) top = capacitorCan(root, m, side * x, z, GROUND + 0.22, 1.2);
+      // The busbar along the row's terminals, dropping into the tower's north face.
+      part(root, new THREE.BoxGeometry(0.1, 0.07, zs[zs.length - 1] - zs[0] + 0.3), m.tungsten, [side * x, top + 0.01, (zs[0] + zs[zs.length - 1]) / 2]);
+      tube(root, [[side * x, top, zs[zs.length - 1] + 0.1], [side * x, top + 0.05, towerNorth - 0.35], [side * x, top + 0.3, towerNorth - 0.05]], 0.055, m.tungsten, 16);
+    }
+    // A cross busbar tying the rows, and a cryo cooler at the north end with frosted coolant lines.
+    part(root, new THREE.BoxGeometry(rows[1] - rows[0] + 0.1, 0.07, 0.1), m.tungsten, [side * plinthX, GROUND + 1.86, zs[0] - 0.05]);
+    const cooler = [side * plinthX, -6.1];
+    part(root, new THREE.BoxGeometry(2.1, 0.6, 0.7), m.plate, [cooler[0], GROUND + 0.3, cooler[1]]);
+    fan(root, m, [cooler[0], GROUND + 0.63, cooler[1]], [0, 1, 0], 0.3);
+    for (const x of rows) {
+      const lx = side * (x + (x === rows[0] ? 0.38 : -0.38));
+      tube(root, [[lx, GROUND + 0.45, cooler[1] + 0.35], [lx, GROUND + 0.45, zs[0]], [lx, GROUND + 0.45, zs[zs.length - 1]], [lx, GROUND + 0.9, towerNorth - 0.1]], 0.07, m.frost, 24);
+    }
+    part(root, new THREE.BoxGeometry(0.5, 0.06, 0.03), m.glow, [cooler[0], GROUND + 0.45, cooler[1] + 0.36]);
+  }
+  // The front east corner: a low rack of four cans, opposite the control cabinet.
+  if (!banks.includes("front")) return;
+  const x0 = 5.4, z0 = 5.0;
+  part(root, new THREE.BoxGeometry(1.5, 0.2, 2.6), m.plate, [x0, GROUND + 0.1, z0 + 0.65]);
+  for (const dx of [-0.38, 0.38]) for (const dz of [0, 1.3]) capacitorCan(root, m, x0 + dx, z0 + dz, GROUND + 0.2, 0.9);
+  part(root, new THREE.BoxGeometry(0.9, 0.07, 0.1), m.tungsten, [x0, GROUND + 1.52, z0]);
+  part(root, new THREE.BoxGeometry(0.9, 0.07, 0.1), m.tungsten, [x0, GROUND + 1.52, z0 + 1.3]);
+  // Its cable into the east tower, once the tower stands.
+  if (wired) tube(root, [[x0, GROUND + 1.52, z0 - 0.05], [x0 + 0.5, GROUND + 1.3, RING_Z + TOWER.depth / 2 + 0.2], [6.3, 1.6, RING_Z + TOWER.depth / 2]], 0.05, m.tungsten, 16);
+}
+
 /** A control cabinet at the front left, beside the west tower. */
 function services(root, m) {
   const [x, z] = [-5.4, 6.1];
@@ -344,57 +417,166 @@ function services(root, m) {
   part(root, new THREE.BoxGeometry(0.3, 0.12, z - 0.4 - (RING_Z + TOWER.depth / 2)), m.grating, [x, GROUND + 0.06, (z - 0.4 + RING_Z + TOWER.depth / 2) / 2]);
 }
 
-/** Raw-concrete formwork, stacked steel, and a crane while the gate is built. */
-function worksite(root, m, rand, spec) {
-  const stacks = [[4.6, 5.4], [-5.2, -5.0], [5.0, -5.0]].slice(0, spec.stacks ?? 0);
-  for (const [x, z] of stacks) {
-    part(root, new THREE.BoxGeometry(1.5, 0.14, 1.1), m.wood, [x, GROUND + 0.07, z]);
-    for (let i = 0; i < 3; i++) {
-      const beamMesh = part(root, new THREE.BoxGeometry(1.4, 0.2, 0.28), m.steel, [x, GROUND + 0.24 + Math.floor(i / 3) * 0.2, z - 0.35 + i * 0.35]);
-      beamMesh.rotation.y = (rand() - 0.5) * 0.08;
-    }
-    part(root, new THREE.BoxGeometry(1.2, 0.5, 0.9), m.tungsten, [x, GROUND + 0.6, z]);
+/** Yellow and black hazard tape on short posts round the platform's edge while the gate is built. */
+function tape(root, m) {
+  const edge = HALF - 0.15;
+  const posts = [];
+  for (let i = -HALF; i <= HALF; i += 2) {
+    const t = Math.max(-edge, Math.min(edge, i));
+    posts.push([t, -edge], [t, edge], [-edge, t], [edge, t]);
   }
-  if (spec.level === 0) {
-    // Formwork boards along the trench.
-    for (const z of TRENCH_Z) part(root, new THREE.BoxGeometry(TRENCH_X * 2, 0.4, 0.08), m.wood, [0, DECK + 0.15, z]);
-  }
-  if (spec.scaffold) {
-    // Scaffolding around the unfinished top of the ring.
-    for (const x of [-1.6, 1.6]) for (const dz of [-0.8, 0.8]) {
-      part(root, new THREE.BoxGeometry(0.07, RING.cy + RING.outer - DECK, 0.07), m.steel, [x, (RING.cy + RING.outer + DECK) / 2, RING_Z + dz]);
-    }
-    for (let y = 1; y < RING.cy + RING.outer; y += 1.4) {
-      for (const dz of [-0.8, 0.8]) part(root, new THREE.BoxGeometry(3.3, 0.06, 0.06), m.steel, [0, y, RING_Z + dz]);
-    }
-    part(root, new THREE.BoxGeometry(3.4, 0.08, 1.7), m.wood, [0, RING.cy + RING.outer - 0.9, RING_Z]);
-  }
-  crane(root, m, spec.crane);
+  for (const [x, z] of posts) part(root, new THREE.BoxGeometry(0.08, 0.6, 0.08), m.rubber, [x, GROUND + 0.3, z]);
+  for (const sz of [-1, 1]) part(root, new THREE.BoxGeometry(edge * 2, 0.12, 0.02), m.hazard, [0, GROUND + 0.48, sz * edge]);
+  for (const sx of [-1, 1]) part(root, new THREE.BoxGeometry(0.02, 0.12, edge * 2), m.hazard, [sx * edge, GROUND + 0.48, 0]);
 }
 
-/** A lattice crane at the front left: just the mast at first, then with a boom over the ring. */
-function crane(root, m, kind) {
-  if (!kind) return;
-  const x = -5.6;
-  const z = 3.9;
-  const boomY = RING.cy + RING.outer + 0.8;
-  part(root, new THREE.BoxGeometry(0.9, 0.3, 0.9), m.hazard, [x, GROUND + 0.15, z]);
-  for (const dx of [-0.2, 0.2]) for (const dz of [-0.2, 0.2]) {
-    beam(root, new THREE.Vector3(x + dx, GROUND, z + dz), new THREE.Vector3(x + dx, boomY, z + dz), 0.035, m.hazard, 6);
+const VEIL_SIZE = 256;
+
+/**
+ * The active portal: a disc filling the ring's opening, lit by a canvas texture that drawVeil()
+ * repaints per frame. Hidden until the model shows its active variant; an additive light only.
+ */
+function veil(root) {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = VEIL_SIZE;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const material = new THREE.MeshStandardMaterial({
+    color: 0x000000, emissive: 0xffffff, emissiveIntensity: 1.6, emissiveMap: texture,
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, roughness: 1, metalness: 0
+  });
+  material.userData.tag = "veil";
+  const mesh = part(root, new THREE.CircleGeometry(RING.inner + 0.05, 96), material, [0, RING.cy, RING_Z + 0.02]);
+  mesh.visible = false;
+  root.userData.veil = { canvas, texture, material };
+}
+
+/**
+ * Paints the veil at `t` (0 to 1 over one loop): a deep blue pool brightening towards the rim, with
+ * rings rippling out from the centre and a slow swirl. Every term repeats a whole number of times
+ * per loop, so the animation loops seamlessly.
+ */
+export function drawVeil(root, t) {
+  drawVeilShape(root, t, () => ({ reach: 1, alpha: 1, flash: 0, surge: 0 }));
+}
+
+// The veil's brightness at (x, y) of the unit disc, `t` (0 to 1) into its loop.
+function veilValue(x, y, t) {
+  const wave = (v) => Math.sin(v * TAU);
+  const r = Math.hypot(x, y);
+  const a = Math.atan2(y, x) / TAU;
+  let v = 0.35 + 0.45 * r ** 3;
+  v += 0.16 * wave(5 * r - 2 * t) * (1 - r * 0.6);
+  v += 0.08 * wave(11 * r - 3 * t + 0.3 * wave(3 * a + t));
+  v += 0.1 * wave(3 * a + 2.5 * r - t) * r;
+  v += 0.05 * wave(7 * a - 4 * r + 2 * t);
+  v += 0.35 * Math.max(0, 1 - r * 4) * (0.6 + 0.4 * wave(t));
+  return v;
+}
+
+/**
+ * The portal forming or collapsing, played once by scripts/gate.lua: `t` runs 0 to 1. Opening
+ * (2.2 s) starts with a flash at the centre, then a burst overshoots out of the middle and settles
+ * as the veil spreads to the rim; closing (1.2 s) shrinks and fades it to nothing. Same timings as
+ * stargate-showcase.html.
+ */
+export function drawVeilTransition(root, t, closing) {
+  drawVeilShape(root, t, (t) => {
+    if (closing) {
+      const since = t * 1.2;
+      const k = Math.max(0, 1 - t);
+      return { reach: k ** 0.6, alpha: k, flash: since < 0.2 ? (0.2 - since) * 2 : 0, surge: 0 };
+    }
+    const since = t * 2.2;
+    const reach = Math.min(1, Math.max(0, (since - 0.35) / 0.9));
+    const flash = since < 0.35 ? since / 0.35 : Math.max(0, 1 - (since - 0.35) / 1.2);
+    const surge = since > 0.3 && since < 1.4 ? Math.sin((since - 0.3) / 1.1 * Math.PI) : 0;
+    return { reach: Math.max(reach, surge * 0.6), alpha: 0.4 + 0.6 * reach, flash, surge };
+  });
+}
+
+function drawVeilShape(root, t, look) {
+  const { canvas, texture } = root.userData.veil;
+  const ctx = canvas.getContext("2d");
+  const image = ctx.createImageData(VEIL_SIZE, VEIL_SIZE);
+  const { reach, alpha, flash, surge } = look(t);
+  for (let py = 0; py < VEIL_SIZE; py++) {
+    for (let px = 0; px < VEIL_SIZE; px++) {
+      const x = (px + 0.5) / VEIL_SIZE * 2 - 1;
+      const y = (py + 0.5) / VEIL_SIZE * 2 - 1;
+      const r = Math.hypot(x, y);
+      let v = 0;
+      if (reach > 0) {
+        // A soft edge: the veil fades in over the outer quarter of its reach (a full veil keeps its
+        // hard rim, below), so a growing or shrinking veil has no sharp, pixelated border.
+        const soft = reach >= 1 ? 0 : 0.25 * reach + 0.05;
+        const edge = soft ? Math.min(1, Math.max(0, (reach - r) / soft)) : r < 1 ? 1 : 0;
+        const fade = edge * edge * (3 - 2 * edge);
+        if (fade > 0) v = veilValue(x / Math.max(reach, 0.01), y / Math.max(reach, 0.01), t) * alpha * fade;
+        // The burst's leading edge, a broad glow brightest at the front.
+        v += surge * 0.5 * Math.exp(-(((reach - r) * 4) ** 2));
+      }
+      // The flash, a light at the centre that fills the ring.
+      v += flash * 1.1 * Math.exp(-r * r * 5);
+      v = Math.max(0, Math.min(1.2, v));
+      const rim = Math.max(0, Math.min(1, (1 - r) * 40));
+      const i = (py * VEIL_SIZE + px) * 4;
+      image.data[i] = Math.min(255, 255 * (0.08 * v + 0.7 * Math.max(0, v - 0.75)));
+      image.data[i + 1] = Math.min(255, 255 * (0.45 * v + 0.5 * Math.max(0, v - 0.7)));
+      image.data[i + 2] = Math.min(255, 255 * (0.95 * v));
+      image.data[i + 3] = 255 * rim;
+    }
   }
-  for (let y = GROUND + 0.5; y < boomY; y += 0.6) {
-    part(root, new THREE.BoxGeometry(0.44, 0.04, 0.44), m.hazard, [x, y, z]);
+  ctx.putImageData(image, 0, 0);
+  texture.needsUpdate = true;
+}
+
+/**
+ * The veil's reaction to someone passing through, drawn over it as extra light: a flash where the
+ * traveller entered (low and central, at body height), then waves running out across the whole veil
+ * and fading, with the veil swelling brighter as they pass. `t` runs 0 to 1 once; nothing loops.
+ */
+export function drawPassage(root, t) {
+  const { canvas, texture } = root.userData.veil;
+  const ctx = canvas.getContext("2d");
+  const image = ctx.createImageData(VEIL_SIZE, VEIL_SIZE);
+  // The entry point in canvas coordinates (y down): about 0.8 tiles above the ground, 2.8 below the axis.
+  const oy = 0.43;
+  const fade = Math.min(1, t * 12) * (1 - t) ** 1.5;
+  for (let py = 0; py < VEIL_SIZE; py++) {
+    for (let px = 0; px < VEIL_SIZE; px++) {
+      const x = (px + 0.5) / VEIL_SIZE * 2 - 1;
+      const y = (py + 0.5) / VEIL_SIZE * 2 - 1;
+      const r = Math.hypot(x, y);
+      if (r > 1) continue;
+      const d = Math.hypot(x, (y - oy) * 1.1);
+      const front = t * 2.4;
+      // Wave crests behind the expanding front, strongest just behind it.
+      const behind = front - d;
+      let v = 0;
+      if (behind > 0) {
+        // Broad, rounded crests, and a front that fades in rather than starting at full strength:
+        // a hard step there read as a pixelated ring.
+        const crest = (0.5 + 0.5 * Math.cos((behind * 7) * TAU / 2.2)) ** 2;
+        const lead = Math.min(1, behind / 0.2);
+        v += crest * lead * lead * (3 - 2 * lead) * Math.exp(-behind * 1.6) * 1.1;
+      }
+      // The flash at the entry point, and a general swell of the whole veil.
+      v += Math.exp(-d * d * 30) * Math.max(0, 1 - t * 3) * 2.2;
+      v += 0.18 * Math.sin(Math.min(1, t * 1.5) * Math.PI);
+      v *= fade + Math.exp(-d * d * 30) * Math.max(0, 1 - t * 3);
+      const rim = Math.max(0, Math.min(1, (1 - r) * 40));
+      // A soft ceiling instead of a clamp, so the brightest parts do not flatten into hard patches.
+      v = 1.4 * Math.tanh(v / 1.4) * rim;
+      const i = (py * VEIL_SIZE + px) * 4;
+      image.data[i] = Math.min(255, 255 * (0.35 * v + 0.6 * Math.max(0, v - 0.6)));
+      image.data[i + 1] = Math.min(255, 255 * (0.75 * v));
+      image.data[i + 2] = Math.min(255, 255 * v);
+      image.data[i + 3] = 255;
+    }
   }
-  if (kind !== "boom") return;
-  const tip = new THREE.Vector3(1.5, boomY + 0.2, RING_Z);
-  beam(root, new THREE.Vector3(x, boomY, z), tip, 0.08, m.hazard);
-  beam(root, new THREE.Vector3(x, boomY, z), new THREE.Vector3(x + 0.8, boomY - 0.1, z + 0.6), 0.08, m.hazard);
-  part(root, new THREE.BoxGeometry(0.6, 0.5, 0.6), m.plate, [x, boomY + 0.3, z]);
-  const along = (0.4 - x) / (tip.x - x);
-  const hangZ = z + along * (tip.z - z);
-  const hangTop = boomY + 0.2 * along;
-  beam(root, new THREE.Vector3(0.4, hangTop, hangZ), new THREE.Vector3(0.4, RING.cy + RING.outer + 0.35, hangZ), 0.02, m.rubber, 4);
-  part(root, new THREE.BoxGeometry(0.9, 0.3, RING_DEPTH), m.steel, [0.4, RING.cy + RING.outer + 0.2, hangZ]);
+  ctx.putImageData(image, 0, 0);
+  texture.needsUpdate = true;
 }
 
 // How far parts lean in towards the centre line per tile of height, as a fraction of their distance from it.
@@ -429,23 +611,31 @@ function lean(root) {
 }
 
 /**
- * Builds the gate in `state` ("site", "stage1", "stage2", or "complete"). `tracks` lays rails along
+ * Builds the gate in `state` ("site", "stage1" to "stage5", or "complete"). `tracks` lays rails along
  * both lanes, for the gate once its train station is activated.
  */
 export async function build({ state = "complete", tracks: withTracks = false } = {}) {
   const spec = STATES[state];
   if (!spec) throw new Error(`unknown Stargate state ${state}`);
   const root = new THREE.Group();
-  const rand = random(spec.seed);
-  const m = await materials();
-  floor(root, spec.level === 0 ? m.raw : m.concrete);
-  ring(root, m, spec.ring, state === "complete");
+  const finished = state === "complete";
+  const lit = await materials();
+  // Unfinished, the lamps are dark and export no glow layer.
+  const m = finished ? lit : { ...lit, glow: lit.rubber };
+  floor(root, m.concrete);
+  ring(root, m, spec.ring, finished);
+  for (const side of [-1, 1]) if (spec.housing) housing(root, m, side, spec.housing);
   towers(root, m, spec.towers);
   // The portal is left empty for now: no bridges over the trench until train passage needs them.
   if (withTracks) bridges(root, m);
-  markings(root, m, state === "complete");
-  if (state === "complete") services(root, m);
-  else worksite(root, m, rand, spec);
+  markings(root, m, finished);
+  services(root, m);
+  capacitors(root, m, spec.banks, spec.towers > 0);
+  if (finished) {
+    veil(root);
+    root.userData.lights = m.glow;
+  }
+  else tape(root, m);
   if (withTracks) tracks(root, m);
   lean(root);
   // The models are lit from the north-west like the rest of the game, which leaves the south face

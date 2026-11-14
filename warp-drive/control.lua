@@ -22,10 +22,12 @@ if script.active_mods["bte-warp-drive-runtime-test"] then
       if not record then
         return nil
       end
+      record.bank = record.bank or {charge = record.reserve_energy or 0}
+      record.reserve_energy = nil
       if value ~= nil then
-        record.reserve_energy = value
+        record.bank.charge = value
       end
-      return record.reserve_energy or 0
+      return record.bank.charge or 0
     end,
     engage = function(platform_index)
       local record = Drive.get(platform_index)

@@ -5,7 +5,7 @@
 -- The schedule is shared with bte-warp-drive-branch-test by tick number so the two mods need
 -- no communication: the detector is starved until BASELINE_END_TICK, held at the 200 MW
 -- reference through the normal windows, then saturated to 1 GW before the final window.
--- Measurement gaps allow the adaptive detector's 10 MW probes to reach each new ceiling.
+-- Measurement gaps allow the detector's adaptive power bank to reach each new ceiling.
 -- The boundary sits after the tick 180 measurement so the whole baseline window, including
 -- the research bonus applied on tick 180 itself, is genuinely unpowered.
 local BASELINE_END_TICK = 190
@@ -43,6 +43,9 @@ script.on_nth_tick(10, function()
       or (game.tick < FAST_TICK and DETECTOR_REFERENCE_WATTS or DETECTOR_MAX_WATTS)
     source.power_production = watts / 60
     source.output_flow_limit = watts / 60
+    -- One tick of output: a larger buffer stores what the detector leaves unused and then
+    -- releases it all at once, above the ceiling.
+    source.electric_buffer_size = math.max(1, watts / 60)
     -- Platform physics rewrites speed every tick and would eventually carry the platform to
     -- its destination, where distance becomes nil and the location multiplier collapses to 1.
     -- Pinning both keeps the signal constant so the test measures routing, not travel.

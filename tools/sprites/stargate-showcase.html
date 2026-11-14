@@ -1,0 +1,374 @@
+<!doctype html>
+<!--
+  Stargate showcase: every look of the gate on one page, from the last renders in out/.
+  Render first (from tools/sprites/): node render.mjs stargate-site stargate-stage1 stargate-stage2 stargate-stage3 stargate-stage4 stargate-stage5 stargate
+  then open this file in a browser. Construction phases, the progress bar, the veil, the status lights
+  (cyan, or red when short of power), the opening and closing animations, and the sounds are the
+  game's; the transfer plays the game's passage and arrival animations and timings, with the same
+  gate standing in for the partner. The finished gate is drawn in the game's layers:
+  the floor under everything, the building (with the lights below the ring's top), and the upper
+  arc with its own lights, which the game draws over spidertrons.
+-->
+<meta charset="utf-8">
+<title>Stargate showcase</title>
+<style>
+  body { margin: 0; background: #101113; color: #ddd; font: 13px system-ui, sans-serif; }
+  header { position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; padding: 8px 14px; background: #1d1f22; border-bottom: 1px solid #333; }
+  h1 { font-size: 15px; margin: 0 8px 0 0; }
+  fieldset { display: flex; gap: 4px; align-items: center; border: 1px solid #3a3d42; border-radius: 4px; padding: 3px 8px; margin: 0; }
+  legend { color: #8a8f96; font-size: 11px; padding: 0 3px; }
+  button { background: #2c2f33; color: #ddd; border: 1px solid #44484e; border-radius: 3px; padding: 3px 9px; cursor: pointer; }
+  button:hover { background: #393d42; }
+  button.on { background: #2a5e7a; border-color: #3d8ab3; color: #fff; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  label { display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
+  #status { color: #8fd8f5; min-width: 260px; }
+  main { display: flex; justify-content: center; padding: 12px; }
+  canvas { background: #000; max-width: 100%; }
+  #error { color: #f88; padding: 20px; white-space: pre-wrap; }
+</style>
+<header>
+  <h1>Stargate</h1>
+  <fieldset><legend>Phase</legend>
+    <button data-phase="site">Construction site</button>
+    <button data-phase="stage1">2</button>
+    <button data-phase="stage2">3</button>
+    <button data-phase="stage3">4</button>
+    <button data-phase="stage4">5</button>
+    <button data-phase="stage5">6</button>
+    <button data-phase="finished">Finished</button>
+    <button id="build">▶ Build (timeline)</button>
+  </fieldset>
+  <fieldset><legend>Gate</legend>
+    <button data-gate="closed">Closed</button>
+    <button data-gate="activating">Activate</button>
+    <button data-gate="active">Active</button>
+    <button data-gate="closing">Shut down</button>
+    <button id="transfer">🚶 Transfer</button>
+  </fieldset>
+  <fieldset><legend>View</legend>
+    <label><input type="checkbox" id="night"> Night</label>
+    <label><input type="checkbox" id="grass" checked> Grass</label>
+    <label><input type="checkbox" id="shadow" checked> Shadow</label>
+    <label><input type="checkbox" id="lights" checked> Lights</label>
+    <label><input type="checkbox" id="red"> Short of power</label>
+    <label><input type="checkbox" id="sound"> Sound</label>
+  </fieldset>
+  <fieldset><legend>Playback</legend>
+    <button id="pause">⏸</button>
+    <label>Speed <input type="range" id="speed" min="0.1" max="2" step="0.1" value="1"></label>
+    <label>Zoom <input type="range" id="zoom" min="0.5" max="2" step="0.05" value="1"></label>
+  </fieldset>
+  <span id="status"></span>
+</header>
+<main><canvas id="view"></canvas></main>
+<div id="error"></div>
+<script>
+const TILE = 64;
+const COT = 1 / Math.tan(50 * Math.PI / 180); // projected height per tile of height (models render at 50°)
+const RING_Z = 2;                              // ring plane, tiles south of the centre
+const VEIL_CENTER = 2.8;                       // ring axis height
+const VEIL_RADIUS = 4.6;
+const BUILD_SECONDS = 9;                       // the timeline compresses the game's minute
+const STAGES = ["stargate-site", "stargate-stage1", "stargate-stage2", "stargate-stage3", "stargate-stage4", "stargate-stage5"];
+const MODELS = [...STAGES, "stargate"];
+// The mod's sounds (stargate/resources/audio), and the trip's length: 128 ticks in game.
+const AUDIO = "../../stargate/resources/audio/stargate-";
+const TRIP_SECONDS = 128 / 60;
+// The trip as in game (scripts/transfer.lua): the passage plays over 128 ticks while the traveller
+// waits in limbo, then the arrival (the passage reversed at double speed) over 64 ticks at the
+// partner, standing in for it here; the traveller then appears 1.9 tiles in front of the ring and
+// runs 5 tiles out at a character's running speed (about 9 tiles a second).
+const ARRIVAL_SECONDS = 64 / 60;
+const ARRIVE_AT = 1.9, EXIT_DISTANCE = 5, RUN_SPEED = 9;
+const sound = (name) => { if ($("sound").checked) new Audio(`${AUDIO}${name}.ogg`).play().catch(() => {}); };
+const PHASE_MODEL = { site: "stargate-site", stage1: "stargate-stage1", stage2: "stargate-stage2", stage3: "stargate-stage3", stage4: "stargate-stage4", stage5: "stargate-stage5", finished: "stargate" };
+
+const $ = (id) => document.getElementById(id);
+const canvas = $("view");
+const ctx = canvas.getContext("2d");
+const state = { phase: "finished", gate: "closed", gateSince: 0, building: null, transfer: null, paused: false, time: 0 };
+const metas = {};
+const images = {};
+
+const loadScript = (src) => new Promise((resolve, reject) => {
+  const s = document.createElement("script");
+  s.src = src; s.onload = resolve; s.onerror = () => reject(new Error(`missing ${src}`));
+  document.head.append(s);
+});
+const loadImage = (src) => new Promise((resolve, reject) => {
+  const img = new Image();
+  img.onload = () => resolve(img); img.onerror = () => reject(new Error(`missing ${src}`));
+  img.src = src;
+});
+
+async function load() {
+  for (const name of MODELS) {
+    await loadScript(`out/${name}.meta.js?${Date.now()}`);
+    metas[name] = window.SPRITE_META;
+    for (const layer of Object.keys(metas[name].sheets)) images[`${name}-${layer}`] = await loadImage(`out/${name}-${layer}.png?${Date.now()}`);
+  }
+  const bg = metas.stargate.background;
+  images.grass = await loadImage(`out/${bg.texture}`);
+}
+
+// --- drawing helpers; the building's centre is the canvas centre, (x, y) in tiles on the ground, h tiles up.
+let W, H, Z;
+const px = (x) => W / 2 + x * TILE * Z;
+const py = (y, h = 0) => H / 2 + (y - h * COT) * TILE * Z;
+
+function sheet(name, layer, frame = 0, opts = {}) {
+  const meta = metas[name].sheets[layer];
+  const img = images[`${name}-${layer}`];
+  if (!meta || !img) return;
+  const f = frame % meta.frame_count;
+  const sx = (f % meta.line_length) * meta.width, sy = Math.floor(f / meta.line_length) * meta.height;
+  const w = meta.width * Z, h = meta.height * Z;
+  const x = px(meta.shift[0]) - w / 2, y = py(meta.shift[1]) - h / 2;
+  ctx.drawImage(img, sx, sy, meta.width, meta.height, x, y, w, h);
+}
+
+function ground() {
+  if ($("grass").checked) {
+    const size = 256 * Z, count = 16;
+    let seed = 7;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const ox = ((px(-1) % size) + size) % size - size, oy = ((py(-1) % size) + size) % size - size;
+    for (let y = oy; y < H; y += size) for (let x = ox; x < W; x += size)
+      ctx.drawImage(images.grass, Math.floor(rnd() * count) * 256, 320, 256, 256, x, y, size + 1, size + 1);
+  } else {
+    ctx.fillStyle = "#2b2c2e";
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+// The portal forming or collapsing: the game's animations, 4 ticks (1/15 s) a frame.
+function transition(layer, since) {
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (const part of ["", "-high"]) {
+    const meta = metas.stargate.sheets[`glow-${layer}${part}`];
+    if (meta) sheet("stargate", `glow-${layer}${part}`, Math.min(meta.frame_count - 1, Math.floor(since * 15)));
+  }
+  ctx.restore();
+}
+
+// The veil, clipped to an ellipse of `reach` (0-1) of the ring opening, at `alpha`.
+function veil(t, reach, alpha) {
+  if (reach <= 0 || alpha <= 0) return;
+  const meta = metas.stargate.sheets["glow-veil"];
+  const frame = Math.floor(t * 16) % meta.frame_count;
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(px(0), py(RING_Z, VEIL_CENTER), VEIL_RADIUS * reach * TILE * Z, VEIL_RADIUS * reach * TILE * Z, 0, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = alpha;
+  sheet("stargate", "glow-veil", frame);
+  // The veil's upper part, a companion of its own in game (drawn over spidertrons).
+  if (metas.stargate.sheets["glow-veil-high"]) sheet("stargate", "glow-veil-high", frame);
+  ctx.restore();
+}
+
+function bloom(x, y, h, radius, alpha, color = "160,230,255") {
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const g = ctx.createRadialGradient(px(x), py(y, h), 0, px(x), py(y, h), radius * TILE * Z);
+  g.addColorStop(0, `rgba(255,255,255,${alpha})`);
+  g.addColorStop(0.35, `rgba(${color},${alpha * 0.6})`);
+  g.addColorStop(1, `rgba(${color},0)`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+// A stand-in engineer: a simple figure `h` tiles tall standing at ground point (x, y).
+function engineer(x, y, alpha, walk) {
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  const s = TILE * Z, bx = px(x), by = py(y);
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  ctx.beginPath(); ctx.ellipse(bx + 0.15 * s, by, 0.35 * s, 0.14 * s, 0, 0, Math.PI * 2); ctx.fill();
+  const swing = Math.sin(walk * Math.PI * 2) * 0.12 * s;
+  ctx.strokeStyle = "#3b3326"; ctx.lineWidth = 0.13 * s; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(bx - 0.08 * s, by - 0.75 * s); ctx.lineTo(bx - 0.08 * s + swing, by - 0.05 * s);
+  ctx.moveTo(bx + 0.08 * s, by - 0.75 * s); ctx.lineTo(bx + 0.08 * s - swing, by - 0.05 * s); ctx.stroke();
+  ctx.fillStyle = "#c8a24a";
+  ctx.fillRect(bx - 0.2 * s, by - 1.35 * s, 0.4 * s, 0.65 * s);
+  ctx.fillStyle = "#7d6a3a";
+  ctx.fillRect(bx - 0.17 * s, by - 1.25 * s, 0.34 * s, 0.2 * s);
+  ctx.fillStyle = "#d9b98a";
+  ctx.beginPath(); ctx.arc(bx, by - 1.52 * s, 0.17 * s, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#58635c";
+  ctx.beginPath(); ctx.arc(bx, by - 1.56 * s, 0.17 * s, Math.PI, 0); ctx.fill();
+  ctx.restore();
+}
+
+function progressBar(fraction) {
+  const x = -4, y = 5.2;
+  ctx.fillStyle = "rgba(15,15,15,0.85)";
+  ctx.fillRect(px(x - 0.12), py(y - 0.12), (8.24) * TILE * Z, 0.59 * TILE * Z);
+  ctx.fillStyle = "rgb(31,199,240)";
+  ctx.fillRect(px(x), py(y), 8 * fraction * TILE * Z, 0.35 * TILE * Z);
+}
+
+// Gate state over time: veil reach and strength, and the activation flash.
+function gateLook(now) {
+  const since = now - state.gateSince;
+  switch (state.gate) {
+    // The game's timings: opening 120 ticks, closing 72.
+    case "activating": {
+      if (since > 2) { setGate("active", now - (since - 2)); return gateLook(now); }
+      return { reach: 0, alpha: Math.min(1, since), flash: 0, surge: 0, transition: "opening", since };
+    }
+    case "active": return { reach: 1, alpha: 1, flash: 0, surge: 0 };
+    case "closing": {
+      if (since > 1.2) { setGate("closed", now); return gateLook(now); }
+      return { reach: 0, alpha: 1 - since / 1.2, flash: 0, surge: 0, transition: "closing", since };
+    }
+    default: return { reach: 0, alpha: 0, flash: 0, surge: 0 };
+  }
+}
+
+function setGate(gate, now = state.time) {
+  // The game's open and close sounds, as the veil forms and collapses.
+  const open = (g) => g === "activating" || g === "active";
+  if (open(gate) && !open(state.gate)) sound("open");
+  if (!open(gate) && open(state.gate)) sound("close");
+  state.gate = gate; state.gateSince = now;
+  refreshButtons();
+}
+
+function frame(dt) {
+  const now = state.time;
+  const finished = state.phase === "finished";
+  let model = PHASE_MODEL[state.phase], progress = null;
+  if (state.building) {
+    const f = (now - state.building) / BUILD_SECONDS;
+    if (f >= 1) { state.building = null; state.phase = "finished"; setGate("closed", now); refreshButtons(); return frame(0); }
+    progress = f;
+    model = STAGES[Math.min(STAGES.length - 1, Math.floor(f * STAGES.length))];
+  }
+
+  ground();
+  // The finished gate's floor is its own layer, drawn under everything (the integration patch).
+  if (metas[model].sheets.floor) sheet(model, "floor");
+  if ($("shadow").checked) sheet(model, "shadow");
+
+  const look = finished && !state.building ? gateLook(now) : { reach: 0, alpha: 0, flash: 0, surge: 0 };
+  const tr = state.transfer && finished ? transferPose(now) : null;
+  if (tr && tr.y < RING_Z) engineer(0, tr.y, tr.alpha, tr.walk); // behind the ring (arriving side not shown)
+  sheet(model, "main");
+  // The upper arc (drawn last in game, on an elevated layer); its pixels match main's, so drawing it
+  // before the lights and the night tint changes nothing here.
+  if (metas[model].sheets.top) sheet(model, "top");
+
+  if ($("night").checked) {
+    ctx.save();
+    ctx.globalCompositeOperation = "multiply";
+    ctx.fillStyle = "rgb(55,62,95)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+    // The veil lights its surroundings at night.
+    if (look.alpha > 0) bloom(0, RING_Z, VEIL_CENTER - 1.5, 9, 0.18 * look.alpha);
+  }
+  const red = $("red").checked && metas[model].sheets["glow-lights-red"];
+  if ($("lights").checked && metas[model].sheets["glow-lights"]) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; sheet(model, red ? "glow-lights-red" : "glow-lights"); ctx.restore();
+  }
+  // The upper arc's lights.
+  if (metas[model].sheets.top) {
+    if ($("lights").checked) {
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; sheet(model, red ? "glow-lights-red-high" : "glow-lights-high"); ctx.restore();
+    }
+  }
+  if (look.transition) transition(look.transition, look.since);
+  else veil(now, look.reach, look.alpha);
+  // The game's passage animation over the veil while someone passes, reversed for the arrival.
+  if (tr && tr.passage !== undefined && metas.stargate.sheets["glow-passage"]) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    sheet("stargate", "glow-passage", Math.max(0, Math.min(metas.stargate.sheets["glow-passage"].frame_count - 1, tr.passage)));
+    ctx.restore();
+  }
+  // In front of the ring, so drawn over its light.
+  if (tr && tr.y >= RING_Z) engineer(0, tr.y, tr.alpha, tr.walk);
+  if (progress !== null) progressBar(progress);
+
+  $("status").textContent = state.building
+    ? `Building… ${Math.round(progress * 100)}% (phase ${STAGES.indexOf(model) + 1} of 6)`
+    : !finished ? `Construction ${state.phase === "site" ? "site (phase 1 of 6)" : `phase ${STAGES.indexOf(PHASE_MODEL[state.phase]) + 1} of 6`}`
+    : tr ? tr.label
+    : { closed: "Closed: unpaired, off, or unpowered", activating: "Opening…", active: "Open: 1 GW, walk through to travel", closing: "Shutting down…" }[state.gate];
+}
+
+// The engineer walks north into the portal, flashes away, then (after a beat) the label says where he went.
+function transferPose(now) {
+  const t = now - state.transfer.at;
+  const start = RING_Z + 5, speed = 2.2;
+  const y = start - t * speed;
+  if (state.gate !== "active" && state.gate !== "activating") {
+    // A closed gate: he walks straight through the platform.
+    if (y < -8) { state.transfer = null; return null; }
+    return { y, alpha: 1, walk: t * 2.5, flash: 0, label: "Gate closed: nothing happens" };
+  }
+  if (y > RING_Z) return { y, alpha: 1, walk: t * 2.5, flash: 0, label: "Walking into the portal…" };
+  const after = (RING_Z - y) / speed;
+  // Sounds as in game: departure as he steps in, arrival when the trip ends at the partner.
+  if (!state.transfer.departed) { state.transfer.departed = true; sound("depart"); }
+  if (after >= TRIP_SECONDS && !state.transfer.arrived) { state.transfer.arrived = true; sound("arrive"); }
+  // Departure: he fades into the veil as the passage animation plays (4 ticks a frame).
+  if (after < TRIP_SECONDS) {
+    return { y: RING_Z, alpha: Math.max(0, 1 - after * 6), walk: t * 2.5, passage: Math.floor(after * 15),
+      label: "In transit… (the gate he left)" };
+  }
+  // Arrival at the partner: the ripples converge (2 ticks a frame), then he steps out and runs.
+  const arrived = after - TRIP_SECONDS;
+  if (arrived < ARRIVAL_SECONDS) {
+    return { y: RING_Z, alpha: 0, walk: 0, passage: 31 - Math.floor(arrived * 30), label: "Arriving at the paired gate…" };
+  }
+  const run = (arrived - ARRIVAL_SECONDS) * RUN_SPEED;
+  if (run > EXIT_DISTANCE + 2) { state.transfer = null; return null; }
+  return { y: RING_Z + ARRIVE_AT + Math.min(run, EXIT_DISTANCE), alpha: 1, walk: run < EXIT_DISTANCE ? t * 5 : 0,
+    label: "Arrived: runs out of the paired gate" };
+}
+
+function refreshButtons() {
+  const finished = state.phase === "finished" && !state.building;
+  for (const b of document.querySelectorAll("[data-phase]")) b.classList.toggle("on", !state.building && b.dataset.phase === state.phase);
+  for (const b of document.querySelectorAll("[data-gate]")) {
+    b.disabled = !finished;
+    b.classList.toggle("on", finished && b.dataset.gate === state.gate);
+  }
+  $("transfer").disabled = !finished;
+  $("build").classList.toggle("on", !!state.building);
+}
+
+function resize() {
+  Z = +$("zoom").value;
+  W = Math.round(1100 * Z); H = Math.round(1000 * Z);
+  canvas.width = W; canvas.height = H;
+}
+
+let last = performance.now();
+function tick(ms) {
+  const dt = Math.min(0.1, (ms - last) / 1000);
+  last = ms;
+  if (!state.paused) state.time += dt * +$("speed").value;
+  resize();
+  frame(dt);
+  requestAnimationFrame(tick);
+}
+
+document.querySelectorAll("[data-phase]").forEach((b) => b.onclick = () => {
+  state.building = null; state.phase = b.dataset.phase; state.transfer = null; setGate("closed");
+});
+document.querySelectorAll("[data-gate]").forEach((b) => b.onclick = () => setGate(b.dataset.gate));
+$("build").onclick = () => { state.building = state.time; state.transfer = null; refreshButtons(); };
+$("transfer").onclick = () => { state.transfer = { at: state.time }; };
+$("pause").onclick = () => { state.paused = !state.paused; $("pause").textContent = state.paused ? "▶" : "⏸"; };
+
+load().then(() => { refreshButtons(); requestAnimationFrame(tick); window.previewReady = true; })
+  .catch((e) => { $("error").textContent = `${e.message}\n\nRender first, from tools/sprites/:\n  node render.mjs stargate-site stargate-stage1 stargate-stage2 stargate-stage3 stargate-stage4 stargate-stage5 stargate`; });
+</script>

@@ -34,8 +34,8 @@ The mod adds no new laboratories, science packs, or particle items. Exactly one 
 
 - **Standby:** Idle, switched off, or waiting out the post-warp re-entry lockout; draws no power.
 - **Detecting tachyons:** Draws up to `1 GW` of spare platform power to observe subspace tachyons — accelerating **Practical Warp Drive** research before it is completed, or providing the general science boost afterwards while warp is not engaged.
-- **Charging:** Fills the internal warp reserve (`100 J/kg` of platform weight, up to `10 W/kg`) once **Engage warp drive** is clicked or the engage circuit condition holds.
-- **Activation:** Spends 90% of the charged reserve to breach subspace, retaining 10% as the initial support reserve and sweeping surrounding asteroids off the platform with an outward shockwave.
+- **Charging:** Fills the internal warp reserve, a [power bank](../docs/power.md) of `100 J/kg` of platform weight, at up to `10 W/kg` once **Engage warp drive** is clicked or the engage circuit condition holds.
+- **Activation:** Spends 80% of the charged reserve to breach subspace, retaining 20% as the initial support reserve and sweeping surrounding asteroids off the platform with an outward shockwave.
 - **Warp:** Multiplies platform travel speed (`10x` at Warp-1, climbing 1 level every 2 seconds while engine speed and `10 W/kg` per level of support power allow) and suppresses all incoming asteroids until disengaged.
 
 The Warp Drive takes 120 seconds to craft from:
@@ -58,7 +58,7 @@ Both technologies use <img src="../docs/icons/automation-science-pack.png" width
 Before **Practical Warp Drive** is researched, the drive operates as a tachyon detector:
 
 - **Start tachyon detector** and **Stop tachyon detector** (or their circuit conditions) switch detection on and off. New drives start with the detector on; stopping it ends its power draw and research bonus.
-- As an ordinary secondary-priority consumer, the detector adaptively requests up to `1 GW` of spare platform power: after a shortfall it drops its request to what was delivered, and when fully supplied it probes `10 MW` higher, so it uses spare generation without starving the ship.
+- As an ordinary secondary-priority consumer, the detector adaptively requests up to `1 GW` of spare platform power, the same way the warp reserve charges ([Dynamic Power](../docs/power.md)): while fully supplied it asks for a little more every tick, in steps of `10` to `50 MW`; after a shortfall it backs off below what was delivered and waits two seconds. It uses spare generation without starving the ship, settling a few percent below an exact limit.
 - The bonus applies only while researching **Practical Warp Drive**. Labs consume science packs at their normal rate while tachyons add bonus progress.
 - The runtime Map setting **Severely impatient mode** multiplies the tachyon research bonus by `1,000` and takes effect immediately.
 
@@ -124,16 +124,16 @@ At the Shattered Planet (**10,000 particles/s**), **50 km/s** (1.5x), and **1 GW
 After **Practical Warp Drive** is researched, the drive can propel its platform through subspace:
 
 - **Entry requirements:** The platform must be travelling along a connection (longer than `2,000 km`), more than `1,000 km` from both endpoints, moving at least `50 km/s`, and outside the re-entry lockout.
-- **Charging & reserve (`100 J/kg`):** Clicking **Engage warp drive** (or meeting the engage condition) charges the internal warp reserve at up to `10 W/kg` (10 seconds at full power). If any entry requirement is lost during charging, the reserve resets and a 5-second lockout begins.
-- **Warp levels & acceleration:** Entry spends 90% of the charge, retains 10% as the initial support reserve, and starts at **Warp-1** (`10x` speed boost). After a brief stabilization pause, the drive climbs by `0.5 levels/s` (1 level every 2 seconds) as long as engine speed and support power permit, with no scripted cap:
+- **Charging & reserve (`100 J/kg`):** Clicking **Engage warp drive** (or meeting the engage condition) charges the internal warp reserve at up to `10 W/kg` (about 10 seconds with enough spare power). The reserve is a [power bank](../docs/power.md): it leaks 0.5 % of its charge a second (`0.5 W/kg` when full) and stores 95 % of what it draws, so the drive draws up to `11.05 W/kg` while charging. If any entry requirement is lost during charging, the reserve resets and a 5-second lockout begins.
+- **Warp levels & acceleration:** Entry spends 80% of the charge, retains 20% as the initial support reserve, and starts at **Warp-1** (`10x` speed boost). After a brief stabilization pause, the drive climbs by `0.5 levels/s` (1 level every 2 seconds) as long as engine speed and support power permit, with no scripted cap:
 
 ```math
 L_{target} = \min\left(\frac{v_{engine}}{50\ \mathrm{km/s}},\ \frac{P_{available}}{m \cdot 10\ \mathrm{W/kg}}\right), \qquad v_{subspace} = 10 \cdot L_{current} \cdot v_{engine}
 ```
 
-  Each warp level requires `50 km/s` of engine speed and `10 W/kg` of support power (plus up to `10 W/kg` of surplus power to replenish the support reserve back to 100%). Reaching **Warp-10** (`100x` speed) therefore requires `500 km/s`, `100 W/kg`, and about 18 seconds after stabilization.
-- **Worked example (`10,000 tonne` platform):** The reserve holds `1 GJ`, charging requests up to `100 MW` for 10 seconds, entry retains `100 MJ`, and replenishment restores the remaining `900 MJ` over 9 seconds. Sustaining Warp-1 needs `100 MW`; Warp-2 needs `200 MW`.
-- **Brownouts & low speed:** If engine speed drops below a level's requirement, the warp level drops immediately; falling below `50 km/s` starts a 5-second warning before warp exits. If power falls short, the drive holds its current level by draining the support reserve (bridging up to 1 second of total outage right after entry, or 10 seconds once replenished to 100%).
+  Each warp level requires `50 km/s` of engine speed and `10 W/kg` of support power, drawn from the reserve, which the network refills at up to `10 W/kg` beyond the support and the leak (all over the 95 % charging efficiency). While climbing, the drive also asks for the next level's support, so it finds out whether the ship can spare it. Reaching **Warp-10** (`100x` speed) therefore requires `500 km/s`, about `106 W/kg` to hold it with a full reserve, and about 18 seconds after stabilization.
+- **Worked example (`10,000 tonne` platform):** The reserve holds `1 GJ` and leaks `5 MW` when full. Charging draws up to `110.5 MW` for about 10 seconds, entry retains `200 MJ`, and replenishment restores the remaining `800 MJ` over about 8 seconds. With a full reserve, holding Warp-1 draws `110.5 MW`; Warp-2 `216 MW`; Warp-5 `532 MW`. See the [chart](../docs/power.md#how-much-it-draws).
+- **Brownouts & low speed:** If engine speed drops below a level's requirement, the warp level drops immediately; falling below `50 km/s` starts a 5-second warning before warp exits. If power falls short, the drive holds its current level by drawing the support from the reserve. In a total outage a full reserve lasts $200 \ln(1 + 0.05 / L)$ seconds at Warp-$L$: about 9.8 seconds at Warp-1, 4.9 at Warp-2, 1 at Warp-10, and a fifth of that right after entry. The drive also backs off its request at once, so the rest of the ship keeps its power.
 - **Disengaging & lockout:** Each engagement is a single jump. Warp exits on **Disengage**, the disengage condition, reaching the final `1,000 km` endpoint zone, depletion of the support reserve, or 5 seconds below `50 km/s`, then enters a 10-second re-entry lockout.
 - **Subspace environment:** Entering warp sends an azure-and-violet shockwave across the platform that sweeps away existing asteroids, and no new asteroids appear until warp ends. Electric-blue streaks, slow-drifting pastel anomalies, and harmless local lightning surround the ship, accompanied by a rising capacitor whine, dimensional breach roar, and subspace hum on the game-effects volume slider.
 

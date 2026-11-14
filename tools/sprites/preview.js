@@ -5,6 +5,12 @@
 // main sheet's frame count unless the model sets `loop` (for a static main sheet under animated
 // layers). A layer's `preview.variant` shows it only for that variant (as the running recipe does
 // in game), `preview.tint: "variant"` multiplies it by the variant's colour, and
+// `preview.blend: "additive"` draws it as light, and `preview.building: true` marks a lit part of
+// the building (drawn by order, dark at night, shown with no recipe), such as a floor patch drawn
+// under it with `preview.order` below -2.
+// The model's `sounds` play behind a Sound checkbox: `states` [{variants, enter, leave}] play
+// `enter` when the picked variant moves into the group and `leave` when it moves out, and `cues`
+// [{variant, at, file}] play at fraction `at` of that variant's cycle.
 // `preview.blend: "additive"` draws it as light. `preview.slider: "Label"` adds a slider that scales
 // the layer's strength from 0 to 3, starting at `preview.gain` (default 1), for tuning glows. The
 // model's `labels` rename the variant picker ({variant, idle}), and `night: false` drops the night
@@ -54,9 +60,9 @@
       slider: meta.sheets[layer].preview?.slider,
       gain: meta.sheets[layer].preview?.gain ?? 1,
       // Model layers are drawn with draw_as_glow in game, so they stay fully lit at night.
-      glow: Boolean(meta.sheets[layer].preview),
+      glow: Boolean(meta.sheets[layer].preview) && !meta.sheets[layer].preview.building,
       // Drawn only while a recipe runs: recipe layers and working lights.
-      needsRecipe: Boolean(meta.sheets[layer].preview) || layer.startsWith("glow-")
+      needsRecipe: (Boolean(meta.sheets[layer].preview) && !meta.sheets[layer].preview.building) || layer.startsWith("glow-")
     }));
   // A variant's own layers set its cycle (so a one-shot plays once); otherwise every shared layer.
   const periodOf = (name) => {
@@ -87,6 +93,7 @@
   document.body.innerHTML = `
     <header>
       <h1>${meta.name}</h1>
+      ${meta.sounds ? `<label><input id="sound" type="checkbox"> Sound</label>` : ""}
       <label>${labels.variant} <select id="variant">${variantNames.map((n) => `<option ${n === variant ? "selected" : ""}>${n}</option>`).join("")}<option value="" ${variant === "" ? "selected" : ""}>${labels.idle}</option></select></label>
       <label>Speed <input id="fps" type="range" min="2" max="60" value="${fps}"> <span id="fps-value">${fps}</span> fps</label>
       <label><input id="real" type="checkbox" ${realBackground ? "checked" : ""} ${meta.background ? "" : "disabled"}> Use real background</label>
@@ -96,9 +103,29 @@
     </header>
     <main>${panels.map((p, i) => `<figure><canvas id="panel-${i}" width="${W}" height="${H}"></canvas><figcaption>${p.label}</figcaption></figure>`).join("")}</main>`;
   const $ = (id) => document.getElementById(id);
+  // Sounds: copies of the game's files, played only once the Sound box is ticked.
+  const sounds = meta.sounds;
+  let soundOn = false;
+  const play = (file) => {
+    if (soundOn && file) new Audio(file).play().catch(() => {});
+  };
+  if (sounds) $("sound").onchange = (e) => (soundOn = e.target.checked);
   if (variantNames.length) $("variant").onchange = (e) => {
+    const before = variant;
     variant = e.target.value;
     frame %= period();
+    for (const state of sounds?.states ?? []) {
+      const was = state.variants.includes(before);
+      const is = state.variants.includes(variant);
+      if (!was && is) play(state.enter);
+      if (was && !is) play(state.leave);
+    }
+  };
+  // Cues fire when playback reaches their frame in the current variant's cycle.
+  const cue = (index) => {
+    for (const c of sounds?.cues ?? []) {
+      if (c.variant === variant && index === Math.floor(c.at * period())) play(c.file);
+    }
   };
   $("fps").oninput = (e) => {
     fps = Number(e.target.value);
@@ -285,6 +312,7 @@
         if (playing && now - last >= 1000 / fps) {
           last = now;
           frame = (frame + 1) % period();
+          cue(frame);
           draw();
         }
         requestAnimationFrame(tick);

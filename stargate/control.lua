@@ -1,10 +1,33 @@
 local Construction = require("scripts.construction")
+local Gate = require("scripts.gate")
+local Gui = require("scripts.gui")
+local Transfer = require("scripts.transfer")
+local Destinations = require("scripts.destinations")
 
 local UPDATE_TICKS = 30
-local SITE = {{filter = "name", name = "bte-stargate-construction-site"}}
+local GATE = "bte-stargate"
+local BUILT = {
+  {filter = "name", name = "bte-stargate-construction-site"},
+  {filter = "name", name = GATE}
+}
 
-script.on_init(Construction.rebuild)
-script.on_configuration_changed(Construction.rebuild)
+local function rebuild()
+  Construction.rebuild()
+  Gate.rebuild()
+  Gui.init_storage()
+  Transfer.init_storage()
+end
+
+script.on_init(rebuild)
+script.on_configuration_changed(rebuild)
+
+local function built(entity)
+  if entity.name == GATE then
+    Gate.register(entity)
+  else
+    Construction.register(entity)
+  end
+end
 
 for _, event in pairs({
   defines.events.on_built_entity,
@@ -14,12 +37,88 @@ for _, event in pairs({
   defines.events.script_raised_revive
 }) do
   script.on_event(event, function(event_data)
-    Construction.register(event_data.entity)
-  end, SITE)
+    built(event_data.entity)
+  end, BUILT)
 end
 
 script.on_event(defines.events.on_entity_cloned, function(event_data)
-  Construction.register(event_data.destination)
-end, SITE)
+  built(event_data.destination)
+end, BUILT)
 
-script.on_nth_tick(UPDATE_TICKS, Construction.update)
+for _, event in pairs({defines.events.on_entity_died, defines.events.script_raised_destroy}) do
+  script.on_event(event, function(event_data)
+    Gate.removed(event_data.entity)
+  end, {{filter = "name", name = GATE}})
+end
+
+script.on_nth_tick(UPDATE_TICKS, function()
+  Construction.update()
+  Gate.prune()
+  Gui.update()
+end)
+script.on_nth_tick(Gate.TRANSFER_TICKS, function()
+  Gate.update(Transfer.start)
+end)
+-- Gates charge every tick. Ripples, arrivals, and the run out of the ring are timed per tick, but only
+-- while someone travels.
+script.on_event(defines.events.on_tick, function()
+  Gate.collect()
+  if (storage.transfers and next(storage.transfers)) or (storage.exits and next(storage.exits)) then
+    Transfer.update()
+  end
+end)
+
+script.on_event({defines.events.on_cutscene_cancelled, defines.events.on_cutscene_finished}, Transfer.on_cutscene_cancelled)
+script.on_event(defines.events.on_gui_opened, Gui.on_opened)
+script.on_event(defines.events.on_gui_closed, Gui.on_closed)
+script.on_event(defines.events.on_gui_click, Gui.on_click)
+script.on_event(defines.events.on_gui_text_changed, Gui.on_text_changed)
+script.on_event(defines.events.on_gui_selection_state_changed, Gui.on_selection_changed)
+script.on_event(defines.events.on_gui_elem_changed, Gui.on_elem_changed)
+script.on_event(defines.events.on_gui_checked_state_changed, Gui.on_checked)
+
+-- Lets the headless runtime test drive what the window does; registered only alongside its helper mod.
+if script.active_mods["bte-stargate-runtime-test"] then
+  remote.add_interface("bte-stargate-test", {
+    state = function(id)
+      local record = Gate.get(id)
+      return record and {name = record.name, partner = record.partner, enabled = record.enabled}
+    end,
+    pair = function(a, b)
+      Gate.pair(Gate.get(a), b and Gate.get(b))
+    end,
+    set_enabled = function(id, enabled)
+      Gate.set_enabled(Gate.get(id), enabled)
+    end,
+    set_keep_charged = function(id, keep)
+      Gate.set_keep_charged(Gate.get(id), keep)
+    end,
+    is_open = function(id)
+      return Gate.is_open(Gate.get(id))
+    end,
+    -- Headless runs do not chart, so no planet counts as visited there; this tests the landing spot.
+    charge = function(id)
+      return Gate.charge(Gate.get(id))
+    end,
+    -- Empties the store and returns what arrived from the network in the last update.
+    take_charge = function(id)
+      local bank = Gate.get(id).bank
+      bank.charge = 0
+      return bank.received or 0
+    end,
+    bank = function(id)
+      return Gate.get(id).bank
+    end,
+    request = function(id)
+      return Gate.request(Gate.get(id))
+    end,
+    random_location = function(force, surface)
+      local position = Destinations.location(game.forces[force], game.get_surface(surface))
+      return position and {x = position.x or position[1], y = position.y or position[2]}
+    end,
+    destination = function(id, x, y)
+      local surface, position = Gate.destination(Gate.get(id), {x = x, y = y})
+      return surface and {surface = surface.name, x = position.x or position[1], y = position.y or position[2]}
+    end
+  })
+end

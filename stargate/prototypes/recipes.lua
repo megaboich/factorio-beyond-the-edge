@@ -23,5 +23,24 @@ data:extend({
     enabled = false,
     subgroup = "space-related",
     order = "z[bte]-a[stargate]-a[construction-kit]"
+  },
+  -- The open portal: what the finished gate (an assembling machine, prototypes/entities.lua) "crafts"
+  -- while it is enabled, so it draws its 1 GW and shows its veil. No ingredients, no results.
+  {
+    type = "recipe-category",
+    name = "bte-stargate-portal"
+  },
+  {
+    type = "recipe",
+    name = "bte-stargate-portal",
+    icon = "__bte-stargate__/graphics/icons/stargate.png",
+    icon_size = 64,
+    categories = {"bte-stargate-portal"},
+    energy_required = 60,
+    ingredients = {},
+    results = {},
+    enabled = true,
+    hidden = true,
+    hide_from_player_crafting = true
   }
 })

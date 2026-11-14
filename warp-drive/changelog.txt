@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.1.1
+Date: 2026-11-14
+  Changes:
+    - The warp reserve is now a power bank shared with the Stargate mod (see docs/power.md): it leaks 0.5 % of its charge a second (0.5 W/kg when full) and stores 95 % of what it draws, so the drive draws about 10 % more to fill it and keep it full.
+    - The drive asks the platform's network for power adaptively, as the Stargate does, in 10-50 MW steps, and backs off at once when the network falls short, so it no longer slows the rest of the ship. The tachyon detector does the same.
+    - Warp entry spends 80 % of the reserve and keeps 20 % (was 90 % and 10 %), so a fresh jump rides out a shortfall twice as long.
+    - During warp the level's support is drawn from the reserve, so a full reserve rides out a total outage for about 10 seconds at Warp-1, 5 at Warp-2, and so on (it was 10 seconds at any level).
+---------------------------------------------------------------------------------------------------
 Version: 0.1.0
 Date: 2026-11-09
   Major Features:

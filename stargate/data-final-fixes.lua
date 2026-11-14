@@ -50,3 +50,15 @@ data:extend({
     }
   }
 })
+
+-- Characters, spidertron legs, and cars and tanks collide with the gate's barriers
+-- (prototypes/entities.lua), which cover only the machinery, so all of them pass through the lanes.
+-- Done last, so prototypes added by other mods are covered too.
+local collision_mask_util = require("collision-mask-util")
+for _, type_name in pairs({"character", "spider-leg", "car"}) do
+  for _, prototype in pairs(data.raw[type_name] or {}) do
+    local mask = collision_mask_util.get_mask(prototype)
+    mask.layers["bte-stargate-barrier"] = true
+    prototype.collision_mask = mask
+  end
+end

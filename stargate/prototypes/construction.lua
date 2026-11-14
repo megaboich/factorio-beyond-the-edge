@@ -11,7 +11,7 @@ return {
   -- Pictures the gate passes through while it is built, one per equal share of the build time. The first
   -- is the construction site's own, so nothing changes the moment the delivery is complete; the rest are
   -- graphics/entity/assembling/assembling-<n>-* (see prototypes/entities.lua).
-  stages = 3,
+  stages = 6,
   requirements = {
     {name = "tungsten-plate", amount = 1000},
     {name = "superconductor", amount = 200},

@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 478" width="760" height="478" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="20" y="26" fill="#1f2328" font-size="15" font-weight="600">Three gates charging beside a 300 MW factory with 200 MW to spare</text>
+<line x1="64" x2="740" y1="254.0" y2="254.0" stroke="#d0d7de"/>
+<text x="58" y="258.0" text-anchor="end" fill="#656d76" font-size="11">0</text>
+<line x1="64" x2="740" y1="214.0" y2="214.0" stroke="#d0d7de"/>
+<text x="58" y="218.0" text-anchor="end" fill="#656d76" font-size="11">50</text>
+<line x1="64" x2="740" y1="174.0" y2="174.0" stroke="#d0d7de"/>
+<text x="58" y="178.0" text-anchor="end" fill="#656d76" font-size="11">100</text>
+<line x1="64" x2="740" y1="134.0" y2="134.0" stroke="#d0d7de"/>
+<text x="58" y="138.0" text-anchor="end" fill="#656d76" font-size="11">150</text>
+<line x1="64" x2="740" y1="94.0" y2="94.0" stroke="#d0d7de"/>
+<text x="58" y="98.0" text-anchor="end" fill="#656d76" font-size="11">200</text>
+<line x1="64" x2="740" y1="54.0" y2="54.0" stroke="#d0d7de"/>
+<text x="58" y="58.0" text-anchor="end" fill="#656d76" font-size="11">250</text>
+<text x="64.0" y="270" text-anchor="middle" fill="#656d76" font-size="11">0</text>
+<text x="120.3" y="270" text-anchor="middle" fill="#656d76" font-size="11">1</text>
+<text x="176.7" y="270" text-anchor="middle" fill="#656d76" font-size="11">2</text>
+<text x="233.0" y="270" text-anchor="middle" fill="#656d76" font-size="11">3</text>
+<text x="289.3" y="270" text-anchor="middle" fill="#656d76" font-size="11">4</text>
+<text x="345.7" y="270" text-anchor="middle" fill="#656d76" font-size="11">5</text>
+<text x="402.0" y="270" text-anchor="middle" fill="#656d76" font-size="11">6</text>
+<text x="458.3" y="270" text-anchor="middle" fill="#656d76" font-size="11">7</text>
+<text x="514.7" y="270" text-anchor="middle" fill="#656d76" font-size="11">8</text>
+<text x="571.0" y="270" text-anchor="middle" fill="#656d76" font-size="11">9</text>
+<text x="627.3" y="270" text-anchor="middle" fill="#656d76" font-size="11">10</text>
+<text x="683.7" y="270" text-anchor="middle" fill="#656d76" font-size="11">11</text>
+<text x="740.0" y="270" text-anchor="middle" fill="#656d76" font-size="11">12</text>
+<line x1="64" x2="740" y1="254" y2="254" stroke="#1f2328"/>
+<text transform="translate(16 154.0) rotate(-90)" text-anchor="middle" fill="#1f2328" font-size="12">Gate draw (MW)</text>
+<polyline points="64.0,214.0 66.8,94.0 67.8,72.2 68.7,94.0 81.8,94.0 83.7,123.1 100.6,123.1 102.5,140.8 214.2,140.8 215.2,134.6 216.1,141.6 327.8,141.6 328.8,134.7 329.7,142.4 441.4,142.4 442.4,134.8 443.3,143.2 555.0,143.2 556.0,135.2 556.9,134.1 557.9,141.8 669.6,141.8 670.5,138.2 671.5,142.6 739.1,142.6" fill="none" stroke="#0969da" stroke-width="2"/>
+<line x1="72" x2="90" y1="84" y2="84" stroke="#0969da" stroke-width="2"/>
+<text x="94" y="88" fill="#1f2328" font-size="11">gate 1</text>
+<polyline points="64.0,254.0 81.8,254.0 82.8,217.6 83.7,235.8 100.6,235.8 101.6,237.1 102.5,243.8 214.2,243.8 215.2,236.1 216.1,244.6 327.8,244.6 328.8,236.8 329.7,245.4 441.4,245.4 442.4,237.4 443.3,245.7 555.0,245.7 556.0,237.7 556.9,230.4 557.9,238.6 669.6,238.6 670.5,231.4 671.5,239.4 739.1,239.4" fill="none" stroke="#cf222e" stroke-width="2"/>
+<line x1="139.2" x2="157.2" y1="84" y2="84" stroke="#cf222e" stroke-width="2"/>
+<text x="161.2" y="88" fill="#1f2328" font-size="11">gate 2</text>
+<polyline points="64.0,254.0 100.6,254.0 101.6,216.7 102.5,235.4 214.2,235.4 215.2,227.7 216.1,236.2 327.8,236.2 328.8,228.4 329.7,237.0 441.4,237.0 442.4,229.0 443.3,237.8 555.0,237.8 556.0,229.8 556.9,222.9 557.9,230.6 669.6,230.6 670.5,223.8 671.5,231.4 739.1,231.4" fill="none" stroke="#1a7f37" stroke-width="2"/>
+<line x1="206.39999999999998" x2="224.39999999999998" y1="84" y2="84" stroke="#1a7f37" stroke-width="2"/>
+<text x="228.39999999999998" y="88" fill="#1f2328" font-size="11">gate 3</text>
+<line x1="64" x2="740" y1="434.0" y2="434.0" stroke="#d0d7de"/>
+<text x="58" y="438.0" text-anchor="end" fill="#656d76" font-size="11">85</text>
+<line x1="64" x2="740" y1="387.3" y2="387.3" stroke="#d0d7de"/>
+<text x="58" y="391.3" text-anchor="end" fill="#656d76" font-size="11">90</text>
+<line x1="64" x2="740" y1="340.7" y2="340.7" stroke="#d0d7de"/>
+<text x="58" y="344.7" text-anchor="end" fill="#656d76" font-size="11">95</text>
+<line x1="64" x2="740" y1="294.0" y2="294.0" stroke="#d0d7de"/>
+<text x="58" y="298.0" text-anchor="end" fill="#656d76" font-size="11">100</text>
+<text x="64.0" y="450" text-anchor="middle" fill="#656d76" font-size="11">0</text>
+<text x="120.3" y="450" text-anchor="middle" fill="#656d76" font-size="11">1</text>
+<text x="176.7" y="450" text-anchor="middle" fill="#656d76" font-size="11">2</text>
+<text x="233.0" y="450" text-anchor="middle" fill="#656d76" font-size="11">3</text>
+<text x="289.3" y="450" text-anchor="middle" fill="#656d76" font-size="11">4</text>
+<text x="345.7" y="450" text-anchor="middle" fill="#656d76" font-size="11">5</text>
+<text x="402.0" y="450" text-anchor="middle" fill="#656d76" font-size="11">6</text>
+<text x="458.3" y="450" text-anchor="middle" fill="#656d76" font-size="11">7</text>
+<text x="514.7" y="450" text-anchor="middle" fill="#656d76" font-size="11">8</text>
+<text x="571.0" y="450" text-anchor="middle" fill="#656d76" font-size="11">9</text>
+<text x="627.3" y="450" text-anchor="middle" fill="#656d76" font-size="11">10</text>
+<text x="683.7" y="450" text-anchor="middle" fill="#656d76" font-size="11">11</text>
+<text x="740.0" y="450" text-anchor="middle" fill="#656d76" font-size="11">12</text>
+<line x1="64" x2="740" y1="434" y2="434" stroke="#1f2328"/>
+<text transform="translate(16 364.0) rotate(-90)" text-anchor="middle" fill="#1f2328" font-size="12">Factory power (%)</text>
+<text x="402.0" y="468" text-anchor="middle" fill="#1f2328" font-size="12">Seconds</text>
+<polyline points="64.0,294.0 66.8,294.0 67.8,378.8 68.7,294.0 81.8,294.0 82.8,378.8 83.7,294.0 100.6,294.0 101.6,357.3 102.5,294.0 214.2,294.0 215.2,307.8 216.1,294.0 327.8,294.0 328.8,302.3 329.7,294.0 441.4,294.0 442.4,296.8 443.3,294.0 556.0,294.0 556.9,350.3 557.9,294.0 669.6,294.0 670.5,327.6 671.5,294.0 739.1,294.0" fill="none" stroke="#0969da" stroke-width="2"/>
+<line x1="72" x2="90" y1="324" y2="324" stroke="#0969da" stroke-width="2"/>
+<text x="94" y="328" fill="#1f2328" font-size="11">factory satisfaction</text>
+</svg>

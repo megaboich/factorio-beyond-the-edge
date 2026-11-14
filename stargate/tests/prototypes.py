@@ -73,7 +73,7 @@ def check_construction_plan(t):
     t.check("construction site slots hold the whole bill", site["inventory_size"], first_slot - 1)
     t.check("construction site slot count", site["inventory_size"], 32)
     t.check("construction plan build time (ticks)", data["build_ticks"], 3600)
-    t.check("construction plan stages", data["stages"], 3)
+    t.check("construction plan stages", data["stages"], 6)
     # Whole stacks, so a delivery can never exceed the bill.
     t.check("every bulk amount is a whole number of stacks",
             [(r["name"], r["amount"] % stack_size(t, r["name"])) for r in data["requirements"]],
@@ -89,7 +89,7 @@ def check_construction_plan(t):
 def check_buildings(t):
     site = t.prototype("container", "bte-stargate-construction-site")
     assembling = t.prototype("simple-entity-with-owner", "bte-stargate-assembling")
-    gate = t.prototype("simple-entity-with-owner", "bte-stargate")
+    gate = t.prototype("assembling-machine", "bte-stargate")
     for name, entity in zip(BUILDINGS, (site, assembling, gate)):
         if entity is None:
             continue
@@ -110,6 +110,72 @@ def check_buildings(t):
         t.check(f"{name} is not blueprintable", "not-blueprintable" in entity.get("flags", []), True)
     if assembling:
         t.check("assembling gate starts on its first picture", assembling.get("random_variation_on_create"), False)
+    if gate:
+        # The gate is an assembling machine on a hidden no-op recipe, for its power, circuit condition, and veil.
+        t.check("gate is powered through its capacitor", gate.get("energy_source", {}).get("type"), "void")
+        t.check("gate runs the portal recipe", gate.get("fixed_recipe"), "bte-stargate-portal")
+        t.check("gate takes no modules", gate.get("module_slots", 0), 0)
+        t.check("gate has a circuit connection", "circuit_connector" in gate and gate.get("circuit_wire_max_distance", 0) > 0, True)
+        t.check("characters can walk into the gate",
+                sorted(set(gate.get("collision_mask", {}).get("layers", {"player": True})) & {"player", "is_object"}), [])
+    # The barriers over the machinery stop characters, spidertron legs, and vehicles.
+    for name in ("bte-stargate-side-block", "bte-stargate-cabinet-block", "bte-stargate-rack-block"):
+        barrier = t.prototype("simple-entity-with-owner", name)
+        if barrier:
+            t.check(f"{name} is on the barrier layer only", barrier.get("collision_mask", {}).get("layers"), {"bte-stargate-barrier": True})
+    for kind, name, expected in (("character", "character", True), ("spider-leg", "spidertron-leg-1", True),
+                                 ("car", "car", True), ("car", "tank", True)):
+        entity = t.prototype(kind, name)
+        if entity:
+            t.check(f"{name} collides with the gate's barriers: {expected}",
+                    "bte-stargate-barrier" in entity.get("collision_mask", {}).get("layers", {}), expected)
+    capacitor = t.prototype("electric-energy-interface", "bte-stargate-capacitor")
+    if capacitor:
+        source = capacitor.get("energy_source", {})
+        t.check("capacitor draws as an ordinary consumer, not accumulator storage", source.get("usage_priority"), "secondary-input")
+        t.check("capacitor charges at up to 1.25 GW (upkeep, leak, and 200 MW) and gives nothing back",
+                (source.get("input_flow_limit"), source.get("output_flow_limit")), ("1250MW", "0W"))
+        t.check("capacitor covers the gate", capacitor.get("collision_box"), [[-6.9, -6.9], [6.9, 6.9]])
+        t.check("capacitor collides with nothing", capacitor.get("collision_mask", {}).get("layers"), {})
+    power = t.prototype("mod-data", "bte-stargate-power")
+    t.check("a gate stores 10 GJ, upkeep 1 GW, charges at 1 GW, refills at 200 MW",
+            power and [power.get("data", {}).get(k) for k in ("capacity", "upkeep", "charge_rate", "refill")], [10e9, 1e9, 1e9, 200e6])
+    for name in ("bte-stargate-open", "bte-stargate-close", "bte-stargate-depart", "bte-stargate-arrive"):
+        sound = t.raw.get("sound", {}).get(name)
+        t.check(f"{name} sound exists", sound is not None, True)
+        if sound:
+            file = re.fullmatch(r"__bte-stargate__/(.+)", sound.get("filename", ""))
+            t.check(f"{name} file exists", bool(file) and (t.mods["bte-stargate"] / file[1]).is_file(), True)
+    # The building and its lights stand on the ring's line, two tiles south of the gate's centre, so
+    # characters sort against the ring; the upper arc is drawn again over spidertrons, like elevated
+    # rails. Variation 1 has cyan lights, 2 red.
+    for label, layer, picture, lights in (("body", "object", "main", "glow-lights"),
+                                          ("top", "elevated-object", "top", "glow-lights-high")):
+        companion = t.prototype("simple-entity-with-owner", f"bte-stargate-{label}")
+        if not companion:
+            continue
+        t.check(f"{label} collides with nothing", companion.get("collision_mask", {}).get("layers"), {})
+        t.check(f"{label} render layer", companion.get("render_layer", "object"), layer)
+        t.check(f"{label} keeps its variation", companion.get("random_variation_on_create"), False)
+        t.check(f"{label} has two variations", len(companion.get("pictures", [])), 2)
+        red = lights.replace("glow-lights", "glow-lights-red")
+        for n, (variation, glow) in enumerate(zip(companion.get("pictures", []), (lights, red)), 1):
+            sprites = variation["layers"]
+            t.check(f"{label} variation {n} layers", [x["filename"].rsplit("stargate-", 1)[-1] for x in sprites], [f"{picture}.png", f"{glow}.png"])
+            t.check(f"{label} variation {n} lights are an additive glow", (sprites[1].get("blend_mode"), sprites[1].get("draw_as_glow")), ("additive", True))
+            for sprite in sprites:
+                name = sprite["filename"].rsplit("/", 1)[-1]
+                t.sprite_sheet(f"{label} {name}", sprite)
+                shift = exported_shift(t, sprite["filename"])
+                t.check(f"{label} {name} shift puts the picture on the gate", [round(v, 4) for v in sprite["shift"]],
+                        [round(shift[0], 4), round(shift[1] - 2, 4)])
+    portal = t.raw.get("recipe", {}).get("bte-stargate-portal")
+    t.check("portal recipe exists", portal is not None, True)
+    if portal:
+        t.check("portal recipe is hidden", portal.get("hidden"), True)
+        t.check("portal recipe has no ingredients or results",
+                (portal.get("ingredients") or [], portal.get("results") or []), ([], []))
+        t.check("portal recipe category", portal.get("categories"), ["bte-stargate-portal"])
     t.check("gate is sturdier than the site", (gate or {}).get("max_health", 0) > (site or {}).get("max_health", 0), True)
 
 
@@ -132,36 +198,63 @@ def check_graphics(t):
         return [(next(x for x in suffixes if s["filename"].endswith(x)), bool(s.get("draw_as_shadow"))) for s in sprites]
 
     plain = [("main.png", False), ("shadow.png", True)]
-    lit = plain + [("glow-lights.png", False)]
     site = t.prototype("container", "bte-stargate-construction-site")
     assembling = t.prototype("simple-entity-with-owner", "bte-stargate-assembling")
-    gate = t.prototype("simple-entity-with-owner", "bte-stargate")
+    gate = t.prototype("assembling-machine", "bte-stargate")
     pictures = {}
     if site:
         pictures["construction site"] = [site["picture"]]
     if assembling:
         pictures.update({f"assembling stage {n}": [p] for n, p in enumerate(assembling["pictures"], 1)})
-        t.check("assembling gate stage pictures", len(assembling["pictures"]), 3)
+        t.check("assembling gate stage pictures", len(assembling["pictures"]), 6)
         if site:
             t.check("the first build stage reuses the construction site's picture",
                     [s["filename"] for s in assembling["pictures"][0]["layers"]],
                     [s["filename"] for s in site["picture"]["layers"]])
     if gate:
-        pictures["gate"] = [gate["picture"]]
+        pictures["gate"] = [gate["graphics_set"]["animation"]]
+        patch = gate["graphics_set"].get("integration_patch")
+        t.check("gate floor is its integration patch, under rails", (bool(patch), gate["graphics_set"].get("integration_patch_render_layer")), (True, "floor"))
+        if patch:
+            t.check("gate floor patch draws the floor", patch["filename"].endswith("stargate-floor.png"), True)
+            t.check("gate floor patch shift follows the box", [round(v, 4) for v in patch["shift"]],
+                    [round(v + 1, 4) for v in exported_shift(t, patch["filename"])])
+        t.check("gate leaves the veil to its companions", gate["graphics_set"].get("working_visualisations"), None)
+    # The veil, split like the ring: the lower part sorts with characters, the upper over spidertrons.
+    for name, layer, sheet in (("bte-stargate-veil", "object", "glow-veil"), ("bte-stargate-veil-top", "elevated-object", "glow-veil-high")):
+        companion = t.prototype("simple-entity-with-owner", name)
+        if not companion:
+            continue
+        t.check(f"{name} render layer", companion.get("render_layer", "object"), layer)
+        t.check(f"{name} collides with nothing", companion.get("collision_mask", {}).get("layers"), {})
+        veil = companion.get("animations", [{}])[0]
+        t.check(f"{name} draws {sheet}", veil.get("filename", "").endswith(f"stargate-{sheet}.png"), True)
+        t.check(f"{name} is an additive glow", (veil.get("blend_mode"), veil.get("draw_as_glow")), ("additive", True))
+        t.check(f"{name} frames", veil.get("frame_count"), 16)
+        t.sprite_sheet(f"{name} {sheet}.png", veil)
+        t.check(f"{name} shift puts the veil on the gate", [round(v, 4) for v in veil["shift"]],
+                (lambda shift: [round(shift[0], 4), round(shift[1] - 2, 4)])(exported_shift(t, veil["filename"])))
     for label, [picture] in pictures.items():
         sprites = picture["layers"]
-        t.check(f"{label} layers", layers(sprites), lit if label == "gate" else plain)
+        # The gate's building is its body (above); the gate itself draws only the shadow.
+        t.check(f"{label} layers", layers(sprites), [("shadow.png", True)] if label == "gate" else plain)
         t.check(f"{label} glow layer is additive",
                 [s.get("blend_mode") for s in sprites if s["filename"].endswith("glow-lights.png")],
-                ["additive"] if label == "gate" else [])
+                [])
         for sprite in sprites:
             t.sprite_sheet(f"{label} {sprite['filename'].rsplit('/', 1)[-1]}", sprite)
             # Every sprite is shifted with the boxes, one tile south-east of the origin.
             expected = [round(v + 1, 4) for v in exported_shift(t, sprite["filename"])]
             t.check(f"{label} {sprite['filename'].rsplit('/', 1)[-1]} shift follows the box",
                     [round(v, 4) for v in sprite["shift"]], expected)
+    passage = t.raw.get("animation", {}).get("bte-stargate-passage")
+    t.check("passage animation exists", passage is not None, True)
+    if passage:
+        t.check("passage is an additive glow of 32 frames",
+                (passage.get("blend_mode"), passage.get("draw_as_glow"), passage.get("frame_count")), ("additive", True, 32))
+        t.sprite_sheet("passage glow-passage.png", passage)
     for name, icon in (("bte-stargate-construction-kit", "construction-kit"), ("bte-stargate", "stargate")):
-        prototype = t.raw["item" if "kit" in name else "simple-entity-with-owner"].get(name)
+        prototype = t.raw["item" if "kit" in name else "assembling-machine"].get(name)
         if prototype:
             t.check(f"{name} icon", prototype.get("icon"), f"__bte-stargate__/graphics/icons/{icon}.png")
 

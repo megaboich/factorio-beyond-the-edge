@@ -1,4 +1,4 @@
-// Stargate construction kit icon: the lower half of the ring between the tower frames (models/stargate-stage1.js), seen nearly face-on.
+// Stargate construction kit icon: the ring half built between the towers (models/stargate-stage2.js), seen nearly face-on.
 import { build } from "../lib/stargate-parts.js";
 import icon from "./stargate-icon.js";
 
@@ -7,6 +7,6 @@ export default {
   export: "stargate/graphics/icons/construction-kit.png",
 
   build() {
-    return build({ state: "stage1" });
+    return build({ state: "stage2" });
   }
 };

@@ -237,6 +237,7 @@ window.renderSprite = async function (name, options = {}) {
     material.opacity = source.transparent ? source.opacity : 1;
     material.depthWrite = source.depthWrite;
     material.side = source.side;
+    material.clippingPlanes = source.clippingPlanes ?? null;
     return material;
   }
 
@@ -314,8 +315,8 @@ window.renderSprite = async function (name, options = {}) {
     if (result) sheets[layer] = result;
   }
   renderer.dispose();
-  const { tiles, ground: groundTexture = null, references = [], export: exportPath = null, fps = 12, variants = [], variantColors = {}, loop = frameCount, labels = {}, night = true } = model;
-  return { sheets, model: { tiles, ground: groundTexture, references, variants, variantColors, exportPath, fps, loop, labels, night } };
+  const { tiles, ground: groundTexture = null, references = [], export: exportPath = null, fps = 12, variants = [], variantColors = {}, loop = frameCount, labels = {}, night = true, sounds = null } = model;
+  return { sheets, model: { tiles, ground: groundTexture, references, variants, variantColors, exportPath, fps, loop, labels, night, sounds } };
 };
 
 /**

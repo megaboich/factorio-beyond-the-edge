@@ -27,14 +27,19 @@ local TECHNOLOGY = "bte-practical-warp-drive"
 -- The bands are wide enough to survive balance tweaks but
 -- narrow enough to fail on an order-of-magnitude formula error, which is what a wrong
 -- research_unit_energy conversion looks like.
-local NEAR_MINIMUM = 3500
-local NEAR_MAXIMUM = 6500
+-- The near band is centred on the 200 MW window as measured with the helper's source limited to
+-- one tick of output (about 3150). Its earlier 3500-6500 band had been calibrated while a 1 GJ
+-- source buffer let the detector briefly draw above the ceiling. The adaptive power bank settles
+-- about 5 % below an exact ceiling (about 3000), which the band and the speed-and-power gain
+-- maximum allow for.
+local NEAR_MINIMUM = 2200
+local NEAR_MAXIMUM = 4000
 local FAR_MINIMUM = 28000
 local FAR_MAXIMUM = 36000
 local OUTWARD_GAIN_MINIMUM = 5
 local FAST_MINIMUM = 240000
 local SPEED_POWER_GAIN_MINIMUM = 9
-local SPEED_POWER_GAIN_MAXIMUM = 9.75
+local SPEED_POWER_GAIN_MAXIMUM = 10.25
 local UNBOOSTED_MAXIMUM = 1.5
 local LAB_COUNT = 3
 local ROUTE = "solar-system-edge-shattered-planet"

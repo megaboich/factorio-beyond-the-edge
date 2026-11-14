@@ -8,7 +8,7 @@ Safe to add to an existing late-game save: the mod only adds a technology, a rec
 
 ## A modern gate
 
-The gate is a human-built machine. A segmented steel ring with a dark tungsten core stands upright between two steel support towers that house its electronics and cooling, with ventilator fans, grilles, roof cooling units, and cyan status lights; machinery housings with hydraulic rams and conduits fill the lower corners between the towers and the ring, clamp housings with light bars sit around it, and a glowing emitter line runs along its inner edge. A control cabinet stands at the front left. The ring is set two tiles forward of the building's centre.
+The gate is a human-built machine. A segmented steel ring with a dark tungsten core stands upright between two steel support towers that house its electronics and cooling, with ventilator fans, grilles, roof cooling units, and cyan status lights; machinery housings with hydraulic rams and conduits fill the lower corners between the towers and the ring, clamp housings with light bars sit around it, and a glowing emitter line runs along its inner edge. Its power bank lines the west and east walls: two rows of superconducting capacitor cans behind each tower, with ceramic insulators, busbars into the towers, cyan charge bands, and frosted coolant lines from a cryo cooler at the back, and a smaller rack in the front right corner. A control cabinet stands at the front left. The ring is set two tiles forward of the building's centre.
 
 The concrete floor is level with the ground at the border and slopes down into a shallow basin. A trench across the basin, under the ring, holds the ring's lower arc, so the whole ring is visible, while its opening at basin level is wide enough for a train on either lane. The portal is empty for now; bridges and train tracks will cross the trench once train passage exists. The site, the gate under construction, and the finished gate all snap to the same two-tile grid as rails, offset so that the layout across the 14 tiles is four tiles of platform, a lane (2 tiles), a 2-tile gap, a second lane (2 tiles), and four more tiles of platform. The edges of the building fall on rail cell edges, so incoming and outgoing track can be laid flush against it and line up with the lanes.
 
@@ -53,9 +53,45 @@ The bulk of a gate is delivered to the **Stargate Construction Site**, a `14x14`
 
 Every amount is a whole number of stacks, so a material's slots hold exactly what a gate needs and a delivery can never overshoot. Nothing is wasted or spilled.
 
-The site checks itself every half second. The moment every slot is full, the delivery is consumed and the site becomes a **Stargate under construction**. Over the next minute the gate goes up in front of you in three equal phases while a progress bar fills across the platform. The first phase keeps the construction site's look (the basin and trench dug in raw concrete, formwork, stacked steel, and a crane mast), so nothing changes the instant the delivery is complete; the second shows the finished floor, the bare steel frames of the towers, and the lower half of the ring; the third adds the tower cladding, the corner housings, and the ring all but its top, with scaffolding at the gap. When the bar is full the finished **Stargate** takes its place, keeping its force, quality, and health fraction.
+The site checks itself every half second. The moment every slot is full, the delivery is consumed and the site becomes a **Stargate under construction**. Over the next minute the gate goes up in front of you in six equal phases while a progress bar fills across the platform, each adding to the last inside yellow-and-black hazard tape round the perimeter. The first phase keeps the construction site's look (the finished floor, the control cabinet, the front capacitor rack, and the bottom of the ring), so nothing changes the instant the delivery is complete; then come more of the ring and the machinery housings, the towers, the west and then the east capacitor banks, and finally the towers' fans and a whole ring. The tape comes down when the gate is finished. When the bar is full the finished **Stargate** takes its place, keeping its force, quality, and health fraction.
 
-The **Stargate Construction Site** can be mined for a refund of the kit and its delivery. Once the materials are consumed there is no going back: a gate under construction cannot be opened or mined, and a gate that is destroyed, at any stage, leaves no kit and refunds nothing. The finished **Stargate** has `20,000` health, cannot be mined or deconstructed, and is not blueprintable. It does nothing else yet.
+The **Stargate Construction Site** can be mined for a refund of the kit and its delivery. Once the materials are consumed there is no going back: a gate under construction cannot be opened or mined, and a gate that is destroyed, at any stage, leaves no kit and refunds nothing. The finished **Stargate** has `20,000` health, cannot be mined or deconstructed, and is not blueprintable.
+
+## Using a Stargate
+
+A finished **Stargate** carries people between two places. Open it to see its window:
+
+- **Name**: a new gate gets a random name, such as `Abydos-417`. Rename it freely.
+- **Paired gate**: pick another gate of your force, on any surface, from the list. Pairing works both ways: the chosen gate is paired back, and any earlier pairs of either gate are broken. If a paired gate is destroyed, its partner is left unpaired. A gate with no partner still opens, and leads somewhere random (below).
+- **Enabled**: switches the gate on or off.
+- **Enable or disable by circuit condition**: connect a red or green wire to the foot of the west tower and set a condition, as for any machine. The gate stays closed while the condition is false.
+
+You can walk anywhere on a gate except into its machinery (the capacitor banks, towers, and corner cabinets along its west and east sides): through the ring, in front of it, and behind it. While the gate is open, stepping into the ring from either side sends you; while it is closed, you just walk through. Vehicles are never stopped by the machinery's walls.
+
+Each gate runs on its own **power bank**, a `10 GJ` store of capacitors charged from the electric network. It works like the Warp Drive's reserve; [Dynamic Power](../docs/power.md) explains it in full, with charts and formulas.
+
+| | Power |
+| --- | --- |
+| Store | `10 GJ` of superconducting capacitors, the gate's alone: it powers nothing else and is not shown as accumulator storage |
+| Leak | 0.5 % of the charge a second (`50 MW` when full); a store left alone fades to a third in 200 seconds |
+| Efficiency | 95 % of the power drawn reaches the store |
+| Charging, closed | up to `1.105 GW`: `1 GW` into the store plus the leak; about 10 seconds from empty |
+| Opening | needs a full store and spends `8 GJ` of it, leaving `2 GJ` |
+| Open | `1 GW` upkeep from the store; draws up to `1.316 GW` (upkeep, leak, and `200 MW` to refill), `1.105 GW` once full again |
+
+A gate that is switched on and allowed by its circuit condition opens once its store is full: the veil forms in its ring with a rush and a shimmer. Right after opening, the `2 GJ` left carries the upkeep for two seconds on its own, and the network refills the store while the gate stays open, in about 37 seconds with enough spare power. If the network cannot keep up, the store drains, and when it runs dry the gate closes and must charge fully before it opens again.
+
+The gate never takes power your factory needs: it asks the network for a little more every tick while it gets everything it asks for, backs off at once when the network falls short, and waits two seconds before asking again, so your machines see at most a brief dip. Several gates on one network share the spare power between them. Like any machine, it is fed by your accumulators when the generators fall short.
+
+A gate switched off or closed by its circuit condition stops charging and its store runs down, unless **Keep charged when deactivated** is ticked in its window: then it keeps the store full (`52.6 MW`) and opens as soon as it is activated again.
+
+The gate's status lights are cyan, and turn red while a switched-on gate charges, or while an open gate gets less than its upkeep. The window shows the charge and why the gate is closed.
+
+The values are provisional, like the rest of the balance.
+
+Walk into the ring of an open gate and you vanish into it with a shimmer heard around the gate: for about two seconds the veil flashes and ripples out from where you went in, while the camera holds on the gate. Then the view moves to the partner gate, where the ripples run backwards for a second with a rising shimmer, closing in on the spot you step out of, and you run five tiles south, clear of it. Your movement keys do nothing until you stop; skipping the cutscene cuts the wait or the run short. Only the sending gate needs power: the receiving gate may be closed, switched off, or unpowered. Everything behind the ring is solid, as are the ring, the towers, and the west and east edges, so you step onto the platform only from the south, and past the ring only through the portal. Nothing can land behind the ring, with a jetpack say, and spidertron legs cannot step there. While the gate is closed the portal is solid too. Vehicles and trains do not travel through gates yet.
+
+An open gate with no partner sends you somewhere random: to a planet your force has visited, picked at random (the one you are on included), at the unexplored area closest to that planet's landing site, the nearest chunk your map has not yet charted. There is no gate there: the reversed ripples converge in mid-air on the spot where you appear, and there is no run out. Nothing checks the ground: you may land on an island or by a lake, or among enemies, so bring a jetpack or a way home. A planet counts as visited when your map shows its landing site, as it does once anyone of your force has landed there.
 
 ## Balance
 

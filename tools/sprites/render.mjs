@@ -161,7 +161,12 @@ try {
     }
     const { sheets, model } = await page.evaluate(([model, options]) => window.renderSprite(model, options),
       [name, { elevation: number(opt.elevation), frames: number(opt.frames) }]);
-    const meta = { name, scale: 0.5, tiles: model.tiles, fps: model.fps, loop: model.loop, labels: model.labels, variants: model.variants, variantColors: model.variantColors, night: model.night, sheets: {} };
+    // The model's `sounds` name files as reference paths (repo:..., factorio:...); the page gets copies.
+    const sounds = model.sounds && {
+      states: (model.sounds.states ?? []).map((s) => ({ ...s, enter: s.enter && copyReference(s.enter), leave: s.leave && copyReference(s.leave) })),
+      cues: (model.sounds.cues ?? []).map((c) => ({ ...c, file: copyReference(c.file) }))
+    };
+    const meta = { name, scale: 0.5, tiles: model.tiles, fps: model.fps, loop: model.loop, labels: model.labels, variants: model.variants, variantColors: model.variantColors, night: model.night, sounds, sheets: {} };
     for (const [layer, { dataURL, ...fields }] of Object.entries(sheets)) {
       writeFileSync(join(out, `${name}-${layer}.png`), Buffer.from(dataURL.split(",")[1], "base64"));
       meta.sheets[layer] = fields;

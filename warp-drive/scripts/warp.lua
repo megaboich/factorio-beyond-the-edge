@@ -1,5 +1,6 @@
 local Anomalies = require("scripts.anomalies")
 local Drive = require("scripts.drive")
+local PowerBank = require("scripts.power_bank")
 local Shockwaves = require("scripts.shockwaves")
 local Visuals = require("scripts.visuals")
 
@@ -9,8 +10,6 @@ local PRACTICAL_TECH = "bte-practical-warp-drive"
 local CHARGE_JOULES_PER_KG = 100
 local SUPPORT_WATTS_PER_KG = 10
 local SUPPORT_POWER_TOLERANCE = 0.999
-local WARP_RESERVE_SECONDS = 10
-local ENTRY_RESERVE_RATIO = 0.1
 local SPEED_EXIT_GRACE_TICKS = 5 * 60
 -- Streaks on screen: one per this many tiles of effect field, at least 48, at most 900.
 local WARP_STREAK_TILES = 512
@@ -45,11 +44,8 @@ local FAILED_ACTIVATION_COOLDOWN_TICKS = 5 * 60
 -- Length of warp-activation.ogg; the background loop starts where its tail hands off.
 local WARP_ACTIVATION_SOUND_TICKS = 5 * 60
 local WARP_BACKGROUND_TICKS = 6 * 60
-local POWER_NAME = "bte-warp-drive-power-interface"
 local DETECTOR_REFERENCE_POWER_WATTS = 100000000
 local DETECTOR_MAX_POWER_WATTS = 1000000000
-local DETECTOR_PROBE_WATTS = 10000000
-local DETECTOR_SHORTFALL_TOLERANCE_WATTS = 100000
 local MINIMUM_SPEED = 50
 local WARP_BOOST_PER_LEVEL = 10
 local WARP_LEVEL_SECONDS = 2
@@ -91,6 +87,23 @@ end
 
 local function required_charge(platform)
   return platform_weight_kg(platform) * CHARGE_JOULES_PER_KG
+end
+
+local function bank(record)
+  if not record.bank then
+    -- Drives from before the bank kept the reserve on the record.
+    record.bank = {charge = record.reserve_energy or 0}
+    record.reserve_energy = nil
+  end
+  return record.bank
+end
+
+local function reserve(record)
+  return bank(record).charge or 0
+end
+
+local function set_reserve(record, joules)
+  bank(record).charge = joules
 end
 
 local function connection_margin(platform)
@@ -209,7 +222,7 @@ local function update_charge_sound(record, platform)
     return
   end
   local charge = required_charge(platform)
-  local ratio = charge > 0 and math.min(1, (record.reserve_energy or 0) / charge) or 0
+  local ratio = charge > 0 and math.min(1, reserve(record) / charge) or 0
   -- The reserve grows in 10-tick increments, so at full power each half-second boundary lands
   -- exactly on a step edge. Rounding before flooring keeps float error (0.45 * 20 = 8.9999...)
   -- from repeating one step and then skipping the next.
@@ -262,7 +275,7 @@ local function disable_power(record, power, disabled)
   power.input_flow_limit = 0
   power.electric_buffer_size = 1
   power.disabled_by_script = disabled
-  record.power_sample_watts = nil
+  record.power_options = nil
 end
 
 local function start_cooldown(record, ticks, reason)
@@ -279,7 +292,7 @@ local function start_failed_activation(record, reason)
   start_cooldown(record, FAILED_ACTIVATION_COOLDOWN_TICKS,
     reason or "activation-interrupted")
   reset_charge_sound(record)
-  record.reserve_energy = 0
+  set_reserve(record, 0)
   record.state = "cooldown"
   return true
 end
@@ -307,7 +320,9 @@ local function exit_warp(record, reason)
   record.lightning_bounds = nil
   record.asteroid_sweep = nil
   Shockwaves.cancel(record)
-  record.reserve_energy = was_warp and 0 or (record.reserve_energy or 0)
+  if was_warp then
+    set_reserve(record, 0)
+  end
   if record.power and record.power.valid then
     -- Keep the mandatory 1 J working buffer stable. Emptying a larger previous buffer here
     -- makes Factorio refill it even with zero logical usage, creating an idle power spike.
@@ -339,98 +354,57 @@ local function immediate_exit_reason(record, platform, direction)
   end
 end
 
--- Electric statistics accumulate this prototype's consumed joules. Each platform permits one
--- drive, so the delta measures local delivery without using buffer energy as a meter.
-local function sample_power(record, power)
-  if not power then
-    record.support_power = 0
-    return 0, 0
-  end
-  local subnetwork = power.electric_network
-  local network = subnetwork and subnetwork.parent_network
-  local statistics = network and network.statistics
-  local input_count = statistics and statistics.get_input_count(POWER_NAME) or 0
-  local network_id = subnetwork and subnetwork.id
-  local elapsed = record.power_sample_tick and game.tick - record.power_sample_tick or 0
-  local delivered = 0
-  local sampled = record.power_sample_watts ~= nil and elapsed > 0
-      and network_id == record.power_sample_network_id
-      and input_count >= (record.power_sample_input_count or 0)
-  if sampled then
-    delivered = (input_count - record.power_sample_input_count)
-      * TICKS_PER_SECOND / elapsed
-  end
-  record.power_sample_input_count = input_count
-  record.power_sample_network_id = network_id
-  record.power_sample_tick = game.tick
-  if record.power_sample_watts == nil then
-    record.support_power = 0
-    return 0, 0, false
-  end
-  delivered = math.max(0, math.min(record.power_sample_watts, delivered))
-  record.support_power = delivered
-  return delivered, math.min(delivered, record.power_sample_support_watts or delivered), sampled
+-- The drive's power is a power bank (scripts/power_bank.lua; docs/power.md at the repository root):
+-- its store is the warp reserve, kept in storage, and its interface is ticked every tick
+-- (Warp.tick) with record.power_options, which these 10-tick updates set. The bank asks the
+-- network adaptively, so the drive takes what the ship can spare instead of its full demand at once.
+-- The reserve refills (and an engaged drive charges) at up to one warp level of support power.
+local function refill_watts(platform)
+  return support_watts_per_level(platform)
 end
 
--- Runtime electric-flow fields use joules per tick. The interface requests exact logical demand
--- as an ordinary machine load; the serialized reserve is never exposed to the electric network.
-local function request_power(record, power, watts, support_watts)
+-- What the interface asks for from the next tick on (PowerBank.tick options).
+local function request_power(record, power, options)
   power.disabled_by_script = false
-  local joules_per_tick = watts / TICKS_PER_SECOND
-  power.power_usage = joules_per_tick
-  power.electric_buffer_size = math.max(1, joules_per_tick)
-  power.input_flow_limit = joules_per_tick
-  record.power_sample_watts = watts
-  record.power_sample_support_watts = support_watts or watts
+  record.power_options = options
 end
 
-local function recharge_watts(platform, reserve_energy, charge)
-  local missing_watts = math.max(0, charge - reserve_energy)
-    * TICKS_PER_SECOND / UPDATE_TICKS
-  return math.min(support_watts(platform, 1), missing_watts)
+-- The average power delivered since the last update, in watts.
+local function sample_power(record)
+  local delivered = PowerBank.delivered(bank(record))
+  record.support_power = delivered
+  return delivered
 end
 
--- Experimental research uses the same private interface in draw-only mode.
+-- Experimental research uses the same private interface for the detector, which stores nothing.
 local function initialize_detector_mode(record, power)
   if record.power_mode ~= "experimental" then
     power.energy = 0
-    record.power_sample_watts = nil
     record.power_mode = "experimental"
-    record.detector_request_watts = DETECTOR_MAX_POWER_WATTS
     record.migrated_reserve_energy = nil
-    record.reserve_energy = 0
+    PowerBank.reset(bank(record))
   end
 end
 
--- Samples the adaptive detector demand and requests the next one. Both modes share it: before
--- Practical research for the research acceleration, afterwards for the Tachyon Science Boost
--- while the drive is idle.
+-- Samples the detector's delivered power and keeps it asking adaptively for up to its maximum.
+-- Both modes share it: before Practical research for the research acceleration, afterwards for
+-- the Tachyon Science Boost while the drive is idle.
 local function update_detector(record, power)
   if not power then
     record.detector_power_ratio = 0
     record.detector_power = 0
     return
   end
-  local requested = record.detector_request_watts or DETECTOR_MAX_POWER_WATTS
-  local delivered, _, sampled = sample_power(record, power)
+  local delivered = PowerBank.delivered(bank(record))
   record.detector_power = math.min(DETECTOR_MAX_POWER_WATTS, delivered)
   record.detector_power_ratio = record.detector_power / DETECTOR_REFERENCE_POWER_WATTS
-  if sampled then
-    if delivered + DETECTOR_SHORTFALL_TOLERANCE_WATTS < requested then
-      requested = delivered
-    else
-      requested = math.min(DETECTOR_MAX_POWER_WATTS, requested + DETECTOR_PROBE_WATTS)
-    end
-  end
-  record.detector_request_watts = requested
-  request_power(record, power, requested, 0)
+  request_power(record, power, {sink = true, max_draw = DETECTOR_MAX_POWER_WATTS})
 end
 
 local function stop_detector(record, power)
   if power then
     disable_power(record, power, true)
   end
-  record.detector_request_watts = DETECTOR_MAX_POWER_WATTS
   record.detector_power = 0
   record.detector_power_ratio = 0
 end
@@ -602,16 +576,15 @@ local function render_warp_effect(record, platform)
   render_warp_lightning(record, platform)
 end
 
--- Entry retains ten percent of the activation charge as support reserve. A new electric sink needs
--- two mod updates before its first complete energy sample is meaningful, so support shortfall
--- checks are deferred while Factorio attaches and services it.
+-- Entry spends 80 % of the full reserve (PowerBank.activate), retaining 20 % as support
+-- reserve. The bank's request then climbs to the support demand; support shortfall checks are
+-- deferred two updates while it does.
 local function enter_warp(record, platform)
   local charge = required_charge(platform)
   local buffer = Drive.ensure_power(record)
-  if not buffer or (record.reserve_energy or 0) + 1 < charge then
+  if not buffer or not PowerBank.activate(bank(record), charge) then
     return false
   end
-  record.reserve_energy = charge * ENTRY_RESERVE_RATIO
   record.state = "warp"
   record.warp_level = 1
   record.requested_warp_level = 1
@@ -622,9 +595,9 @@ local function enter_warp(record, platform)
   record.warp_warning = nil
   record.last_exit_reason = nil
   local support_demand = support_watts(platform, 1)
-  record.support_demand_watts = support_demand
-    + recharge_watts(platform, record.reserve_energy, charge)
-  request_power(record, buffer, record.support_demand_watts, support_demand)
+  record.support_demand_watts = PowerBank.max_draw(charge, support_demand, refill_watts(platform))
+  request_power(record, buffer, {capacity = charge, load = support_demand,
+    max_draw = record.support_demand_watts})
   record.support_check_after = game.tick + UPDATE_TICKS * 2
   start_warp_sound(record)
   update_warp_effect_bounds(record, platform)
@@ -653,7 +626,7 @@ local function update_experimental(record)
 end
 
 local function update_active_warp(record, platform, direction, charge_buffer)
-  local delivered_watts, delivered_support_watts = sample_power(record, charge_buffer)
+  local delivered_watts = sample_power(record)
   local immediate_reason = immediate_exit_reason(record, platform, direction)
   if immediate_reason then
     exit_warp(record, immediate_reason)
@@ -672,9 +645,6 @@ local function update_active_warp(record, platform, direction, charge_buffer)
     record.warp_warning = nil
   end
   local charge = required_charge(platform)
-  local delivered_recharge_watts = math.max(0, delivered_watts - delivered_support_watts)
-  record.reserve_energy = math.min(charge, (record.reserve_energy or 0)
-    + delivered_recharge_watts * UPDATE_TICKS / TICKS_PER_SECOND)
   -- During the grace period, retain Warp-1 rather than collapsing the level to zero.
   local engine_limit = math.max(record.speed_exit_at and 1 or 0, engine_warp_limit(platform))
   local level = math.min(record.warp_level or 1, engine_limit)
@@ -682,32 +652,30 @@ local function update_active_warp(record, platform, direction, charge_buffer)
   local power_limited = false
   local reserve_active = false
   local target_level = engine_limit
-  -- Active support is allocated before reserve replenishment. Delivered power determines
-  -- whether the current and next levels are sustainable; only delivery beyond support refills.
+  -- The level's support is drawn from the reserve every tick (PowerBank.tick), which the network
+  -- refills. Delivery below the support and the leak means the reserve is draining: hold the
+  -- level, and leave warp when it runs dry. Otherwise climb, unless the bank fell short recently.
   if game.tick >= (record.support_check_after or 0) then
+    -- What reaches the reserve after conversion losses, against the support and the leak of a
+    -- full reserve (the level a refilled reserve must hold).
+    local stored_watts = delivered_watts * PowerBank.EFFICIENCY
     local watts_per_level = support_watts_per_level(platform)
-    local power_limit = watts_per_level > 0 and delivered_support_watts / watts_per_level or 0
-    local required_watts = support_watts(platform, level)
-    if delivered_support_watts < required_watts * SUPPORT_POWER_TOLERANCE then
-      -- Unsatisfied usage drains only the interface's private reserve. Other ship machinery
-      -- cannot consume it because the interface has no electrical output.
+    local leak = PowerBank.leak(charge)
+    local power_limit = watts_per_level > 0 and math.max(0, stored_watts - leak) / watts_per_level or 0
+    local required_watts = support_watts(platform, level) + leak
+    if stored_watts < required_watts * SUPPORT_POWER_TOLERANCE then
       reserve_active = true
       power_limited = true
       target_level = math.min(engine_limit, power_limit)
       requested_level = level
-      local deficit = required_watts > 0
-        and math.max(0, math.min(1, 1 - delivered_support_watts / required_watts)) or 1
-      record.reserve_energy = math.max(0, record.reserve_energy
-        - charge * deficit * UPDATE_TICKS / (WARP_RESERVE_SECONDS * TICKS_PER_SECOND))
-      if record.reserve_energy <= 1 then
+      if reserve(record) <= 1 then
         exit_warp(record, "reserve-depleted")
         return
       end
       if not record.warp_warning then
         record.warp_warning = "power"
       end
-    elseif delivered_support_watts
-        >= support_watts(platform, requested_level) * SUPPORT_POWER_TOLERANCE then
+    elseif game.tick >= (bank(record).hold_until or 0) then
       level = math.min(requested_level, engine_limit)
     else
       power_limited = true
@@ -728,10 +696,12 @@ local function update_active_warp(record, platform, direction, charge_buffer)
   else
     record.warp_ramp_state = "engine-limited"
   end
-  local support_demand = support_watts(platform, next_level)
-  record.support_demand_watts = support_demand
-    + recharge_watts(platform, record.reserve_energy, charge)
-  request_power(record, charge_buffer, record.support_demand_watts, support_demand)
+  -- The load is the current level's support; the draw may reach the next level's, plus the leak
+  -- and the refill, so the network's spare power shows before the level climbs.
+  record.support_demand_watts = PowerBank.max_draw(charge, support_watts(platform, next_level),
+    refill_watts(platform))
+  request_power(record, charge_buffer, {capacity = charge, load = support_watts(platform, level),
+    max_draw = record.support_demand_watts})
   -- Platform distance is a 0..1 fraction of connection.length. Add only the speed above
   -- natural travel, because Factorio advances the ordinary one-times speed itself.
   local connection = platform.space_connection
@@ -753,7 +723,7 @@ end
 local function update_cooldown(record, charge_buffer)
   Drive.destroy_support(record)
   stop_detector(record, charge_buffer)
-  record.reserve_energy = 0
+  set_reserve(record, 0)
   record.state = "cooldown"
 end
 
@@ -762,7 +732,7 @@ local function reset_preparation(record, charge_buffer, reason)
   reset_charge_sound(record)
   Drive.destroy_support(record)
   disable_power(record, charge_buffer, true)
-  record.reserve_energy = 0
+  set_reserve(record, 0)
   record.support_power = 0
   record.support_demand_watts = nil
   record.state = failed_activation and "cooldown" or "idle"
@@ -776,7 +746,7 @@ end
 local function update_idle(record, charge_buffer)
   reset_charge_sound(record)
   Drive.destroy_support(record)
-  record.reserve_energy = 0
+  set_reserve(record, 0)
   record.support_power = 0
   record.support_demand_watts = nil
   update_detector_latch(record)
@@ -793,10 +763,9 @@ end
 -- this update is never credited to the warp reserve.
 local function begin_charging(record)
   record.state = "charging"
-  record.power_sample_watts = nil
+  PowerBank.delivered(bank(record))
   record.detector_power = 0
   record.detector_power_ratio = 0
-  record.detector_request_watts = DETECTOR_MAX_POWER_WATTS
 end
 
 -- Charging is the engaged state before warp: it begins from the Engage button or a true activate
@@ -822,18 +791,18 @@ local function update_idle_or_charging(record, platform, direction, charge_buffe
     return
   end
   local charge = required_charge(platform)
-  -- Charging requests Warp-1 support power. Since reserve capacity is ten seconds of that
-  -- mass-scaled demand, adequate generation fills an empty reserve in exactly ten seconds.
+  -- Charging draws up to Warp-1 support power plus the leak. Since reserve capacity is ten
+  -- seconds of that mass-scaled demand, ample generation fills an empty reserve in about ten
+  -- seconds once the bank's request has climbed.
   charge_buffer.disabled_by_script = false
-  record.reserve_energy = math.min(record.reserve_energy or 0, charge)
-  if record.reserve_energy + 1 >= charge then
+  set_reserve(record, math.min(reserve(record), charge))
+  if reserve(record) + 1 >= charge then
     enter_warp(record, platform)
   else
-    local delivered_watts = sample_power(record, charge_buffer)
-    record.reserve_energy = math.min(charge, record.reserve_energy
-      + delivered_watts * UPDATE_TICKS / TICKS_PER_SECOND)
-    record.support_demand_watts = support_watts(platform, 1)
-    request_power(record, charge_buffer, record.support_demand_watts, 0)
+    sample_power(record)
+    record.support_demand_watts = PowerBank.max_draw(charge, 0, refill_watts(platform))
+    request_power(record, charge_buffer, {capacity = charge, load = 0,
+      max_draw = record.support_demand_watts})
     record.state = "charging"
   end
 end
@@ -844,7 +813,7 @@ local function visual_level(record, platform)
     return (record.detector_power or 0) / DETECTOR_MAX_POWER_WATTS
   end
   local charge = required_charge(platform)
-  return charge > 0 and (record.reserve_energy or 0) / charge or 0
+  return charge > 0 and reserve(record) / charge or 0
 end
 
 -- Advances the drive's electrical and warp state. Returns false when the power interface could
@@ -860,10 +829,9 @@ local function update_state(record, platform, direction)
   end
   local charge = required_charge(platform)
   if record.power_mode ~= "practical" then
-    record.reserve_energy = math.min(record.migrated_reserve_energy or 0, charge)
+    PowerBank.reset(bank(record))
+    set_reserve(record, math.min(record.migrated_reserve_energy or 0, charge))
     record.migrated_reserve_energy = nil
-    record.power_sample_watts = nil
-    record.detector_request_watts = nil
     record.detector_power = 0
     record.detector_power_ratio = 0
     record.power_mode = "practical"
@@ -907,6 +875,11 @@ end
 -- holds. Until the sweeping ring has passed, only what its front has reached is cleared;
 -- afterwards, everything. Idle drives cost one state check.
 function Warp.tick(record)
+  -- The power bank runs every tick: its interface's buffer holds one tick of its request.
+  local power = record.power
+  if record.power_options and power and power.valid then
+    PowerBank.tick(bank(record), power, record.power_options)
+  end
   if record.shockwave_tick or record.shockwaves then
     Shockwaves.update(record)
   end
@@ -968,7 +941,7 @@ function Warp.snapshot(record)
     end
   end
   local charge = required_charge(platform)
-  local stored_charge = practical and math.min(record.reserve_energy or 0, charge) or 0
+  local stored_charge = practical and math.min(reserve(record), charge) or 0
   local speed = platform_speed_km_per_second(platform)
   local support_required = support_watts(platform, math.max(1, record.warp_level or 1))
   local activate_active = activate_requested(record)
@@ -1023,8 +996,9 @@ function Warp.snapshot(record)
     demand_watts = record.support_demand_watts or 0,
     engine_level_limit = engine_warp_limit(platform),
     -- How long the current reserve would carry a complete power outage during warp.
-    outage_seconds = charge > 0 and stored_charge / charge * WARP_RESERVE_SECONDS or 0,
-    power_ready = (record.support_power or 0)
+    -- The level's support and the leak (a share of what is stored) both come out of the reserve.
+    outage_seconds = PowerBank.cover_seconds(stored_charge, support_required),
+    power_ready = (record.support_power or 0) * PowerBank.EFFICIENCY
       >= support_required * SUPPORT_POWER_TOLERANCE,
     cooldown_ready = game.tick >= record.cooldown_until,
     cooldown_seconds = math.max(0, record.cooldown_until - game.tick) / TICKS_PER_SECOND

@@ -60,6 +60,8 @@ These are not installable yet, or only partly:
 
 Space Lab and Warp Drive are safe to add to an existing late-game save: they change no existing recipes or buildings (apart from Space Lab lifting the surface restriction on four science packs) and leave running factories untouched. The two mods complement each other: Space Lab makes platforms self-sufficient, and Warp Drive gives them a reason to travel deep into space. Neither mod requires the other — Warp Drive adapts its research routing depending on whether laboratories are run in space or on planets, keeping the progression engaging either way.
 
+The Warp Drive and the Stargate draw their large power needs the same way, through a store that charges from spare power without slowing your factory: see [Dynamic Power](docs/power.md).
+
 The planned Mechanoids mod and Stargate will also work independently, including without each other. Homecoming Journey is the deliberate exception: it brings all four together as hard dependencies. Installing Mechanoids and Stargate without Homecoming will not enable campaign rules or objectives.
 
 ## Building

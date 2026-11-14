@@ -62,7 +62,7 @@ cp -R "$ROOT_DIR/tests/mods/bte-warp-drive-runtime-test" "$PLATFORM_MODS/"
 "$FACTORIO_BIN" \
   --mod-directory "$PLATFORM_MODS" \
   --benchmark "$TEST_ROOT/platform-save.zip" \
-  --benchmark-ticks 3100 \
+  --benchmark-ticks 3800 \
   --benchmark-runs 1 2>&1 | tee "$TEST_ROOT/platform.log"
 
 if ! grep -q 'WARP_TEST_PASS: detector, duplicate, warp visuals, asteroid suppression, ramp, speed grace, reserve, warnings, lockout, circuit condition, revocation, and relocation paths completed' "$TEST_ROOT/platform.log"; then
