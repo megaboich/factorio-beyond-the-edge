@@ -7,8 +7,8 @@
 // second rail lane (2), and four more tiles; the lanes are centred two tiles either side of the centre.
 // The floor slopes from the border down into a basin (DECK) so the ring can stand lower, and a trench
 // across the platform under the ring (TRENCH) holds its lower arc, so the whole ring stays visible
-// while its opening at deck level is wide enough for a train on either lane. Steel bridges carry the
-// lanes over the trench; the `tracks` option lays rails along them.
+// while its opening at deck level is wide enough for a train on either lane. The `tracks` option sets
+// station-mode track into the floor along the lanes, ending at the trench's lip.
 //
 // One build covers every state of the gate (STATES below):
 //   site      the finished floor, the control cabinet, the front east capacitor rack, and the bottom
@@ -42,7 +42,6 @@ const TRENCH_X = 5.75;
 export const RING = { cy: 2.8, inner: 4.6, mid: 5.05, outer: 5.5 };
 const RING_DEPTH = 1.0;
 const TOWER = { x: 6.3, width: 1.3, depth: 2.6, top: 4.4 };
-const LANES = [-2, 2];
 const CLAMPS = 12;
 const CYAN = 0x2fd2ff;
 
@@ -76,6 +75,17 @@ export async function materials() {
     hazard: textured({ color: 0xc9a227, stripes: true, grime: 0.4, scratches: 0.4, scale: 1, metalness: 0.2, seed: 83 }),
     rubber: textured({ color: 0x232427, grime: 0.2, scale: 1, metalness: 0.2, roughness: 0.8, seed: 85 }),
     ceramic: textured({ color: 0xd9d4c8, grime: 0.25, scratches: 0.15, scale: 1, metalness: 0.05, roughness: 0.35, seed: 89 }),
+    // Station-mode track, after the game's rails: brown-grey ballast, dark wooden sleepers, bright rails.
+    // Station-mode track (laneTrack()), coloured after the game's rail sheets (rail-stone-path, -inside,
+    // -ties, -backplates, -metals), and red steel after its ramps.
+    // The bed under the track: riveted dark steel deck plates, with grating between the rails.
+    ballast: textured({ color: 0x2c2f34, panels: 3, rivets: true, grime: 0.3, scratches: 0.4, scale: 1, metalness: 0.65, roughness: 0.45, seed: 93 }),
+    ballastInner: textured({ color: 0x383c42, holes: 10, grime: 0.3, scale: 1.2, metalness: 0.6, roughness: 0.5, seed: 94 }),
+    sleeper: textured({ color: 0x6f5426, grime: 0.45, scratches: 0.7, scale: 0.6, metalness: 0, roughness: 0.85, seed: 95 }),
+    backplate: textured({ color: 0x77736e, grime: 0.4, rust: 0.2, scale: 1, metalness: 0.5, roughness: 0.6, seed: 96 }),
+    // Matte enough that no rail catches a bright reflection where the light hits it.
+    rail: Object.assign(textured({ color: 0x7e8286, grime: 0.15, scratches: 0.3, scale: 1, metalness: 0.4, roughness: 0.7, seed: 97 }), { envMapIntensity: 0.4 }),
+    redSteel: textured({ color: 0x5e221c, panels: 1, grime: 0.4, rust: 0.1, scratches: 0.35, scale: 1, metalness: 0.45, roughness: 0.55, seed: 99 }),
     frost: textured({ color: 0xa9c4cf, panels: 1, grime: 0.15, scratches: 0.2, scale: 1, metalness: 0.55, roughness: 0.3, seed: 91 }),
     glow: Object.assign(new THREE.MeshStandardMaterial({ color: 0x0c2b33, emissive: CYAN, emissiveIntensity: 1.4, roughness: 0.4 }), {
       userData: { glow: { layer: "lights" }, tag: "light" }
@@ -296,36 +306,98 @@ function housing(root, m, side, level) {
   part(root, new THREE.BoxGeometry(0.3, 0.06, 0.03), m.glow, [panelX, DECK + 1.8, front + 0.11]);
 }
 
-/** The steel bridges that carry the lanes over the trench, with rails when `tracks` is set. */
-function bridges(root, m) {
-  const length = TRENCH_Z[1] - TRENCH_Z[0] + 0.4;
-  const z = (TRENCH_Z[0] + TRENCH_Z[1]) / 2;
-  for (const x of LANES) {
-    for (const dx of [-0.75, 0.75]) part(root, new THREE.BoxGeometry(0.22, 0.45, length), m.plate, [x + dx, DECK - 0.2, z]);
-    part(root, new THREE.BoxGeometry(1.9, 0.05, length), m.grating, [x, DECK + 0.03, z]);
-    for (const dx of [-0.95, 0.95]) {
-      for (let post = TRENCH_Z[0]; post <= TRENCH_Z[1] + 0.01; post += (TRENCH_Z[1] - TRENCH_Z[0]) / 3) {
-        part(root, new THREE.BoxGeometry(0.05, 0.5, 0.05), m.hazard, [x + dx, DECK + 0.3, post]);
-      }
-      part(root, new THREE.BoxGeometry(0.05, 0.05, length), m.hazard, [x + dx, DECK + 0.55, z]);
+// Station-mode track (stargate/scripts/railway.lua): one lane on the centre line, or two either side.
+export const TRACK_LANES = { single: [0], double: [-2, 2] };
+// Where the track stops: an eighth of a tile into the ring's front face. It runs over the ring's
+// lower arc, which lies in the trench below it.
+const TRACK_END = RING_Z + RING_DEPTH / 2 - 0.125;
+// Half the rail gauge, from the game's rail-metals sheet (36 px from the centre at 64 px a tile).
+const GAUGE = 0.5625;
+
+// The track's height on its ramp: level with the ground at the gate's edge, rising gently to
+// RAMP_TOP at the ring, so it crosses the basin and the ring's lower arc above them.
+const RAMP_TOP = 0.45;
+const trackHeight = (z) => lerp(GROUND, RAMP_TOP, (HALF - z) / (HALF - TRACK_END));
+
+/**
+ * Track along lane `x` after the game's rail ramps, tagged `userData.track = x`: a riveted steel deck
+ * with grating between the rails, edge lips and cyan marker studs, ties,
+ * backplates, and rails sized and coloured after the game's rail sheets, carried by red steel trusses along both sides over a
+ * dark recessed core, from the gate's south edge, where red foot blocks anchor the ramp and the game's
+ * rails join it, over the basin and the ring's lower arc into the ring.
+ */
+function laneTrack(root, m, x) {
+  // Unshadowed, so both lanes look alike: in game the gate's shadow layer falls over the track anyway.
+  const add = (mesh) => { mesh.userData.track = x; mesh.userData.unshadowed = true; return mesh; };
+  const step = 0.25;
+  const base = (z) => Math.min(floorHeight(x, z), trackHeight(z)) - 0.05;
+  for (let z = TRACK_END; z < HALF - 0.001; z += step) {
+    const zc = z + step / 2;
+    const top = trackHeight(zc);
+    // The core under the track, set back between the trusses so it reads as shadowed structure.
+    add(part(root, new THREE.BoxGeometry(1.7, top - base(zc), step + 0.01), m.tungsten, [x, (top + base(zc)) / 2, zc]));
+  }
+  // The track, measured from the game's straight rail sheets at 64 px a tile: ballast 2.06 tiles
+  // wide with a raised inner bed 1.15 wide, ties 1.5 long and 0.16 thick every 0.406, backplates and
+  // rail heads 0.5625 either side of the centre.
+  const along = (top, w, h, material) => {
+    for (let z = TRACK_END; z < HALF - 0.001; z += step) {
+      const zc = z + step / 2;
+      add(part(root, new THREE.BoxGeometry(w, h, step + 0.01), material, [x, trackHeight(zc) + top - h / 2, zc]));
     }
+  };
+  along(0.05, 2.06, 0.05, m.ballast);
+  along(0.08, 1.15, 0.05, m.ballastInner);
+  // Steel lips along the deck's edges, with a cyan marker stud every tile.
+  for (const side of [-1, 1]) {
+    const lip = [];
+    for (let z = TRACK_END; z <= HALF + 0.001; z += 0.25) lip.push([x + side * 0.98, trackHeight(z) + 0.07, z]);
+    add(tube(root, lip, 0.04, m.plate, 48));
+    for (let z = HALF - 0.5; z > TRACK_END + 0.3; z -= 1) {
+      add(part(root, new THREE.BoxGeometry(0.08, 0.03, 0.14), m.glow, [x + side * 0.86, trackHeight(z) + 0.065, z]));
+    }
+  }
+  // From the gate's edge inwards, the first tie flush with it; tall enough to read as blocks with
+  // shaded sides.
+  for (let z = HALF - 0.08; z > TRACK_END + 0.08; z -= 0.406) {
+    add(part(root, new THREE.BoxGeometry(1.5, 0.1, 0.16), m.sleeper, [x, trackHeight(z) + 0.1, z]));
+  }
+  for (const dx of [-GAUGE, GAUGE]) {
+    const plates = [], heads = [];
+    // Run a little past the edge: raised above the deck, they would otherwise end short of it on screen.
+    for (let z = TRACK_END; z <= HALF + 0.21; z += 0.25) {
+      plates.push([x + dx, trackHeight(z) + 0.13, z]);
+      heads.push([x + dx, trackHeight(z) + 0.17, z]);
+    }
+    add(tube(root, plates, 0.07, m.backplate, 64));
+    add(tube(root, heads, 0.035, m.rail, 64));
+  }
+  // The side trusses: a top chord level with the ballast, a bottom chord on the floor, posts every
+  // tile, and a diagonal in each bay.
+  for (const dx of [-1, 1]) {
+    const sx = x + dx;
+    const chord = (y) => {
+      const points = [];
+      for (let z = TRACK_END; z <= HALF - 0.6 + 0.001; z += 0.25) points.push([sx, y(z), z]);
+      add(tube(root, points, 0.07, m.redSteel, 48));
+    };
+    chord((z) => trackHeight(z) + 0.06);
+    chord((z) => base(z) + 0.12);
+    for (let z = HALF - 0.6; z > TRACK_END + 0.2; z -= 1) {
+      add(part(root, new THREE.BoxGeometry(0.12, trackHeight(z) - base(z), 0.12), m.redSteel, [sx, (trackHeight(z) + base(z)) / 2, z]));
+      const z2 = Math.max(TRACK_END, z - 1);
+      add(beam(root, new THREE.Vector3(sx, base(z) + 0.12, z), new THREE.Vector3(sx, trackHeight(z2) + 0.06, z2), 0.04, m.redSteel, 6));
+    }
+    // The foot block anchoring the ramp at the gate's edge.
+    const z = HALF - 0.45;
+    add(part(root, new THREE.BoxGeometry(0.34, 0.42, 0.7), m.redSteel, [sx + dx * 0.05, GROUND + 0.21, z]));
+    add(part(root, new THREE.BoxGeometry(0.44, 0.08, 0.8), m.plate, [sx + dx * 0.05, GROUND + 0.04, z]));
+    add(part(root, new THREE.BoxGeometry(0.2, 0.12, 0.2), m.tungsten, [sx + dx * 0.05, GROUND + 0.48, z + 0.1]));
   }
 }
 
-/** Rails down each lane, following the floor: sleepers and two steel rails. */
-function tracks(root, m) {
-  const step = 0.5;
-  for (const x of LANES) {
-    for (let z = -HALF + 0.25; z < HALF; z += step) {
-      const y = floorHeight(x, z, { trench: false });
-      part(root, new THREE.BoxGeometry(1.8, 0.07, 0.22), m.raw, [x, y + 0.08, z]);
-    }
-    for (const dx of [-0.72, 0.72]) {
-      const points = [];
-      for (let z = -HALF; z <= HALF + 0.001; z += 0.25) points.push([x + dx, floorHeight(x, z, { trench: false }) + 0.17, z]);
-      tube(root, points, 0.05, m.steel, 112);
-    }
-  }
+function tracks(root, m, lanes) {
+  for (const x of lanes) laneTrack(root, m, x);
 }
 
 /** Floor lights at the corners. */
@@ -579,6 +651,47 @@ export function drawPassage(root, t) {
   texture.needsUpdate = true;
 }
 
+/**
+ * One train carriage passing the veil, drawn over it as extra light: a carriage-sized glow low on the
+ * centre line (the gate draws it at each lane, scripts/railway.lua) that flares as the carriage
+ * meets the veil and spreads into one ring as it fades, hiding the moment the carriage vanishes or
+ * appears. `t` runs 0 to 1 once; everything outside the splash stays dark.
+ */
+export function drawSplash(root, t) {
+  const { canvas, texture } = root.userData.veil;
+  const ctx = canvas.getContext("2d");
+  const image = ctx.createImageData(VEIL_SIZE, VEIL_SIZE);
+  // A carriage behind the veil, about to vanish or just appeared, fills its lane's column of the
+  // veil on screen from the deck nearly to the ring's top (5.2 tiles long, 1.6 high, seen at 50
+  // degrees), so the glow covers that column, a little wider than the carriage (unit disc, y down),
+  // centred a quarter of a carriage below the veil's centre, where the change shows most.
+  const oy = 0.39;
+  const flare = Math.exp(-(((t - 0.25) / 0.16) ** 2));
+  const ring = t * 0.32;
+  const fade = (1 - t) ** 1.4;
+  for (let py = 0; py < VEIL_SIZE; py++) {
+    for (let px = 0; px < VEIL_SIZE; px++) {
+      const x = (px + 0.5) / VEIL_SIZE * 2 - 1;
+      const y = (py + 0.5) / VEIL_SIZE * 2 - 1;
+      // A tall rounded column, about two tiles wide, the whole height of the veil.
+      const d = Math.hypot(x / 0.24, ((y - oy) / 0.95) ** 2);
+      let v = Math.exp(-d * d * 1.5) * (0.15 + 0.5 * flare);
+      v += Math.exp(-(((d * 0.2 - ring) / 0.035) ** 2)) * 0.45 * fade * Math.min(1, t * 6);
+      v *= fade;
+      // Inside the veil only, as the carriage vanishes and appears only there.
+      const rim = Math.max(0, Math.min(1, (1 - Math.hypot(x, y)) * 40));
+      v = 1.4 * Math.tanh(v / 1.4) * rim;
+      const i = (py * VEIL_SIZE + px) * 4;
+      image.data[i] = Math.min(255, 255 * (0.35 * v + 0.6 * Math.max(0, v - 0.6)));
+      image.data[i + 1] = Math.min(255, 255 * (0.75 * v));
+      image.data[i + 2] = Math.min(255, 255 * v);
+      image.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+  texture.needsUpdate = true;
+}
+
 // How far parts lean in towards the centre line per tile of height, as a fraction of their distance from it.
 const LEAN = 0.0055;
 
@@ -611,10 +724,10 @@ function lean(root) {
 }
 
 /**
- * Builds the gate in `state` ("site", "stage1" to "stage5", or "complete"). `tracks` lays rails along
- * both lanes, for the gate once its train station is activated.
+ * Builds the gate in `state` ("site", "stage1" to "stage5", or "complete"). `tracks` lists the lanes
+ * (x offsets) to lay station-mode track along, each tagged with its lane (laneTrack()).
  */
-export async function build({ state = "complete", tracks: withTracks = false } = {}) {
+export async function build({ state = "complete", tracks: lanes = null } = {}) {
   const spec = STATES[state];
   if (!spec) throw new Error(`unknown Stargate state ${state}`);
   const root = new THREE.Group();
@@ -626,8 +739,6 @@ export async function build({ state = "complete", tracks: withTracks = false } =
   ring(root, m, spec.ring, finished);
   for (const side of [-1, 1]) if (spec.housing) housing(root, m, side, spec.housing);
   towers(root, m, spec.towers);
-  // The portal is left empty for now: no bridges over the trench until train passage needs them.
-  if (withTracks) bridges(root, m);
   markings(root, m, finished);
   services(root, m);
   capacitors(root, m, spec.banks, spec.towers > 0);
@@ -636,7 +747,7 @@ export async function build({ state = "complete", tracks: withTracks = false } =
     root.userData.lights = m.glow;
   }
   else tape(root, m);
-  if (withTracks) tracks(root, m);
+  if (lanes) tracks(root, m, lanes);
   lean(root);
   // The models are lit from the north-west like the rest of the game, which leaves the south face
   // the camera sees in shade; a gentle fill from the south-west keeps the faces readable.

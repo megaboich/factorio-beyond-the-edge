@@ -171,6 +171,30 @@ def generate_arrive() -> list[float]:
     return fade_edges(normalize(echo(samples, (0.041, 0.067), 0.45, 0.0)), fade_in=0.02)
 
 
+CAR_DURATION = 0.7
+
+
+def generate_car_in() -> list[float]:
+    """One train carriage plunging into the veil: a short falling splash of filtered noise and shimmer."""
+    count = samples_for(CAR_DURATION)
+    splash = svf(noise(count, 0xCA51), [1800 * (250 / 1800) ** (i / count) for i in range(count)], q=1.4, mode="band")
+    wash = shimmer(count, 0.0, 0xCA52, 0.18)
+    samples = [smoothstep(i / samples_for(0.02)) * math.exp(-(i / SAMPLE_RATE) / 0.16) * splash[i] + 0.35 * wash[i]
+               for i in range(count)]
+    return fade_edges(normalize(echo(samples, (0.031, 0.053), 0.35, 0.0), peak=PEAK * 0.8))
+
+
+def generate_car_out() -> list[float]:
+    """One carriage breaking out of the veil: the splash rising, then a short ring."""
+    count = samples_for(CAR_DURATION)
+    rise = samples_for(0.18)
+    splash = svf(noise(count, 0xCA61), [300 * (2000 / 300) ** min(1, i / rise) for i in range(count)], q=1.4, mode="band")
+    wash = shimmer(count, 0.12, 0xCA62, 0.2)
+    samples = [(smoothstep(i / rise) if i < rise else math.exp(-((i - rise) / SAMPLE_RATE) / 0.12)) * splash[i] + 0.35 * wash[i]
+               for i in range(count)]
+    return fade_edges(normalize(echo(samples, (0.029, 0.047), 0.35, 0.0), peak=PEAK * 0.8))
+
+
 def write_wave(path: Path, samples: Sequence[float]) -> None:
     pcm = bytearray()
     for sample in samples:
@@ -196,6 +220,8 @@ def outputs() -> dict[str, Callable[[], Sequence[float]]]:
         "stargate-close": generate_close,
         "stargate-depart": generate_depart,
         "stargate-arrive": generate_arrive,
+        "stargate-car-in": generate_car_in,
+        "stargate-car-out": generate_car_out,
     }
 
 

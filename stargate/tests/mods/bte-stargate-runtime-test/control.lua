@@ -499,6 +499,141 @@ local steps = {
     storage.share = nil
   end},
 
+  -- Station mode: gate R1 on one surface sends a train to R2 on another. R1 departs on its right lane
+  -- (x 3) and R2 receives on its left-mode arrival lane (also x 3); vanilla rails lead south from both.
+  {5, function()
+    local function lab(name)
+      local s = game.create_surface(name)
+      s.generate_with_lab_tiles = true
+      s.request_to_generate_chunks({0, 0}, 3)
+      s.force_generate_chunk_requests()
+      return s
+    end
+    local ra, rb = lab("bte-test-rail-a"), lab("bte-test-rail-b")
+    local g1 = ra.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
+    local g2 = rb.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
+    ra.create_entity({name = "substation", position = {-10, -6}, force = "player"})
+    local source = ra.create_entity({name = "bte-stargate-test-power", position = {-12, -6}, force = "player"})
+    source.power_production, source.electric_buffer_size, source.energy = 1e9, 1e10, 1e10
+    expect("station mode switches on", remote.call("bte-stargate-test", "set_station", g1.unit_number, "right"), true)
+    remote.call("bte-stargate-test", "set_station", g2.unit_number, "left")
+    expect("two lanes of three rails", #ra.find_entities_filtered({name = "bte-stargate-rail"}), 6)
+    local tracks = ra.find_entities_filtered({name = "bte-stargate-tracks", area = {{-8, -8}, {10, 10}}})
+    expect("a two-track station draws its track", #tracks == 1 and tracks[1].graphics_variation, 2)
+    local body = ra.find_entities_filtered({name = "bte-stargate-body", area = {{-8, -8}, {10, 10}}})[1]
+    expect("its body has the track cut out (two tracks, red while charging)", body.graphics_variation, 6)
+    expect("and three hidden behind the ring", #ra.find_entities_filtered({name = "bte-stargate-rail-hidden"}), 6)
+    local station = remote.call("bte-stargate-test", "station", g1.unit_number)
+    expect("the station is named after the gate", station.backer_name, remote.call("bte-stargate-test", "state", g1.unit_number).name)
+    expect("the station stands on the departure lane at the gate's edge", station.connected_rail and serpent.line(station.connected_rail.position), "{x = 3, y = 7}")
+    remote.call("bte-stargate-test", "pair", g1.unit_number, g2.unit_number)
+    -- Off at first, so the train waits at the station; and laid out as an earlier version would be.
+    remote.call("bte-stargate-test", "set_enabled", g1.unit_number, false)
+    remote.call("bte-stargate-test", "forget_layout", g1.unit_number)
+    expect("an old layout has no hidden rails", #ra.find_entities_filtered({name = "bte-stargate-rail-hidden"}), 0)
+    for _, s in pairs({ra, rb}) do
+      for _, x in pairs({-1, 3}) do
+        for y = 9, 71, 2 do
+          s.create_entity({name = "straight-rail", position = {x, y}, direction = defines.direction.north, force = "player"})
+        end
+      end
+    end
+    -- The train's next stop, on R2's surface beside its arrival lane, for southbound trains.
+    rb.create_entity({name = "train-stop", position = {1, 61}, direction = defines.direction.south, force = "player"}).backer_name = "bte-test-far"
+    local loco = ra.create_entity({name = "locomotive", position = {3, 30}, direction = defines.direction.north, force = "player"})
+    local cargo = ra.create_entity({name = "cargo-wagon", position = {3, 37}, direction = defines.direction.north, force = "player"})
+    local tank = ra.create_entity({name = "fluid-wagon", position = {3, 44}, direction = defines.direction.north, force = "player"})
+    loco.insert({name = "coal", count = 50})
+    cargo.insert({name = "iron-plate", count = 100})
+    tank.insert_fluid({name = "water", amount = 1000})
+    storage.rail_driver = ra.create_entity({name = "character", position = {6, 30}, force = "player"})
+    loco.set_driver(storage.rail_driver)
+    local schedule = loco.train.get_schedule()
+    schedule.group = "bte-test-group"
+    schedule.add_record({station = station.backer_name, wait_conditions = {{type = "time", ticks = 30}}})
+    schedule.add_record({station = "bte-test-far", wait_conditions = {{type = "time", ticks = 6000}}})
+    schedule.go_to_station(1)
+    storage.g1, storage.g2, storage.ra, storage.rb = g1, g2, ra, rb
+    storage.rail_watch = {deepest = math.huge, first_arrival_rear = nil}
+    -- One track both ways: S1 and S2 at x 40, their lane at x 41. A train with no schedule, pushed in
+    -- by hand, arrives in manual mode and rolls out.
+    local s1 = ra.create_entity({name = GATE, position = {40, 0}, force = "player", raise_built = true})
+    local s2 = rb.create_entity({name = GATE, position = {40, 0}, force = "player", raise_built = true})
+    ra.create_entity({name = "substation", position = {30, -6}, force = "player"})
+    local source2 = ra.create_entity({name = "bte-stargate-test-power", position = {28, -6}, force = "player"})
+    source2.power_production, source2.electric_buffer_size, source2.energy = 1e9, 1e10, 1e10
+    remote.call("bte-stargate-test", "set_station", s1.unit_number, "single")
+    remote.call("bte-stargate-test", "set_station", s2.unit_number, "single")
+    remote.call("bte-stargate-test", "pair", s1.unit_number, s2.unit_number)
+    for _, s in pairs({ra, rb}) do
+      for y = 9, 71, 2 do
+        s.create_entity({name = "straight-rail", position = {41, y}, direction = defines.direction.north, force = "player"})
+      end
+    end
+    local pushed = ra.create_entity({name = "cargo-wagon", position = {41, 20}, direction = defines.direction.south, force = "player"})
+    ra.create_entity({name = "locomotive", position = {41, 27}, direction = defines.direction.north, force = "player"})
+    storage.pushed, storage.s1, storage.s2 = pushed.train, s1, s2
+  end},
+
+  {200, function()
+    -- Pushed towards the ring (north) once the gates have charged.
+    local train = storage.pushed
+    train.manual_mode = true
+    train.speed = (train.front_stock.position.y < train.back_stock.position.y and 1 or -1) * 0.3
+    expect("an old layout gets its hidden rails back", #storage.ra.find_entities_filtered({name = "bte-stargate-rail-hidden", area = {{-8, -8}, {10, 10}}}), 6)
+    local station = remote.call("bte-stargate-test", "station", storage.g1.unit_number)
+    expect("and its station moves to the edge", station.connected_rail and station.connected_rail.position.y, 7)
+    local waiting = storage.ra.find_entities_filtered({name = "locomotive", area = {{2, 0}, {4, 80}}})[1]
+    expect("a train waits at the station while the gate is off", waiting and waiting.train.state, defines.train_state.wait_station)
+    expect("with its front at the gate's edge (" .. tostring(waiting and waiting.bounding_box.left_top.y) .. ")",
+      waiting and math.abs(waiting.bounding_box.left_top.y - 7.4) < 0.2, true)
+    remote.call("bte-stargate-test", "set_enabled", storage.g1.unit_number, true)
+    expect("a station gate with a train on its rails keeps its mode", remote.call("bte-stargate-test", "set_station", storage.g1.unit_number, nil), false)
+  end},
+
+  {700, function()
+    local ra, rb = storage.ra, storage.rb
+    local watch = storage.rail_watch
+    storage.rail_watch = nil
+    -- R1's ring plane is y 3: a vanilla carriage is 4.8 to 5.2 long, so its front gets past y -1.
+    expect("carriages drive in behind the veil before vanishing (" .. watch.deepest .. ")", watch.deepest < -1, true)
+    expect("arrivals appear behind the partner's veil (" .. tostring(watch.first_arrival_rear) .. ")",
+      watch.first_arrival_rear ~= nil and watch.first_arrival_rear <= 3, true)
+    expect("each carriage splashes on both gates (" .. tostring(watch.splashes) .. " at once)", (watch.splashes or 0) >= 2, true)
+    expect("the whole train has left", ra.count_entities_filtered({type = {"locomotive", "cargo-wagon", "fluid-wagon"}, area = {{-5, 0}, {8, 80}}}), 0)
+    local cars = rb.find_entities_filtered({type = {"locomotive", "cargo-wagon", "fluid-wagon"}, area = {{-5, 0}, {8, 80}}})
+    expect("the train arrives on the partner's surface", #cars, 3)
+    local train = cars[1].train
+    expect("its carriages are coupled again", #train.carriages, 3)
+    expect("it keeps its cargo", train.get_item_count("iron-plate"), 100)
+    expect("it keeps its fluid", math.floor(train.get_fluid_count("water")), 1000)
+    local loco = train.locomotives.front_movers[1] or train.locomotives.back_movers[1]
+    expect("the locomotive faces away from the ring", loco.orientation, 0.5)
+    expect("its driver came along", loco.get_driver() == storage.rail_driver and storage.rail_driver.surface.name, "bte-test-rail-b")
+    expect("it runs automatically again", train.manual_mode, false)
+    local stop = train.station or train.path_end_stop
+    expect("it went on to its next stop", stop and stop.backer_name, "bte-test-far")
+    expect("the schedule moved past the gate", train.get_schedule().current, 2)
+    expect("it stays in its group", train.get_schedule().group, "bte-test-group")
+    local pushed = rb.find_entities_filtered({type = {"locomotive", "cargo-wagon"}, area = {{39, 0}, {43, 80}}})
+    expect("the pushed train arrives through the single track", #pushed, 2)
+    expect("still coupled", #pushed[1].train.carriages, 2)
+    expect("in manual mode", pushed[1].train.manual_mode, true)
+    expect("rolled out and not sent back (" .. serpent.line(pushed[1].position) .. ")", pushed[1].position.y > 12, true)
+    expect("nothing is left at the sending single track", ra.count_entities_filtered({type = {"locomotive", "cargo-wagon"}, area = {{39, 0}, {43, 80}}}), 0)
+    storage.s1.destroy()
+    storage.s2.destroy()
+    expect("an empty station gate changes mode", remote.call("bte-stargate-test", "set_station", storage.g1.unit_number, nil), true)
+    expect("its track picture is gone", ra.count_entities_filtered({name = "bte-stargate-tracks", area = {{-8, -8}, {10, 10}}}), 0)
+    expect("its rails are gone", ra.count_entities_filtered({name = {"bte-stargate-rail", "bte-stargate-rail-hidden", "bte-stargate-station"}, area = {{-8, -8}, {10, 10}}}), 0)
+    storage.g1.destroy()
+    storage.g2.destroy()
+  end},
+
+  {31, function()
+    expect("a gone station gate leaves no rails", storage.rb.count_entities_filtered({name = {"bte-stargate-rail", "bte-stargate-rail-hidden", "bte-stargate-station"}}), 0)
+  end},
+
   -- Mining a half-filled site returns the kit and everything delivered, and builds nothing.
   {5, function()
     local half = build_site(20)
@@ -509,11 +644,22 @@ local steps = {
     expect("mined site returns its delivery", bag.get_item_count("tungsten-plate"), 100)
     bag.destroy()
     expect("mining builds nothing", #entities(ASSEMBLING) + #entities(GATE), 0)
-    log("STARGATE_TEST_PASS: filters, exact slots, completion, staged build, replacement, grid snapping, gate pairing, power, circuit, transfer, vehicle and enemy transfer, and mining paths completed")
+    log("STARGATE_TEST_PASS: filters, exact slots, completion, staged build, replacement, grid snapping, gate pairing, power, circuit, transfer, vehicle and enemy transfer, train transfer, and mining paths completed")
   end}
 }
 
 script.on_event(defines.events.on_tick, function()
+  local watch = storage.rail_watch
+  if watch then
+    for _, car in pairs(storage.ra.find_entities_filtered({type = {"locomotive", "cargo-wagon", "fluid-wagon"}, area = {{2, -10}, {4, 80}}})) do
+      watch.deepest = math.min(watch.deepest, car.bounding_box.left_top.y)
+    end
+    watch.splashes = math.max(watch.splashes or 0, drawn("bte-stargate-splash"))
+    if not watch.first_arrival_rear then
+      local arrived = storage.rb.find_entities_filtered({type = {"locomotive", "cargo-wagon", "fluid-wagon"}, area = {{2, -10}, {4, 80}}})[1]
+      watch.first_arrival_rear = arrived and arrived.bounding_box.right_bottom.y
+    end
+  end
   local share = storage.share
   if share then
     local got = 0

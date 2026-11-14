@@ -136,7 +136,26 @@ local function capacitor(record)
   return record.capacitor
 end
 
+-- Removes station mode's rails and stop (scripts/railway.lua), and any carriage on those rails first:
+-- a rail cannot be removed from under one.
+function Gate.remove_railway(record)
+  for _, rail in pairs(record.rails or {}) do
+    if rail.valid then
+      for _, car in pairs(rail.surface.find_entities_filtered({type = {"locomotive", "cargo-wagon", "fluid-wagon",
+          "artillery-wagon", "infinity-cargo-wagon"}, area = rail.bounding_box})) do
+        car.destroy()
+      end
+      rail.destroy()
+    end
+  end
+  if record.station and record.station.valid then
+    record.station.destroy()
+  end
+  record.rails, record.station = nil, nil
+end
+
 local function remove_companions(record)
+  Gate.remove_railway(record)
   if record.capacitor and record.capacitor.valid then
     record.capacitor.destroy()
   end
@@ -147,13 +166,13 @@ local function remove_companions(record)
     end
   end
   record.veil_fx = nil
-  for _, key in pairs({"body", "top", "veil", "veil_top", "lights", "lights_high"}) do
+  for _, key in pairs({"body", "top", "veil", "veil_top", "lights", "lights_high", "tracks"}) do
     if record[key] and record[key].valid then
       record[key].destroy()
     end
   end
   record.capacitor, record.body, record.lights, record.lights_high, record.lights_state, record.top = nil, nil, nil, nil, nil, nil
-  record.veil, record.veil_top = nil, nil
+  record.veil, record.veil_top, record.tracks = nil, nil, nil
 end
 
 -- The gate's store is a power bank (scripts/power_bank.lua, a copy of Warp Drive's; see
@@ -218,8 +237,29 @@ end
 -- line, so Factorio draws characters behind the ring under it and those in front over it, and
 -- bte-stargate-top, the upper arc again, over spidertrons. Variation 1 has cyan lights, 2 red.
 -- Created on demand, so gates from earlier versions get them and lose the render objects they drew.
+local TRACK_MODES = {single = 1, right = 2, left = 2}
 local function show_body(record, red)
-  local variation = red and 2 or 1
+  -- The station's track (scripts/railway.lua) is a companion of its own, and the body's picture for
+  -- it has the track cut out where it crosses the ring's lower arc (prototypes/entities.lua).
+  local mode = TRACK_MODES[record.railway] or 0
+  local variation = mode * 2 + (red and 2 or 1)
+  local tracks = record.tracks
+  if mode == 0 or not (tracks and tracks.valid) then
+    if tracks and tracks.valid and mode == 0 then
+      tracks.destroy()
+    end
+    record.tracks = nil
+    if mode > 0 then
+      local c = center(record)
+      tracks = record.entity.surface.create_entity({name = "bte-stargate-tracks", position = {c.x, c.y + RING_Z},
+        force = record.entity.force, create_build_effect_smoke = false})
+      tracks.destructible = false
+      record.tracks = tracks
+    end
+  end
+  if record.tracks and record.tracks.graphics_variation ~= mode then
+    record.tracks.graphics_variation = mode
+  end
   for key, name in pairs({body = BODY, top = TOP}) do
     local entity = record[key]
     -- Earlier versions kept a render object under `top`.
@@ -243,8 +283,9 @@ local function show_body(record, red)
       entity.destructible = false
       record[key] = entity
     end
-    if entity.graphics_variation ~= variation then
-      entity.graphics_variation = variation
+    local wanted = key == "body" and variation or (red and 2 or 1)
+    if entity.graphics_variation ~= wanted then
+      entity.graphics_variation = wanted
     end
   end
 end
@@ -327,6 +368,9 @@ local function apply(record)
   sync_barriers(record)
 end
 
+-- Brings a gate's state and companions up to date, as after a change of station mode.
+Gate.refresh = apply
+
 function Gate.register(entity)
   if not (entity and entity.valid) or storage.gates[entity.unit_number] then
     return
@@ -373,6 +417,10 @@ end
 
 function Gate.set_name(record, name)
   record.name = name
+  -- The station of a gate in station mode carries its name (scripts/railway.lua).
+  if record.station and record.station.valid and record.station.backer_name ~= name then
+    record.station.backer_name = name
+  end
 end
 
 -- Every other gate of the record's force, by name, for the pairing selector.

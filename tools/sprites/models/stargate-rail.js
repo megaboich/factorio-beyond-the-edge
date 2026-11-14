@@ -1,6 +1,7 @@
-// Stargate with its train station activated: the finished gate with rails along both lanes. Not
-// exported yet; it is previewed until train passage uses it.
-import { build } from "../lib/stargate-parts.js";
+// Stargate with its two-track train station: the finished gate with the station track along both
+// lanes, in one picture, for previewing. Not exported: in game the track is its own layer
+// (models/stargate.js, rails-single and rails-double).
+import { build, TRACK_LANES } from "../lib/stargate-parts.js";
 import stargate from "./stargate.js";
 
 export default {
@@ -10,6 +11,6 @@ export default {
   export: null,
 
   build() {
-    return build({ state: "complete", tracks: true });
+    return build({ state: "complete", tracks: TRACK_LANES.double });
   }
 };

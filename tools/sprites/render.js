@@ -138,7 +138,8 @@ window.renderSprite = async function (name, options = {}) {
     if (!object.isMesh) return;
     meshes.push(object);
     object.castShadow = !object.material.transparent;
-    object.receiveShadow = true;
+    // `userData.unshadowed` meshes take no sun shadow, for parts the game shades with the shadow layer.
+    object.receiveShadow = !object.userData.unshadowed;
     const data = object.material.userData;
     if (data.mask) masks.add(data.mask);
     if (data.glow) glows.add(data.glow.layer);
@@ -462,7 +463,7 @@ window.renderIcon = async function (name, options = {}) {
   root.traverse((o) => {
     if (o.isMesh) {
       o.castShadow = !o.material.transparent;
-      o.receiveShadow = true;
+      o.receiveShadow = !o.userData.unshadowed;
     }
   });
 

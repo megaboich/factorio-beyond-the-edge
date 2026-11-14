@@ -18,7 +18,7 @@
 // is drawn twice. TOP is the ring's centre, so the upper half is elevated; anyone in front of the
 // ring close enough to reach that height on screen is already in the portal zone.
 import * as THREE from "three";
-import { build, drawPassage, drawVeil, drawVeilTransition, RING } from "../lib/stargate-parts.js";
+import { build, drawPassage, drawSplash, drawVeil, drawVeilTransition, RING, TRACK_LANES } from "../lib/stargate-parts.js";
 
 // The ring's centre height: the upper half of the ring is the elevated part.
 const TOP = RING.cy;
@@ -31,7 +31,9 @@ const LIGHTS = {
   alarm: { color: 0xff2a1a, clip: lowClip },
   high: { color: 0x2fd2ff, clip: topClip },
   "alarm-high": { color: 0xff2a1a, clip: topClip },
-  top: { color: 0x000000, clip: topClip }
+  top: { color: 0x000000, clip: topClip },
+  // Cyan lit lamps tagged for a layer of their own (the station's light layers below).
+  cyan: { color: 0x2fd2ff, clip: lowClip }
 };
 // The lamps are dark in main and top: their colour comes only from the glow layers drawn over them,
 // since red light added over a lamp baked cyan would read white. The null pass's lamps still feed
@@ -58,6 +60,7 @@ const OPENING_FRAMES = 30;
 const CLOSING_FRAMES = 18;
 // The passage plays once over two loops (128 ticks in game, scripts/transfer.lua TRANSIT_TICKS).
 const PASSAGE_FRAMES = 32;
+const SPLASH_FRAMES = 16;
 
 export default {
   tiles: [14, 14],
@@ -84,6 +87,21 @@ export default {
     { name: "glow-closing-high", tag: "veil", glow: true, variant: "closing-high", frames: CLOSING_FRAMES, preview: { variant: "closing" } },
     // The status lights in red, which scripts/gate.lua shows instead of glow-lights while the gate lacks power.
     { name: "glow-lights-red", tag: "light", glow: true, variant: "alarm", frames: 1, preview: { variant: "alarm" } },
+    // Station-mode track, one picture per layout, drawn by a companion just above the floor
+    // (stargate/scripts/railway.lua); hidden from every other layer.
+    { name: "rails-single", tag: "rails", variant: "rails-single", frames: 1 },
+    { name: "rails-double", tag: "rails", variant: "rails-double", frames: 1 },
+    // The building with the track cut out where it passes over the ring's lower arc into the ring,
+    // so the track (drawn under the building) shows there: main for a station gate.
+    { name: "main-single", tag: "body", variant: "body-single", frames: 1 },
+    { name: "main-double", tag: "body", variant: "body-double", frames: 1 },
+    // The status lights below TOP, cyan and red, with the track in front of them hiding them.
+    { name: "glow-lights-single", tag: "light", glow: true, variant: "lights-single", frames: 1 },
+    { name: "glow-lights-double", tag: "light", glow: true, variant: "lights-double", frames: 1 },
+    { name: "glow-lights-red-single", tag: "light", glow: true, variant: "alarm-single", frames: 1 },
+    { name: "glow-lights-red-double", tag: "light", glow: true, variant: "alarm-double", frames: 1 },
+    // One train carriage passing the veil, drawn by scripts/railway.lua at its lane, 16 frames at 2 ticks.
+    { name: "glow-splash", tag: "veil", glow: true, variant: "splash", frames: SPLASH_FRAMES, span: 0.5 },
     // Drawn over the veil by script while someone passes through.
     { name: "glow-passage", tag: "veil", glow: true, variant: "passage", frames: PASSAGE_FRAMES, span: 2, preview: { variant: "passage" } }
   ],
@@ -120,7 +138,7 @@ export default {
   ],
 
   build() {
-    return build({ state: "complete" });
+    return build({ state: "complete", tracks: [...TRACK_LANES.single, ...TRACK_LANES.double] });
   },
 
   setVariant(root, name) {
@@ -134,7 +152,24 @@ export default {
       mesh.renderOrder = 0;
       const floor = mesh.userData.floor;
       const light = mesh.material === root.userData.lights;
-      if (name === null && floor) {
+      const track = mesh.userData.track;
+      const body = String(name).startsWith("body-");
+      // A station's lights: "lights-<mode>" cyan, "alarm-<mode>" red.
+      const station = /^(lights|alarm)-(single|double)$/.exec(String(name));
+      if (track !== undefined) {
+        // Shown in its own layer, and untagged in the building's and the lights', where it hides them.
+        const mode = String(name).startsWith("rails-") ? String(name).slice(6) : body ? String(name).slice(5) : station?.[2];
+        mesh.visible = (TRACK_LANES[mode] ?? []).includes(track);
+        if (mesh.visible && !body && !station) mesh.material = mesh.userData.railMaterial ??= Object.assign(mesh.material.clone(), { userData: { tag: "rails" } });
+      } else if (station) {
+        if (light) mesh.material = lightMaterial(mesh.material, station[1] === "lights" ? "cyan" : "alarm");
+      } else if (body) {
+        // main, as the null pass draws it, but tagged; the floor stays an untagged occluder.
+        if (!floor && mesh.material.userData.tag !== "veil") {
+          const source = light ? lightMaterial(mesh.material, "null") : mesh.material;
+          mesh.material = mesh.userData.bodyMaterial ??= Object.assign(source.clone(), { userData: { tag: "body" } });
+        }
+      } else if (name === null && floor) {
         mesh.material = floorOccluder;
         mesh.renderOrder = -20;
       } else if (name === "floor") {
@@ -149,7 +184,7 @@ export default {
       }
     });
     root.traverse((object) => {
-      if (object.isMesh && object.userData.original?.userData.tag === "veil") object.visible = VEILS.includes(name) || name === "passage";
+      if (object.isMesh && object.userData.original?.userData.tag === "veil") object.visible = VEILS.includes(name) || name === "passage" || name === "splash";
     });
     // The passage is drawn whole, by script.
     root.userData.veil.material.clippingPlanes = !VEILS.includes(name) ? null : name.endsWith("-high") ? topClip : lowClip;
@@ -158,6 +193,7 @@ export default {
   animate(root, t) {
     const variant = String(root.userData.variant);
     if (variant === "passage") drawPassage(root, t / 2);
+    else if (variant === "splash") drawSplash(root, t * 2);
     else if (variant.startsWith("opening")) drawVeilTransition(root, t * OPENING_FRAMES / (OPENING_FRAMES - 1), false);
     else if (variant.startsWith("closing")) drawVeilTransition(root, t * CLOSING_FRAMES / (CLOSING_FRAMES - 1), true);
     else drawVeil(root, t % 1);

@@ -3,6 +3,7 @@ local Gate = require("scripts.gate")
 local Gui = require("scripts.gui")
 local Transfer = require("scripts.transfer")
 local Destinations = require("scripts.destinations")
+local Railway = require("scripts.railway")
 
 local UPDATE_TICKS = 30
 local GATE = "bte-stargate"
@@ -16,6 +17,7 @@ local function rebuild()
   Gate.rebuild()
   Gui.init_storage()
   Transfer.init_storage()
+  Railway.rebuild()
 end
 
 script.on_init(rebuild)
@@ -58,6 +60,7 @@ script.on_nth_tick(UPDATE_TICKS, function()
 end)
 script.on_nth_tick(Gate.TRANSFER_TICKS, function()
   Gate.update(Transfer.start)
+  Railway.check()
 end)
 -- Gates charge every tick. Ripples, arrivals, and the run out of the ring are timed per tick, but only
 -- while someone travels.
@@ -66,10 +69,21 @@ script.on_event(defines.events.on_tick, function()
   if (storage.transfers and next(storage.transfers)) or (storage.exits and next(storage.exits)) then
     Transfer.update()
   end
+  if Railway.active() then
+    Railway.update()
+  end
 end)
 
 script.on_event({defines.events.on_cutscene_cancelled, defines.events.on_cutscene_finished}, Transfer.on_cutscene_cancelled)
 script.on_event(defines.events.on_gui_opened, Gui.on_opened)
+-- A gate's station renamed in its train stop window renames the gate.
+script.on_event(defines.events.on_entity_renamed, function(event_data)
+  local entity = event_data.entity
+  local record = entity.valid and entity.name == "bte-stargate-station" and Railway.gate_of(entity)
+  if record then
+    Gate.set_name(record, entity.backer_name)
+  end
+end)
 script.on_event(defines.events.on_gui_closed, Gui.on_closed)
 script.on_event(defines.events.on_gui_click, Gui.on_click)
 script.on_event(defines.events.on_gui_text_changed, Gui.on_text_changed)
@@ -92,6 +106,23 @@ if script.active_mods["bte-stargate-runtime-test"] then
     end,
     set_keep_charged = function(id, keep)
       Gate.set_keep_charged(Gate.get(id), keep)
+    end,
+    set_station = function(id, mode)
+      return Railway.set_mode(Gate.get(id), mode)
+    end,
+    -- Makes a station gate look built by an earlier layout: no hidden rails, the station at the ring.
+    forget_layout = function(id)
+      local record = Gate.get(id)
+      for _, rail in pairs(record.rails) do
+        if rail.valid and rail.name == "bte-stargate-rail-hidden" then
+          rail.destroy()
+        end
+      end
+      record.station.teleport({record.station.position.x, record.station.position.y - 4})
+      record.rail_layout = nil
+    end,
+    station = function(id)
+      return Railway.station(Gate.get(id))
     end,
     can_enter = function(entity)
       return Transfer.can_enter(entity)

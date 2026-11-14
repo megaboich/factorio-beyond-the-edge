@@ -45,6 +45,12 @@
     <button data-gate="active">Active</button>
     <button data-gate="closing">Shut down</button>
     <button id="transfer">🚶 Transfer</button>
+    <button id="train">🚂 Train</button>
+  </fieldset>
+  <fieldset><legend>Train station</legend>
+    <button data-rails="off">Off</button>
+    <button data-rails="single">One track</button>
+    <button data-rails="double">Two tracks</button>
   </fieldset>
   <fieldset><legend>View</legend>
     <label><input type="checkbox" id="night"> Night</label>
@@ -87,7 +93,7 @@ const PHASE_MODEL = { site: "stargate-site", stage1: "stargate-stage1", stage2: 
 const $ = (id) => document.getElementById(id);
 const canvas = $("view");
 const ctx = canvas.getContext("2d");
-const state = { phase: "finished", gate: "closed", gateSince: 0, building: null, transfer: null, paused: false, time: 0 };
+const state = { rails: "off", phase: "finished", gate: "closed", gateSince: 0, building: null, transfer: null, paused: false, time: 0 };
 const metas = {};
 const images = {};
 
@@ -124,7 +130,7 @@ function sheet(name, layer, frame = 0, opts = {}) {
   const f = frame % meta.frame_count;
   const sx = (f % meta.line_length) * meta.width, sy = Math.floor(f / meta.line_length) * meta.height;
   const w = meta.width * Z, h = meta.height * Z;
-  const x = px(meta.shift[0]) - w / 2, y = py(meta.shift[1]) - h / 2;
+  const x = px(meta.shift[0] + (opts.dx ?? 0)) - w / 2, y = py(meta.shift[1]) - h / 2;
   ctx.drawImage(img, sx, sy, meta.width, meta.height, x, y, w, h);
 }
 
@@ -255,12 +261,20 @@ function frame(dt) {
   ground();
   // The finished gate's floor is its own layer, drawn under everything (the integration patch).
   if (metas[model].sheets.floor) sheet(model, "floor");
+  // Station-mode track (a companion just above the floor in game), only on the finished gate.
+  if (finished && !state.building && state.rails !== "off" && metas[model].sheets[`rails-${state.rails}`]) sheet(model, `rails-${state.rails}`);
   if ($("shadow").checked) sheet(model, "shadow");
 
+  // A station gate's building has its track cut out where it runs over the ring's lower arc.
+  const rails = finished && !state.building && state.rails !== "off" ? state.rails : null;
   const look = finished && !state.building ? gateLook(now) : { reach: 0, alpha: 0, flash: 0, surge: 0 };
   const tr = state.transfer && finished ? transferPose(now) : null;
   if (tr && tr.y < RING_Z) engineer(0, tr.y, tr.alpha, tr.walk); // behind the ring (arriving side not shown)
-  sheet(model, "main");
+  const train = state.train && finished && rails ? trainCars(now) : null;
+  if (state.train && !train) state.train = null;
+  // Carriages sort against the ring's body by their centre, as objects do in game.
+  if (train) for (const c of train.cars) if ((c.front + c.rear) / 2 < RING_Z) carriage(c);
+  sheet(model, rails && metas[model].sheets[`main-${rails}`] ? `main-${rails}` : "main");
   // The upper arc (drawn last in game, on an elevated layer); its pixels match main's, so drawing it
   // before the lights and the night tint changes nothing here.
   if (metas[model].sheets.top) sheet(model, "top");
@@ -276,7 +290,8 @@ function frame(dt) {
   }
   const red = $("red").checked && metas[model].sheets["glow-lights-red"];
   if ($("lights").checked && metas[model].sheets["glow-lights"]) {
-    ctx.save(); ctx.globalCompositeOperation = "lighter"; sheet(model, red ? "glow-lights-red" : "glow-lights"); ctx.restore();
+    const lights = (red ? "glow-lights-red" : "glow-lights") + (rails && metas[model].sheets[`glow-lights-${rails}`] ? `-${rails}` : "");
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; sheet(model, lights); ctx.restore();
   }
   // The upper arc's lights.
   if (metas[model].sheets.top) {
@@ -294,13 +309,89 @@ function frame(dt) {
   }
   // In front of the ring, so drawn over its light.
   if (tr && tr.y >= RING_Z) engineer(0, tr.y, tr.alpha, tr.walk);
+  if (train) {
+    for (const c of train.cars) if ((c.front + c.rear) / 2 >= RING_Z) carriage(c);
+    const meta = metas.stargate.sheets["glow-splash"];
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    for (const sp of train.splashes) {
+      const f = Math.floor(sp.since * 30);
+      if (meta && f < meta.frame_count) sheet("stargate", "glow-splash", f, { dx: sp.x });
+    }
+    ctx.restore();
+  }
   if (progress !== null) progressBar(progress);
 
   $("status").textContent = state.building
     ? `Building… ${Math.round(progress * 100)}% (phase ${STAGES.indexOf(model) + 1} of 6)`
     : !finished ? `Construction ${state.phase === "site" ? "site (phase 1 of 6)" : `phase ${STAGES.indexOf(PHASE_MODEL[state.phase]) + 1} of 6`}`
     : tr ? tr.label
+    : train ? train.label
     : { closed: "Closed: unpaired, off, or unpowered", activating: "Opening…", active: "Open: 1 GW, walk through to travel", closing: "Shutting down…" }[state.gate];
+}
+
+// A train through a station gate, as scripts/railway.lua runs it: four carriages (a locomotive and
+// three wagons, 7 tiles apart) driven north up the departure lane at 0.3 tiles a tick, each vanishing
+// once it is wholly behind the veil, with a splash (glow-splash, 16 frames at 2 ticks) and the
+// stargate-car-in sound at its lane; then at the partner (this gate standing in for it) each appears
+// behind the veil on the arrival lane with a splash and stargate-car-out and drives out south.
+const TRAIN = { cars: 4, spacing: 7, length: 5.2, speed: 18, height: 1.6 };
+function trainLanes() {
+  return state.rails === "single" ? { depart: 0, arrive: 0 } : { depart: 2, arrive: -2 };
+}
+function trainCars(now) {
+  const tr = state.train, lanes = trainLanes();
+  const t = now - tr.at, cars = [], splashes = [];
+  const open = state.gate === "active";
+  // Departure: the front starts 4 tiles beyond the gate's edge (y 7) and, while the gate is closed,
+  // stops at the station with its front 0.6 inside the edge.
+  const step = Math.max(0, t - (tr.last ?? t)) * TRAIN.speed;
+  tr.travel = open ? (tr.travel ?? 0) + step : Math.min(4.6, (tr.travel ?? 0) + step);
+  tr.last = t;
+  const front0 = 11 - tr.travel;
+  let departed = 0;
+  for (let i = 0; i < TRAIN.cars; i++) {
+    const front = front0 + i * TRAIN.spacing, rear = front + TRAIN.length;
+    if (rear <= RING_Z) {
+      departed++;
+      tr.gone[i] ??= now;
+      if (!tr.goneSound[i]) { tr.goneSound[i] = true; sound("car-in"); }
+      splashes.push({ x: lanes.depart, since: now - tr.gone[i] });
+    } else cars.push({ x: lanes.depart, front, rear, loco: i === 0 });
+  }
+  // Arrival: carriage i appears when the departure side sent it, behind the veil (front at the
+  // hidden rails' end, 5 tiles north of the centre) and drives south.
+  for (let i = 0; i < TRAIN.cars; i++) {
+    const sent = tr.gone[i];
+    if (sent === undefined) continue;
+    const since = now - sent - 0.4;
+    if (since < 0) continue;
+    if (!tr.cameSound[i]) { tr.cameSound[i] = true; sound("car-out"); }
+    // Coupled behind the carriage before it: it appears where that one was one spacing ago.
+    const lead = now - tr.gone[0] - 0.4;
+    const front = -5 + lead * TRAIN.speed - i * TRAIN.spacing;
+    if (since < 0.6) splashes.push({ x: lanes.arrive, since });
+    if (front < 16) cars.push({ x: lanes.arrive, front: front + TRAIN.length, rear: front, loco: i === 0, out: true });
+  }
+  if (departed === TRAIN.cars && tr.gone[TRAIN.cars - 1] !== undefined && now - tr.gone[TRAIN.cars - 1] > 2.5) state.train = null;
+  const label = !open && departed === 0 ? "Train waits at the station until the gate opens"
+    : departed < TRAIN.cars ? `Train passing: ${departed} of ${TRAIN.cars} carriages through` : "Train arriving at the paired gate (shown here)";
+  return { cars, splashes, label };
+}
+// A stand-in carriage: a box `height` tiles tall from `front` to `rear` (y, tiles) on lane x; a red
+// locomotive or a grey wagon.
+function carriage(c) {
+  const s = TILE * Z, half = 0.6, h = TRAIN.height;
+  const y0 = Math.min(c.front, c.rear), y1 = Math.max(c.front, c.rear);
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.fillRect(px(c.x - half + 0.3), py(y0 + 0.2), 2 * half * s, (y1 - y0) * s);
+  ctx.fillStyle = c.loco ? "#5a2620" : "#3c3f43";
+  ctx.fillRect(px(c.x - half), py(y1, h), 2 * half * s, (py(y1) - py(y1, h)));
+  ctx.fillStyle = c.loco ? "#8c3a2c" : "#6b7076";
+  ctx.fillRect(px(c.x - half), py(y0, h), 2 * half * s, (y1 - y0) * s);
+  ctx.strokeStyle = "rgba(0,0,0,0.5)"; ctx.lineWidth = 0.04 * s;
+  for (let y = y0 + 0.6; y < y1 - 0.3; y += 0.8) {
+    ctx.beginPath(); ctx.moveTo(px(c.x - half + 0.1), py(y, h)); ctx.lineTo(px(c.x + half - 0.1), py(y, h)); ctx.stroke();
+  }
 }
 
 // The engineer walks north into the portal, flashes away, then (after a beat) the label says where he went.
@@ -342,6 +433,11 @@ function refreshButtons() {
     b.classList.toggle("on", finished && b.dataset.gate === state.gate);
   }
   $("transfer").disabled = !finished;
+  $("train").disabled = !finished || state.rails === "off";
+  for (const b of document.querySelectorAll("[data-rails]")) {
+    b.disabled = !finished;
+    b.classList.toggle("on", b.dataset.rails === state.rails);
+  }
   $("build").classList.toggle("on", !!state.building);
 }
 
@@ -365,8 +461,10 @@ document.querySelectorAll("[data-phase]").forEach((b) => b.onclick = () => {
   state.building = null; state.phase = b.dataset.phase; state.transfer = null; setGate("closed");
 });
 document.querySelectorAll("[data-gate]").forEach((b) => b.onclick = () => setGate(b.dataset.gate));
+document.querySelectorAll("[data-rails]").forEach((b) => b.onclick = () => { state.rails = b.dataset.rails; refreshButtons(); });
 $("build").onclick = () => { state.building = state.time; state.transfer = null; refreshButtons(); };
 $("transfer").onclick = () => { state.transfer = { at: state.time }; };
+$("train").onclick = () => { state.train = { at: state.time, gone: [], goneSound: [], cameSound: [] }; };
 $("pause").onclick = () => { state.paused = !state.paused; $("pause").textContent = state.paused ? "▶" : "⏸"; };
 
 load().then(() => { refreshButtons(); requestAnimationFrame(tick); window.previewReady = true; })

@@ -237,7 +237,23 @@ local function companion(name, render_layer, picture, lights)
     render_layer = render_layer,
     random_variation_on_create = false
   }
-  if lights then
+  if lights == "track" then
+    -- The station track (scripts/railway.lua): variation 1 one track, 2 two tracks.
+    entity.pictures = {}
+    for _, mode in pairs({"single", "double"}) do
+      entity.pictures[#entity.pictures + 1] = {layers = {util.sprite_load(gate_sprites .. "rails-" .. mode,
+        {scale = 0.5, priority = "high", shift = {0, -BODY}})}}
+    end
+  elseif lights and picture == "main" then
+    -- Cyan and red, for no station track, one track, and two tracks: the station's pictures have the
+    -- track cut out of the building where it runs over the ring's lower arc, and their lights hidden
+    -- behind it. Variation (mode * 2) + 1 is cyan, + 2 red, mode 0 none, 1 one track, 2 two tracks.
+    entity.pictures = {}
+    for _, suffix in pairs({"", "-single", "-double"}) do
+      entity.pictures[#entity.pictures + 1] = companion_picture(picture .. suffix, lights .. suffix)
+      entity.pictures[#entity.pictures + 1] = companion_picture(picture .. suffix, lights:gsub("^glow%-lights", "glow-lights-red") .. suffix)
+    end
+  elseif lights then
     entity.pictures = {companion_picture(picture, lights), companion_picture(picture, lights:gsub("^glow%-lights", "glow-lights-red"))}
   else
     -- The open portal's veil, VEIL_FRAMES frames looping once every 64 ticks (models/stargate.js).
@@ -255,7 +271,9 @@ data:extend({
   companion("bte-stargate-body", "object", "main", "glow-lights"),
   companion("bte-stargate-top", "elevated-object", "top", "glow-lights-high"),
   companion("bte-stargate-veil", "object", "glow-veil"),
-  companion("bte-stargate-veil-top", "elevated-object", "glow-veil-high")
+  companion("bte-stargate-veil-top", "elevated-object", "glow-veil-high"),
+  -- Above the gate's floor and the ground, under trains and everything else.
+  companion("bte-stargate-tracks", "floor-mechanics", nil, "track")
 })
 
 -- The portal forming and collapsing (models/stargate.js), played once by scripts/gate.lua as it opens
@@ -298,6 +316,18 @@ for frame = PASSAGE_FRAMES, 1, -1 do
 end
 data:extend({passage, arrival})
 
+-- One train carriage passing the veil (models/stargate.js, glow-splash): SPLASH_FRAMES frames at two
+-- ticks each, drawn once at the carriage's lane by scripts/railway.lua as it vanishes or appears.
+local SPLASH_FRAMES = 16
+local splash = sprite(gate_sprites .. "glow-splash", {
+  frame_count = SPLASH_FRAMES,
+  blend_mode = "additive",
+  draw_as_glow = true
+})
+splash.type = "animation"
+splash.name = "bte-stargate-splash"
+data:extend({splash})
+
 -- The gate's power: a hidden electric energy interface over the whole footprint, so any pole whose
 -- supply area reaches the gate powers it. The gate's store (the `bte-stargate-power` mod-data
 -- capacity) is kept by scripts/gate.lua, which draws through this interface as an ordinary consumer with an
@@ -336,7 +366,7 @@ data:extend({
 })
 
 -- Positional sounds, from resources/audio/generate.py.
-for _, name in pairs({"open", "close", "depart", "arrive"}) do
+for _, name in pairs({"open", "close", "depart", "arrive", "car-in", "car-out"}) do
   data:extend({{
     type = "sound",
     name = "bte-stargate-" .. name,

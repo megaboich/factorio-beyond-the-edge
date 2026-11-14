@@ -140,7 +140,8 @@ def check_buildings(t):
     power = t.prototype("mod-data", "bte-stargate-power")
     t.check("a gate stores 10 GJ, upkeep 1 GW, charges at 1 GW, refills at 200 MW",
             power and [power.get("data", {}).get(k) for k in ("capacity", "upkeep", "charge_rate", "refill")], [10e9, 1e9, 1e9, 200e6])
-    for name in ("bte-stargate-open", "bte-stargate-close", "bte-stargate-depart", "bte-stargate-arrive"):
+    for name in ("bte-stargate-open", "bte-stargate-close", "bte-stargate-depart", "bte-stargate-arrive",
+                 "bte-stargate-car-in", "bte-stargate-car-out"):
         sound = t.raw.get("sound", {}).get(name)
         t.check(f"{name} sound exists", sound is not None, True)
         if sound:
@@ -157,11 +158,14 @@ def check_buildings(t):
         t.check(f"{label} collides with nothing", companion.get("collision_mask", {}).get("layers"), {})
         t.check(f"{label} render layer", companion.get("render_layer", "object"), layer)
         t.check(f"{label} keeps its variation", companion.get("random_variation_on_create"), False)
-        t.check(f"{label} has two variations", len(companion.get("pictures", [])), 2)
         red = lights.replace("glow-lights", "glow-lights-red")
-        for n, (variation, glow) in enumerate(zip(companion.get("pictures", []), (lights, red)), 1):
+        # The body also has pictures for a station gate's one and two tracks (scripts/gate.lua, show_body).
+        suffixes = ("", "-single", "-double") if label == "body" else ("",)
+        expected = [(picture + x, glow + x) for x in suffixes for glow in (lights, red)]
+        t.check(f"{label} has {len(expected)} variations", len(companion.get("pictures", [])), len(expected))
+        for n, (variation, (pic, glow)) in enumerate(zip(companion.get("pictures", []), expected), 1):
             sprites = variation["layers"]
-            t.check(f"{label} variation {n} layers", [x["filename"].rsplit("stargate-", 1)[-1] for x in sprites], [f"{picture}.png", f"{glow}.png"])
+            t.check(f"{label} variation {n} layers", [x["filename"].rsplit("stargate-", 1)[-1] for x in sprites], [f"{pic}.png", f"{glow}.png"])
             t.check(f"{label} variation {n} lights are an additive glow", (sprites[1].get("blend_mode"), sprites[1].get("draw_as_glow")), ("additive", True))
             for sprite in sprites:
                 name = sprite["filename"].rsplit("/", 1)[-1]
@@ -169,6 +173,39 @@ def check_buildings(t):
                 shift = exported_shift(t, sprite["filename"])
                 t.check(f"{label} {name} shift puts the picture on the gate", [round(v, 4) for v in sprite["shift"]],
                         [round(shift[0], 4), round(shift[1] - 2, 4)])
+    # Station mode (scripts/railway.lua): vanilla rails only the script places, on the rail layer alone so
+    # they fit inside the gate yet still block and join player rails, and an invisible station.
+    rail = t.prototype("straight-rail", "bte-stargate-rail")
+    if rail:
+        t.check("station rail is on the rail layer only", rail.get("collision_mask", {}).get("layers"), {"rail": True})
+        t.check("station rail cannot be mined", "minable" in rail, False)
+        vanilla = dict(t.prototype("straight-rail", "straight-rail").get("pictures", {}))
+        pictures = dict(rail.get("pictures", {}))
+        layers = pictures.pop("render_layers", {})
+        vanilla.pop("render_layers", None)
+        t.check("station rail keeps the vanilla look", pictures == vanilla, True)
+        # Never drawn: the gate draws its own track on a ramp (bte-stargate-tracks).
+        t.check("station rail is drawn under the ground", set(layers.values()), {"zero"})
+    splash = t.raw.get("animation", {}).get("bte-stargate-splash")
+    t.check("each train carriage's splash exists, 16 frames", splash and splash.get("frame_count"), 16)
+    tracks = t.prototype("simple-entity-with-owner", "bte-stargate-tracks")
+    t.check("station track companion exists", tracks is not None, True)
+    if tracks:
+        t.check("station track is drawn above the floor, under trains", tracks.get("render_layer"), "floor-mechanics")
+        t.check("station track collides with nothing", tracks.get("collision_mask", {}).get("layers"), {})
+        t.check("station track has one and two tracks",
+                [v["layers"][0]["filename"].rsplit("stargate-", 1)[-1] for v in tracks.get("pictures", [])], ["rails-single.png", "rails-double.png"])
+        for v in tracks.get("pictures", []):
+            t.sprite_sheet("station track", v["layers"][0])
+    hidden = t.prototype("straight-rail", "bte-stargate-rail-hidden")
+    if hidden:
+        t.check("hidden rail is drawn under the ground", set(hidden.get("pictures", {}).get("render_layers", {}).values()), {"zero"})
+        t.check("hidden rail is on the rail layer only", hidden.get("collision_mask", {}).get("layers"), {"rail": True})
+    station = t.prototype("train-stop", "bte-stargate-station")
+    if station:
+        t.check("station collides with nothing", station.get("collision_mask", {}).get("layers"), {})
+        t.check("station cannot be mined", "minable" in station, False)
+        t.check("station is not blueprintable", "not-blueprintable" in station.get("flags", []), True)
     portal = t.raw.get("recipe", {}).get("bte-stargate-portal")
     t.check("portal recipe exists", portal is not None, True)
     if portal:
