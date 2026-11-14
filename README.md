@@ -2,14 +2,14 @@
 
 Mods for **Factorio: Space Age**, extending planetary exploration, interplanetary logistics, and the post-game factory with something to build toward other than more science for its own sake.
 
-Each mod is packaged and published separately. Space Lab and Warp Drive are available now, and Stargate has its first piece, gate construction. Two more are planned: an independent Mechanoids mod, and Homecoming Journey, a campaign requiring all four other family mods.
+Each mod is packaged and published separately. Space Lab and Warp Drive are available now, and Stargate is in development: gates are built, paired, and travelled through on foot, by vehicle, or by wandering enemies. Two more are planned: an independent Mechanoids mod, and Homecoming Journey, a campaign requiring all four other family mods.
 
 | Mod | Factorio name | In one line | Details |
 | --- | --- | --- | --- |
 | **Beyond the Edge: Space Lab** | `bte-spacelab` | Turns space platforms into self-sufficient orbital industry. | [Space Lab manual](spacelab/README.md) |
 | **Beyond the Edge: Warp Drive** | `bte-warp-drive` | Turns deep-space distance into research, then into faster-than-normal platform travel. | [Warp Drive manual](warp-drive/README.md) |
 | **Beyond the Edge: Mechanoids — Guardians of the Ruins** *(planned)* | `bte-mechanoids` | Mechanical ruin defenders, provisionally on Fulgora in standalone play. | [Mechanoids vision](mechanoids/VISION.md) |
-| **Beyond the Edge: Stargate** *(in development)* | `bte-stargate` | A gate built from a delivery of late-game materials; travel and trains come later. | [Stargate manual](stargate/README.md) |
+| **Beyond the Edge: Stargate** *(in development)* | `bte-stargate` | A gate built from a delivery of late-game materials, sending characters, vehicles, and enemies to its partner; trains come later. | [Stargate manual](stargate/README.md) |
 | **Beyond the Edge: Homecoming Journey** *(planned)* | `bte-homecoming-journey` | Combines the family into an ancient-gate campaign and a journey home. | [Homecoming vision](homecoming-journey/VISION.md) |
 
 The collection targets Factorio 2.1 with the Space Age expansion.
@@ -53,7 +53,7 @@ See the Warp Drive manual [for all details](warp-drive/README.md).
 These are not installable yet, or only partly:
 
 - **Mechanoids — Guardians of the Ruins:** independent robotic enemies and finite ruin encounters. Standalone placement is provisionally Fulgora-only; detailed placement and rewards remain open. [Vision](mechanoids/VISION.md) · [Plan](mechanoids/PLAN.md).
-- **Stargate (the rest of it):** construction exists today; the uncontrolled first jump, controllable paired travel, and train passage do not. No enemy or campaign mod required. [Vision](stargate/VISION.md) · [Plan](stargate/PLAN.md).
+- **Stargate (the rest of it):** construction and paired travel for characters, vehicles, and enemies exist today; the uncontrolled first jump and train passage do not. No enemy or campaign mod required. [Vision](stargate/VISION.md) · [Plan](stargate/PLAN.md).
 - **Homecoming Journey:** requires Space Lab, Warp Drive, Mechanoids, and Stargate. It owns the ancient ruins, artifact hunt, enormous research effort, and orbital gate that brings the engineer home. [Vision](homecoming-journey/VISION.md) · [Plan](homecoming-journey/PLAN.md).
 
 ## Playing Them Together
@@ -81,7 +81,7 @@ Publishing copy, screenshots, and demo-video sources are grouped under [media-po
 
 Space Lab and Warp Drive are published on the Factorio Mod Portal and are in their first public release. See each mod's **Asset Attribution** section for the origin of its art and sounds.
 
-Mechanoids and Homecoming Journey are in planning, and Stargate is only partly built (construction), each with a separate vision and development plan linked above. Their mod identifiers are planned; none of the three has been verified in a visible game yet.
+Mechanoids and Homecoming Journey are in planning, and Stargate is only partly built (construction and travel, without trains), each with a separate vision and development plan linked above. Their mod identifiers are planned; none of the three has been verified in a visible game yet.
 
 ## Links
 

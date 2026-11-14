@@ -6,8 +6,8 @@
 -- switched-on gate whose circuit condition allows it opens once the capacitor is full, then draws
 -- UPKEEP from its store and closes when it is switched off, closed by the circuit, or the store runs dry.
 -- Its status lights, on its body companion, turn red while a switched-on gate's capacitor is not full.
--- Every TRANSFER_TICKS this module hands any character standing in an open gate's portal to
--- scripts/transfer.lua, which sends it to the front of the partner, or with no partner to a random
+-- Every TRANSFER_TICKS this module hands any traveller (character, vehicle, or enemy) in an open
+-- gate's portal to scripts/transfer.lua, which sends it to the front of the partner, or with no partner to a random
 -- destination. A receiving gate needs no power and may be off.
 local Destinations = require("scripts.destinations")
 local PowerBank = require("scripts.power_bank")
@@ -24,12 +24,13 @@ local CENTER = 1
 -- portal, from either side, within PORTAL_HALF_WIDTH of the centre line (the whole gap between the
 -- side blocks, so nobody slips past at the ring's edge) and from PORTAL_BACK to PORTAL_FRONT about the
 -- ring's plane. The zone is two tiles deep, more than the fastest runner covers between two checks
--- (TRANSFER_TICKS). Travellers arrive ARRIVAL tiles south of the partner's ring, just clear of its zone.
+-- (TRANSFER_TICKS). Travellers arrive in front of the partner's ring, just clear of its zone (Gate.arrival).
 local RING_Z = 2
 local PORTAL_HALF_WIDTH = 3
 local PORTAL_BACK = -0.5
 local PORTAL_FRONT = 1.5
-local ARRIVAL = 1.9
+-- A character (box 0.2 from its centre) arrives 1.9 tiles south of the ring.
+local ARRIVAL_MARGIN = 0.2
 -- Each block's prototype and centre, in tiles from the building's centre.
 local BARRIERS = {
   west = {"bte-stargate-side-block", -4.975, -1.675},
@@ -443,11 +444,19 @@ local function in_portal(record, position)
   return math.abs(position.x - (gate.x + CENTER)) < PORTAL_HALF_WIDTH and dy > PORTAL_BACK and dy < PORTAL_FRONT
 end
 
--- Where a gate receives travellers: just in front of its portal, clear of its zone.
-function Gate.arrival(target)
+-- How far a traveller's collision box reaches from its centre in any direction.
+local function extent(name)
+  local box = prototypes.entity[name].collision_box
+  return math.max(-box.left_top.x, -box.left_top.y, box.right_bottom.x, box.right_bottom.y)
+end
+
+-- Where a gate receives a traveller (a prototype name, "character" by default): in front of its
+-- portal, its box just clear of the zone, at the nearest free spot for its kind.
+function Gate.arrival(target, name)
+  name = name or "character"
   local gate, surface = target.entity.position, target.entity.surface
-  local front = {gate.x + CENTER, gate.y + CENTER + RING_Z + ARRIVAL}
-  local position = surface.find_non_colliding_position("character", front, 8, 0.1) or front
+  local front = {gate.x + CENTER, gate.y + CENTER + RING_Z + PORTAL_FRONT + extent(name) + ARRIVAL_MARGIN}
+  local position = surface.find_non_colliding_position(name, front, 8, 0.1) or front
   return surface, position
 end
 
@@ -466,15 +475,36 @@ local function portal_area(record)
   return {{x - PORTAL_HALF_WIDTH, y + PORTAL_BACK - 0.3}, {x + PORTAL_HALF_WIDTH, y + PORTAL_FRONT + 0.3}}
 end
 
--- Updates every gate's barriers and calls `enter(character, record)` for each character in an open portal.
+-- What can travel: characters on foot, cars and tanks (car), spidertrons (spider-vehicle), and
+-- biters, spitters, and pentapods (unit, spider-unit) of any force.
+local TRAVELLERS = {"character", "car", "spider-vehicle", "unit", "spider-unit"}
+
+-- Whether `entity` is in the portal. A car or tank stopped by the barriers behind or beside the lane
+-- has its centre up to two tiles short of the zone, so it counts as soon as its box touches the zone;
+-- everyone else (a spidertron by its body) by the centre.
+local function entering(record, entity)
+  if entity.type ~= "car" then
+    return in_portal(record, entity.position)
+  end
+  local box = entity.bounding_box
+  local x, y = record.entity.position.x + CENTER, record.entity.position.y + CENTER + RING_Z
+  return box.left_top.x < x + PORTAL_HALF_WIDTH and box.right_bottom.x > x - PORTAL_HALF_WIDTH
+    and box.left_top.y < y + PORTAL_FRONT and box.right_bottom.y > y + PORTAL_BACK
+end
+
+-- Updates every gate's barriers and calls `enter(entity, record)` for each traveller in an open portal.
+-- A character in a vehicle travels with the vehicle.
 function Gate.update(enter)
   for _, record in pairs(storage.gates) do
     if record.entity.valid then
       apply(record)
       if Gate.is_open(record) then
-        for _, character in pairs(record.entity.surface.find_entities_filtered({type = "character", area = portal_area(record)})) do
-          if in_portal(record, character.position) and not character.vehicle then
-            enter(character, record)
+        local area = portal_area(record)
+        -- Large enough for a tank's box to reach the zone from its centre.
+        area[1][2], area[2][2] = area[1][2] - 2, area[2][2] + 2
+        for _, entity in pairs(record.entity.surface.find_entities_filtered({type = TRAVELLERS, area = area})) do
+          if entity.valid and not (entity.type == "character" and entity.vehicle) and entering(record, entity) then
+            enter(entity, record)
           end
         end
       end

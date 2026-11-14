@@ -93,6 +93,9 @@ if script.active_mods["bte-stargate-runtime-test"] then
     set_keep_charged = function(id, keep)
       Gate.set_keep_charged(Gate.get(id), keep)
     end,
+    can_enter = function(entity)
+      return Transfer.can_enter(entity)
+    end,
     is_open = function(id)
       return Gate.is_open(Gate.get(id))
     end,

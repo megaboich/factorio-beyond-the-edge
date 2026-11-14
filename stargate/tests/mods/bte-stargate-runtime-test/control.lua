@@ -339,6 +339,109 @@ local steps = {
     local p = storage.traveller.position
     expect("the traveller runs out of the ring and stops (" .. serpent.line(p) .. ")", p.y > 9.6 and p.y < 10.8, true)
     storage.traveller.destroy()
+  end},
+
+  -- Vehicles and enemies, A to B on one surface. A car stopped behind the ring with only its box in the
+  -- zone (its centre 1.7, box to 2.7; the zone starts at 2.5) goes; one parked further back stays. An
+  -- enemy biter and a pentapod strafer (a spider-unit) in the portal go too, as clones.
+  {5, function()
+    storage.car = surface().create_entity({name = "car", position = {1, 1.7}, force = "player"})
+    storage.parked = surface().create_entity({name = "car", position = {1, -3}, force = "player"})
+    storage.car.insert({name = "coal", count = 7})
+    surface().create_entity({name = "small-biter", position = {3, 3.5}, force = "enemy"})
+    surface().create_entity({name = "small-strafer-pentapod", position = {-1, 3.5}, force = "enemy"})
+  end},
+
+  {10, function()
+    expect("a car touching the zone is in transit", storage.car.surface.name, "bte-stargate-limbo")
+    expect("a car short of the zone stays", storage.parked.surface.name, "nauvis")
+    expect("a vehicle waits inactive", storage.car.active, false)
+    local limbo = game.get_surface("bte-stargate-limbo")
+    expect("the biter waits in limbo", limbo.count_entities_filtered({name = "small-biter"}), 1)
+    expect("the strafer waits in limbo", limbo.count_entities_filtered({name = "small-strafer-pentapod"}), 1)
+    expect("the biter has left the portal", surface().count_entities_filtered({name = "small-biter", area = {{-6, -6}, {8, 8}}}), 0)
+    for _, unit in pairs(limbo.find_entities_filtered({type = {"unit", "spider-unit"}})) do
+      expect("units wait inactive", unit.active, false)
+    end
+  end},
+
+  {190, function()
+    local car = storage.car
+    expect("the car arrives on the partner's surface", car.surface.name, "nauvis")
+    local p = car.position
+    -- B's ring is at y 3; the car's box (1 tile from its centre) arrives clear of the zone's front, 4.5.
+    expect("the car arrives in front of the partner (" .. serpent.line(p) .. ")", math.abs(p.x - 21) < 2 and p.y > 5.4 and p.y < 12, true)
+    expect("the car faces south", car.orientation, 0.5)
+    expect("the car is active again", car.active, true)
+    expect("the car keeps its fuel", car.get_item_count("coal"), 7)
+    local near_b = {{15, 3}, {27, 16}}
+    expect("the biter arrives in front of the partner", surface().count_entities_filtered({name = "small-biter", area = near_b}), 1)
+    expect("the strafer arrives in front of the partner", surface().count_entities_filtered({name = "small-strafer-pentapod", area = near_b}), 1)
+    expect("limbo is empty", game.get_surface("bte-stargate-limbo").count_entities_filtered({type = {"car", "unit", "spider-unit"}}), 0)
+    storage.car_arrival = p.y
+  end},
+
+  {60, function()
+    local p = storage.car.position
+    expect("the car drives out of the ring (" .. serpent.line(p) .. ")", p.y > storage.car_arrival + 4, true)
+    for _, entity in pairs(surface().find_entities_filtered({name = {"car", "small-biter", "small-strafer-pentapod"}})) do
+      entity.destroy()
+    end
+    -- Across surfaces: gate C on another surface, a tank with a driver and a passenger, and a
+    -- spidertron with a driver and an old autopilot target.
+    local far = game.create_surface("bte-test-far")
+    far.generate_with_lab_tiles = true
+    far.request_to_generate_chunks({0, 0}, 2)
+    far.force_generate_chunk_requests()
+    storage.c = far.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
+    remote.call("bte-stargate-test", "pair", storage.a.unit_number, storage.c.unit_number)
+    local tank = surface().create_entity({name = "tank", position = {2.5, 3}, force = "player"})
+    tank.insert({name = "coal", count = 9})
+    storage.tank, storage.driver, storage.passenger = tank,
+      surface().create_entity({name = "character", position = {8, 8}, force = "player"}),
+      surface().create_entity({name = "character", position = {9, 8}, force = "player"})
+    tank.set_driver(storage.driver)
+    tank.set_passenger(storage.passenger)
+    local spider = surface().create_entity({name = "spidertron", position = {-0.5, 3}, force = "player"})
+    storage.pilot = surface().create_entity({name = "character", position = {10, 8}, force = "player"})
+    spider.set_driver(storage.pilot)
+    storage.spider = spider
+  end},
+
+  {200, function()
+    local tank, spider = storage.tank, storage.spider
+    expect("the tank crosses to the partner's surface", tank.surface.name, "bte-test-far")
+    expect("its driver stays seated", tank.get_driver(), storage.driver)
+    expect("its passenger stays seated", tank.get_passenger(), storage.passenger)
+    expect("the crew is on the new surface", storage.driver.surface.name .. storage.passenger.surface.name, "bte-test-farbte-test-far")
+    expect("the tank keeps its fuel", tank.get_item_count("coal"), 9)
+    expect("the tank arrives in front of C (" .. serpent.line(tank.position) .. ")", math.abs(tank.position.x - 1) < 2.5 and tank.position.y > 5.7, true)
+    expect("the spidertron crosses too", spider.surface.name, "bte-test-far")
+    expect("its driver stays seated", spider.get_driver(), storage.pilot)
+    local goal = spider.autopilot_destinations[1]
+    expect("the spidertron walks five tiles south (" .. serpent.line(goal) .. ")",
+      goal ~= nil and math.abs(goal.y - spider.position.y) <= 5.01 and goal.y > spider.position.y + 3, true)
+    expect("an arrival is not sent straight back through its gate", remote.call("bte-stargate-test", "can_enter", spider), false)
+    for _, entity in pairs({tank, spider, storage.driver, storage.passenger, storage.pilot}) do
+      entity.destroy()
+    end
+    -- A gate on a surface without gravity takes no car: Space Age cars need gravity.
+    local zero = game.create_surface("bte-test-zero-g")
+    zero.generate_with_lab_tiles = true
+    zero.request_to_generate_chunks({0, 0}, 2)
+    zero.force_generate_chunk_requests()
+    zero.set_property("gravity", 0)
+    storage.z = zero.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
+    remote.call("bte-stargate-test", "pair", storage.a.unit_number, storage.z.unit_number)
+    storage.car = surface().create_entity({name = "car", position = {1, 3}, force = "player"})
+  end},
+
+  {20, function()
+    expect("a car is refused by a surface without gravity", storage.car.surface.name, "nauvis")
+    storage.car.destroy()
+    storage.c.destroy()
+    storage.z.destroy()
+    remote.call("bte-stargate-test", "pair", storage.a.unit_number, storage.b.unit_number)
     local a, b = storage.a, storage.b
     b.die()
     expect("losing the partner unpairs", remote.call("bte-stargate-test", "state", a.unit_number).partner, nil)
@@ -406,7 +509,7 @@ local steps = {
     expect("mined site returns its delivery", bag.get_item_count("tungsten-plate"), 100)
     bag.destroy()
     expect("mining builds nothing", #entities(ASSEMBLING) + #entities(GATE), 0)
-    log("STARGATE_TEST_PASS: filters, exact slots, completion, staged build, replacement, grid snapping, gate pairing, power, circuit, transfer, and mining paths completed")
+    log("STARGATE_TEST_PASS: filters, exact slots, completion, staged build, replacement, grid snapping, gate pairing, power, circuit, transfer, vehicle and enemy transfer, and mining paths completed")
   end}
 }
 
