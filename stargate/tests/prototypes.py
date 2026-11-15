@@ -187,16 +187,18 @@ def check_buildings(t):
         # Never drawn: the gate draws its own track on a ramp (bte-stargate-tracks).
         t.check("station rail is drawn under the ground", set(layers.values()), {"zero"})
     splash = t.raw.get("animation", {}).get("bte-stargate-splash")
-    t.check("each train carriage's splash exists, 16 frames", splash and splash.get("frame_count"), 16)
+    t.check("each train carriage's splash exists, 32 frames", splash and splash.get("frame_count"), 32)
     tracks = t.prototype("simple-entity-with-owner", "bte-stargate-tracks")
     t.check("station track companion exists", tracks is not None, True)
     if tracks:
         t.check("station track is drawn above the floor, under trains", tracks.get("render_layer"), "floor-mechanics")
         t.check("station track collides with nothing", tracks.get("collision_mask", {}).get("layers"), {})
-        t.check("station track has one and two tracks",
-                [v["layers"][0]["filename"].rsplit("stargate-", 1)[-1] for v in tracks.get("pictures", [])], ["rails-single.png", "rails-double.png"])
+        t.check("station track has one track, and two with chevrons for either layout",
+                [[layer["filename"].rsplit("stargate-", 1)[-1] for layer in v["layers"]] for v in tracks.get("pictures", [])],
+                [["rails-single.png"], ["rails-double.png", "chevrons-right.png"], ["rails-double.png", "chevrons-left.png"]])
         for v in tracks.get("pictures", []):
-            t.sprite_sheet("station track", v["layers"][0])
+            for layer in v["layers"]:
+                t.sprite_sheet("station track", layer)
     hidden = t.prototype("straight-rail", "bte-stargate-rail-hidden")
     if hidden:
         t.check("hidden rail is drawn under the ground", set(hidden.get("pictures", {}).get("render_layers", {}).values()), {"zero"})

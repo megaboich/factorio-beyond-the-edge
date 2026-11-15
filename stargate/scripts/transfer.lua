@@ -197,6 +197,11 @@ end
 -- gate whose position (origin) is `origin`.
 local function play(animation, surface, origin, ticks)
   local speed = PASSAGE_FRAMES / ticks
+  -- A bright cyan flash of light on the surroundings, centred on the veil's middle on screen (the
+  -- gate's centre is origin + (1, 1), the ring 2 tiles south, its centre about 1.6 tiles up).
+  local position = origin.x and origin or {x = origin[1], y = origin[2]}
+  rendering.draw_light({sprite = "utility/light_medium", scale = 5, intensity = 1, color = {0.3, 0.85, 1},
+    surface = surface, target = {position.x + 1, position.y + 1.4}, time_to_live = math.min(ticks, 60)})
   return rendering.draw_animation({
     animation = animation, target = origin, surface = surface,
     render_layer = "higher-object-above", animation_speed = speed,

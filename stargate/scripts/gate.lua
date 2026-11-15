@@ -42,6 +42,10 @@ local CAPACITOR = "bte-stargate-capacitor"
 local BODY = "bte-stargate-body"
 local TOP = "bte-stargate-top"
 local VEIL = {veil = "bte-stargate-veil", veil_top = "bte-stargate-veil-top"}
+-- The open veil's cyan light on its surroundings, centred where the veil's middle is drawn: the
+-- ring's centre stands 2.8 tiles high on the ring's line, about 1.6 tiles up on screen.
+local VEIL_LIGHT = {sprite = "utility/light_medium", scale = 5, intensity = 0.55, color = {0.2, 0.8, 1}}
+local VEIL_LIGHT_UP = 1.6
 -- The gate's power (prototypes/entities.lua): the store's capacity, the open portal's upkeep
 -- (1 GW), and the most a closed gate charges at (charge_rate) or an open one refills at beyond its
 -- upkeep (refill), both on top of the leak: 1.05 GW while charging, 1.25 GW while open and refilling.
@@ -166,13 +170,13 @@ local function remove_companions(record)
     end
   end
   record.veil_fx = nil
-  for _, key in pairs({"body", "top", "veil", "veil_top", "lights", "lights_high", "tracks"}) do
+  for _, key in pairs({"body", "top", "veil", "veil_top", "veil_light", "lights", "lights_high", "tracks"}) do
     if record[key] and record[key].valid then
       record[key].destroy()
     end
   end
   record.capacitor, record.body, record.lights, record.lights_high, record.lights_state, record.top = nil, nil, nil, nil, nil, nil
-  record.veil, record.veil_top, record.tracks = nil, nil, nil
+  record.veil, record.veil_top, record.veil_light, record.tracks = nil, nil, nil, nil
 end
 
 -- The gate's store is a power bank (scripts/power_bank.lua, a copy of Warp Drive's; see
@@ -238,6 +242,8 @@ end
 -- bte-stargate-top, the upper arc again, over spidertrons. Variation 1 has cyan lights, 2 red.
 -- Created on demand, so gates from earlier versions get them and lose the render objects they drew.
 local TRACK_MODES = {single = 1, right = 2, left = 2}
+-- The track companion's picture: one track, or two with chevrons for each layout.
+local TRACK_PICTURES = {single = 1, right = 2, left = 3}
 local function show_body(record, red)
   -- The station's track (scripts/railway.lua) is a companion of its own, and the body's picture for
   -- it has the track cut out where it crosses the ring's lower arc (prototypes/entities.lua).
@@ -257,8 +263,9 @@ local function show_body(record, red)
       record.tracks = tracks
     end
   end
-  if record.tracks and record.tracks.graphics_variation ~= mode then
-    record.tracks.graphics_variation = mode
+  local picture = TRACK_PICTURES[record.railway]
+  if record.tracks and record.tracks.graphics_variation ~= picture then
+    record.tracks.graphics_variation = picture
   end
   for key, name in pairs({body = BODY, top = TOP}) do
     local entity = record[key]
@@ -340,6 +347,18 @@ local function show_veil(record, was_open)
       end
       record[key] = nil
     end
+  end
+  local light = record.veil_light
+  if record.open and game.tick >= (record.veil_from or 0) and not (light and light.valid) then
+    local c = center(record)
+    record.veil_light = rendering.draw_light({sprite = VEIL_LIGHT.sprite, scale = VEIL_LIGHT.scale,
+      intensity = VEIL_LIGHT.intensity, color = VEIL_LIGHT.color, surface = record.entity.surface,
+      target = {c.x, c.y + RING_Z - VEIL_LIGHT_UP}})
+  elseif not record.open and light then
+    if light.valid then
+      light.destroy()
+    end
+    record.veil_light = nil
   end
 end
 

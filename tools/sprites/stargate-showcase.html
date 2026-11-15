@@ -263,6 +263,8 @@ function frame(dt) {
   if (metas[model].sheets.floor) sheet(model, "floor");
   // Station-mode track (a companion just above the floor in game), only on the finished gate.
   if (finished && !state.building && state.rails !== "off" && metas[model].sheets[`rails-${state.rails}`]) sheet(model, `rails-${state.rails}`);
+  // Two tracks run as scripts/railway.lua's "right" layout: trains leave on the east lane.
+  if (finished && !state.building && state.rails === "double" && metas[model].sheets["chevrons-right"]) sheet(model, "chevrons-right");
   if ($("shadow").checked) sheet(model, "shadow");
 
   // A station gate's building has its track cut out where it runs over the ring's lower arc.
@@ -331,7 +333,7 @@ function frame(dt) {
 
 // A train through a station gate, as scripts/railway.lua runs it: four carriages (a locomotive and
 // three wagons, 7 tiles apart) driven north up the departure lane at 0.3 tiles a tick, each vanishing
-// once it is wholly behind the veil, with a splash (glow-splash, 16 frames at 2 ticks) and the
+// once it is wholly behind the veil, with a splash (glow-splash, 32 frames at 2 ticks) and the
 // stargate-car-in sound at its lane; then at the partner (this gate standing in for it) each appears
 // behind the veil on the arrival lane with a splash and stargate-car-out and drives out south.
 const TRAIN = { cars: 4, spacing: 7, length: 5.2, speed: 18, height: 1.6 };
@@ -351,11 +353,17 @@ function trainCars(now) {
   let departed = 0;
   for (let i = 0; i < TRAIN.cars; i++) {
     const front = front0 + i * TRAIN.spacing, rear = front + TRAIN.length;
+    // Each splash peaks 16 ticks after it starts, as in scripts/railway.lua: the departing one when
+    // the carriage's centre passes the ring (drawn behind it from then on), the arriving one when
+    // its rear does and it is sent.
+    const lead = TRAIN.speed * 16 / 60;
+    if ((front + rear) / 2 <= RING_Z + TRAIN.speed * 11 / 60 && tr.flash[i] === undefined) { tr.flash[i] = now; sound("car-in"); }
+    if (rear <= RING_Z + lead && tr.come[i] === undefined) { tr.come[i] = now; sound("car-out"); }
+    if (tr.flash[i] !== undefined && now - tr.flash[i] < 1.1) splashes.push({ x: lanes.depart, since: now - tr.flash[i] });
+    if (tr.come[i] !== undefined && now - tr.come[i] < 1.1) splashes.push({ x: lanes.arrive, since: now - tr.come[i] });
     if (rear <= RING_Z) {
       departed++;
       tr.gone[i] ??= now;
-      if (!tr.goneSound[i]) { tr.goneSound[i] = true; sound("car-in"); }
-      splashes.push({ x: lanes.depart, since: now - tr.gone[i] });
     } else cars.push({ x: lanes.depart, front, rear, loco: i === 0 });
   }
   // Arrival: carriage i appears when the departure side sent it, behind the veil (front at the
@@ -363,13 +371,9 @@ function trainCars(now) {
   for (let i = 0; i < TRAIN.cars; i++) {
     const sent = tr.gone[i];
     if (sent === undefined) continue;
-    const since = now - sent - 0.4;
-    if (since < 0) continue;
-    if (!tr.cameSound[i]) { tr.cameSound[i] = true; sound("car-out"); }
     // Coupled behind the carriage before it: it appears where that one was one spacing ago.
-    const lead = now - tr.gone[0] - 0.4;
+    const lead = now - tr.gone[0];
     const front = -5 + lead * TRAIN.speed - i * TRAIN.spacing;
-    if (since < 0.6) splashes.push({ x: lanes.arrive, since });
     if (front < 16) cars.push({ x: lanes.arrive, front: front + TRAIN.length, rear: front, loco: i === 0, out: true });
   }
   if (departed === TRAIN.cars && tr.gone[TRAIN.cars - 1] !== undefined && now - tr.gone[TRAIN.cars - 1] > 2.5) state.train = null;
@@ -464,7 +468,7 @@ document.querySelectorAll("[data-gate]").forEach((b) => b.onclick = () => setGat
 document.querySelectorAll("[data-rails]").forEach((b) => b.onclick = () => { state.rails = b.dataset.rails; refreshButtons(); });
 $("build").onclick = () => { state.building = state.time; state.transfer = null; refreshButtons(); };
 $("transfer").onclick = () => { state.transfer = { at: state.time }; };
-$("train").onclick = () => { state.train = { at: state.time, gone: [], goneSound: [], cameSound: [] }; };
+$("train").onclick = () => { state.train = { at: state.time, gone: [], flash: [], come: [] }; };
 $("pause").onclick = () => { state.paused = !state.paused; $("pause").textContent = state.paused ? "▶" : "⏸"; };
 
 load().then(() => { refreshButtons(); requestAnimationFrame(tick); window.previewReady = true; })

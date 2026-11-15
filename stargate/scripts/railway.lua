@@ -21,8 +21,8 @@
 -- train's schedule, interrupts, and group, its current stop moved past the gate's station, and leaves
 -- in the mode it came in.
 --
--- Each carriage gets its own splash and sound at its lane on both gates (splash()), covering the
--- moment it vanishes and appears.
+-- Each carriage gets its own splash and sound at its lane on both gates (splash()), started early
+-- enough that the flash is at its brightest as it vanishes and appears.
 --
 -- Unlike RiftRail, the schedule is copied only once, to the complete train, so cargo interrupts never
 -- see a half-arrived train, and no leading locomotive is needed: the script drives the train while
@@ -265,7 +265,9 @@ end
 -- end, its rear still behind the ring's plane), so it drives out through the veil.
 local function spawn_position(target, name)
   local c = center(target)
-  return {x = c.x + layout(target).arrive, y = c.y + RAIL_END + half_length(name) - 1}
+  -- Half a tile further south than the hidden rails' end allows, so no part of the carriage shows
+  -- above the ring's top on screen; it still lies wholly behind the veil.
+  return {x = c.x + layout(target).arrive, y = c.y + RAIL_END + half_length(name) - 0.5}
 end
 
 -- Whether the arrival lane has room for a carriage of kind `name`: the previous clone has moved a
@@ -309,11 +311,11 @@ local function receiving(target)
   return false
 end
 
--- One carriage meeting the veil at lane `dx` of `record`'s gate: the splash animation (16 frames, two
+-- One carriage meeting the veil at lane `dx` of `record`'s gate: the splash animation (32 frames, two
 -- ticks each, starting on its first frame whatever the tick), centred on the lane and covering the
 -- column of the veil the carriage fills on screen as it vanishes or appears, and a short sound there.
-local SPLASH_FRAMES = 16
-local SPLASH_TICKS = 32
+local SPLASH_FRAMES = 32
+local SPLASH_TICKS = 64
 local function splash(record, dx, sound)
   local gate = record.entity
   local speed = SPLASH_FRAMES / SPLASH_TICKS
@@ -324,7 +326,19 @@ local function splash(record, dx, sound)
   })
   local c = center(record)
   gate.surface.play_sound({path = sound, position = {c.x + dx, c.y + RING_PLANE}})
+  -- A short bright cyan light on the surroundings while the splash plays (scripts/gate.lua VEIL_LIGHT).
+  rendering.draw_light({sprite = "utility/light_medium", scale = 3.5, intensity = 0.9, color = {0.3, 0.85, 1},
+    surface = gate.surface, target = {c.x + dx, c.y + RING_PLANE - 1.6}, time_to_live = 48})
 end
+
+-- The splash brightens for its first quarter before it peaks, so each starts this many ticks before
+-- the moment it should hide: the arriving carriage appearing, when it is sent, and the departing one
+-- vanishing, which on screen happens earlier, once its centre passes the ring's line and it is drawn
+-- behind the ring and the veil.
+local SPLASH_PEAK_TICKS = 16
+-- The departing carriage is seen to vanish a little after its centre passes the line, so its splash
+-- starts later than the peak alone would say (tuned in game).
+local DEPART_LEAD_TICKS = 11
 
 local function start(record, target, train, car)
   local schedule = train.get_schedule()
@@ -419,8 +433,6 @@ local function send(transfer, record, target, car)
       player.opened = clone
     end
   end
-  splash(record, layout(record).depart, "bte-stargate-car-in")
-  splash(target, layout(target).arrive, "bte-stargate-car-out")
   car.destroy()
   storage.rail_guard[clone.unit_number] = game.tick + GUARD_TICKS
   transfer.last = clone
@@ -518,8 +530,20 @@ function Railway.update()
       if not train then
         finish(index, transfer)
       else
-        local front, _, rear = leading(train)
+        local front, front_y, rear = leading(train)
         local c = center(record)
+        local lead = SPEED * SPLASH_PEAK_TICKS
+        transfer.flashed = transfer.flashed or {}
+        local flashed = transfer.flashed[front.unit_number] or 0
+        if flashed < 1 and (front_y + rear) / 2 <= c.y + RING_PLANE + SPEED * DEPART_LEAD_TICKS then
+          flashed = 1
+          splash(record, layout(record).depart, "bte-stargate-car-in")
+        end
+        if flashed < 2 and rear <= c.y + RING_PLANE + lead then
+          flashed = 2
+          splash(target, layout(target).arrive, "bte-stargate-car-out")
+        end
+        transfer.flashed[front.unit_number] = flashed
         if rear <= c.y + RING_PLANE and room(transfer, target, front.name) then
           local rest = front.get_connected_rolling_stock(defines.rail_direction.front)
           if not rest or rest == front then

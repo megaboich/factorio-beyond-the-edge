@@ -81,10 +81,10 @@ export async function materials() {
     // The bed under the track: riveted dark steel deck plates, with grating between the rails.
     ballast: textured({ color: 0x2c2f34, panels: 3, rivets: true, grime: 0.3, scratches: 0.4, scale: 1, metalness: 0.65, roughness: 0.45, seed: 93 }),
     ballastInner: textured({ color: 0x383c42, holes: 10, grime: 0.3, scale: 1.2, metalness: 0.6, roughness: 0.5, seed: 94 }),
-    sleeper: textured({ color: 0x6f5426, grime: 0.45, scratches: 0.7, scale: 0.6, metalness: 0, roughness: 0.85, seed: 95 }),
+    sleeper: textured({ color: 0x55585c, grime: 0.45, scratches: 0.7, scale: 0.6, metalness: 0, roughness: 0.85, seed: 95 }),
     backplate: textured({ color: 0x77736e, grime: 0.4, rust: 0.2, scale: 1, metalness: 0.5, roughness: 0.6, seed: 96 }),
     // Matte enough that no rail catches a bright reflection where the light hits it.
-    rail: Object.assign(textured({ color: 0x7e8286, grime: 0.15, scratches: 0.3, scale: 1, metalness: 0.4, roughness: 0.7, seed: 97 }), { envMapIntensity: 0.4 }),
+    rail: Object.assign(textured({ color: 0x5f9cc0, grime: 0.15, scratches: 0.3, scale: 1, metalness: 0.4, roughness: 0.7, seed: 97 }), { envMapIntensity: 0.4 }),
     redSteel: textured({ color: 0x5e221c, panels: 1, grime: 0.4, rust: 0.1, scratches: 0.35, scale: 1, metalness: 0.45, roughness: 0.55, seed: 99 }),
     frost: textured({ color: 0xa9c4cf, panels: 1, grime: 0.15, scratches: 0.2, scale: 1, metalness: 0.55, roughness: 0.3, seed: 91 }),
     glow: Object.assign(new THREE.MeshStandardMaterial({ color: 0x0c2b33, emissive: CYAN, emissiveIntensity: 1.4, roughness: 0.4 }), {
@@ -316,8 +316,11 @@ const GAUGE = 0.5625;
 
 // The track's height on its ramp: level with the ground at the gate's edge, rising gently to
 // RAMP_TOP at the ring, so it crosses the basin and the ring's lower arc above them.
-const RAMP_TOP = 0.45;
-const trackHeight = (z) => lerp(GROUND, RAMP_TOP, (HALF - z) / (HALF - TRACK_END));
+const RAMP_TOP = DECK + 0.05;
+const trackHeight = (z) => lerp(GROUND, RAMP_TOP, Math.min(1, (HALF - z) / (HALF - TRACK_END)));
+// Where the track ends behind the ring: level at RAMP_TOP through the ring and on behind it, far
+// enough that the ring's upper part hides its end on screen.
+const TRACK_FAR = RING_Z - 5.406;
 
 /**
  * Track along lane `x` after the game's rail ramps, tagged `userData.track = x`: a riveted steel deck
@@ -327,11 +330,12 @@ const trackHeight = (z) => lerp(GROUND, RAMP_TOP, (HALF - z) / (HALF - TRACK_END
  * rails join it, over the basin and the ring's lower arc into the ring.
  */
 function laneTrack(root, m, x) {
-  // Unshadowed, so both lanes look alike: in game the gate's shadow layer falls over the track anyway.
-  const add = (mesh) => { mesh.userData.track = x; mesh.userData.unshadowed = true; return mesh; };
+  // Its own layer is rendered with the building hidden (models/stargate.js), so the track shades only
+  // itself and both lanes look alike: in game the gate's shadow layer falls over it anyway.
+  const add = (mesh) => { mesh.userData.track = x; return mesh; };
   const step = 0.25;
   const base = (z) => Math.min(floorHeight(x, z), trackHeight(z)) - 0.05;
-  for (let z = TRACK_END; z < HALF - 0.001; z += step) {
+  for (let z = TRACK_FAR; z < HALF - 0.001; z += step) {
     const zc = z + step / 2;
     const top = trackHeight(zc);
     // The core under the track, set back between the trusses so it reads as shadowed structure.
@@ -341,7 +345,7 @@ function laneTrack(root, m, x) {
   // wide with a raised inner bed 1.15 wide, ties 1.5 long and 0.16 thick every 0.406, backplates and
   // rail heads 0.5625 either side of the centre.
   const along = (top, w, h, material) => {
-    for (let z = TRACK_END; z < HALF - 0.001; z += step) {
+    for (let z = TRACK_FAR; z < HALF - 0.001; z += step) {
       const zc = z + step / 2;
       add(part(root, new THREE.BoxGeometry(w, h, step + 0.01), material, [x, trackHeight(zc) + top - h / 2, zc]));
     }
@@ -351,21 +355,21 @@ function laneTrack(root, m, x) {
   // Steel lips along the deck's edges, with a cyan marker stud every tile.
   for (const side of [-1, 1]) {
     const lip = [];
-    for (let z = TRACK_END; z <= HALF + 0.001; z += 0.25) lip.push([x + side * 0.98, trackHeight(z) + 0.07, z]);
+    for (let z = TRACK_FAR; z <= HALF + 0.001; z += 0.25) lip.push([x + side * 0.98, trackHeight(z) + 0.07, z]);
     add(tube(root, lip, 0.04, m.plate, 48));
-    for (let z = HALF - 0.5; z > TRACK_END + 0.3; z -= 1) {
+    for (let z = HALF - 0.5; z > TRACK_FAR + 0.3; z -= 1) {
       add(part(root, new THREE.BoxGeometry(0.08, 0.03, 0.14), m.glow, [x + side * 0.86, trackHeight(z) + 0.065, z]));
     }
   }
   // From the gate's edge inwards, the first tie flush with it; tall enough to read as blocks with
   // shaded sides.
-  for (let z = HALF - 0.08; z > TRACK_END + 0.08; z -= 0.406) {
+  for (let z = HALF - 0.08; z > TRACK_FAR + 0.08; z -= 0.406) {
     add(part(root, new THREE.BoxGeometry(1.5, 0.1, 0.16), m.sleeper, [x, trackHeight(z) + 0.1, z]));
   }
   for (const dx of [-GAUGE, GAUGE]) {
     const plates = [], heads = [];
     // Run a little past the edge: raised above the deck, they would otherwise end short of it on screen.
-    for (let z = TRACK_END; z <= HALF + 0.21; z += 0.25) {
+    for (let z = TRACK_FAR; z <= HALF + 0.21; z += 0.25) {
       plates.push([x + dx, trackHeight(z) + 0.13, z]);
       heads.push([x + dx, trackHeight(z) + 0.17, z]);
     }
@@ -373,12 +377,13 @@ function laneTrack(root, m, x) {
     add(tube(root, heads, 0.035, m.rail, 64));
   }
   // The side trusses: a top chord level with the ballast, a bottom chord on the floor, posts every
-  // tile, and a diagonal in each bay.
-  for (const dx of [-1, 1]) {
+  // tile, and a diagonal in each bay. Off while trying the track without them.
+  const TRUSSES = false;
+  for (const dx of TRUSSES ? [-1, 1] : []) {
     const sx = x + dx;
     const chord = (y) => {
       const points = [];
-      for (let z = TRACK_END; z <= HALF - 0.6 + 0.001; z += 0.25) points.push([sx, y(z), z]);
+      for (let z = TRACK_FAR; z <= HALF - 0.6 + 0.001; z += 0.25) points.push([sx, y(z), z]);
       add(tube(root, points, 0.07, m.redSteel, 48));
     };
     chord((z) => trackHeight(z) + 0.06);
@@ -396,8 +401,36 @@ function laneTrack(root, m, x) {
   }
 }
 
+// Direction chevrons for a two-track station: low steel plates on the concrete either side of each
+// lane, pointing the way its trains run. Tagged `userData.chevrons` with the layout they belong to:
+// "right" has trains leave on the east lane (x = +2) and arrive on the west, "left" the reverse
+// (stargate/scripts/railway.lua LAYOUTS).
+const CHEVRON = { offset: 1.32, arm: 0.3, width: 0.08, height: 0.07, rows: [6.45, 5.45, 4.6] };
+function chevrons(root, m) {
+  for (const layout of ["right", "left"]) {
+    for (const lane of TRACK_LANES.double) {
+      const departs = (lane > 0) === (layout === "right");
+      // North (-z, into the ring) on the departure lane, south on the arrival lane.
+      const dir = departs ? -1 : 1;
+      for (const side of [-1, 1]) for (const z of CHEVRON.rows) {
+        const x = lane + side * CHEVRON.offset;
+        const y = floorHeight(x, z) + CHEVRON.height / 2;
+        for (const s of [-1, 1]) {
+          // Each arm runs from the tip back and out to one side at 45 degrees, centred on the row so
+          // chevrons pointing either way line up.
+          const h = CHEVRON.arm / Math.SQRT2 / 2;
+          const mesh = part(root, new THREE.BoxGeometry(CHEVRON.arm, CHEVRON.height, CHEVRON.width), m.plate,
+            [x + s * h, y, z], [0, s * dir * Math.PI / 4, 0]);
+          mesh.userData.chevrons = layout;
+        }
+      }
+    }
+  }
+}
+
 function tracks(root, m, lanes) {
   for (const x of lanes) laneTrack(root, m, x);
+  if (lanes.some((x) => TRACK_LANES.double.includes(x))) chevrons(root, m);
 }
 
 /** Floor lights at the corners. */
@@ -663,7 +696,7 @@ export function drawSplash(root, t) {
   const image = ctx.createImageData(VEIL_SIZE, VEIL_SIZE);
   // A carriage behind the veil, about to vanish or just appeared, fills its lane's column of the
   // veil on screen from the deck nearly to the ring's top (5.2 tiles long, 1.6 high, seen at 50
-  // degrees), so the glow covers that column, a little wider than the carriage (unit disc, y down),
+  // degrees), so the glow covers that column, wider than the carriage (unit disc, y down),
   // centred a quarter of a carriage below the veil's centre, where the change shows most.
   const oy = 0.39;
   const flare = Math.exp(-(((t - 0.25) / 0.16) ** 2));
@@ -673,14 +706,16 @@ export function drawSplash(root, t) {
     for (let px = 0; px < VEIL_SIZE; px++) {
       const x = (px + 0.5) / VEIL_SIZE * 2 - 1;
       const y = (py + 0.5) / VEIL_SIZE * 2 - 1;
-      // A tall rounded column, about two tiles wide, the whole height of the veil.
-      const d = Math.hypot(x / 0.24, ((y - oy) / 0.95) ** 2);
-      let v = Math.exp(-d * d * 1.5) * (0.15 + 0.5 * flare);
-      v += Math.exp(-(((d * 0.2 - ring) / 0.035) ** 2)) * 0.45 * fade * Math.min(1, t * 6);
+      // A tall soft column whose light thins out gradually instead of ending at a visible edge.
+      const d = Math.hypot(x / 0.5, (y - oy) / 1.8);
+      const body = Math.exp(-d * d * 1.5);
+      let v = body * (0.15 + 0.5 * flare);
+      v += Math.exp(-(((d * 0.2 - ring) / 0.08) ** 2)) * 0.45 * fade * Math.min(1, t * 6) * Math.min(1, body * 4);
       v *= fade;
-      // Inside the veil only, as the carriage vanishes and appears only there.
-      const rim = Math.max(0, Math.min(1, (1 - Math.hypot(x, y)) * 40));
-      v = 1.4 * Math.tanh(v / 1.4) * rim;
+      // Inside the veil only, as the carriage vanishes and appears only there, fading out over the
+      // veil's outer quarter rather than cut at its rim.
+      const edge = Math.max(0, Math.min(1, (1 - Math.hypot(x, y)) / 0.25));
+      v = 1.4 * Math.tanh(v / 1.4) * edge * edge * (3 - 2 * edge);
       const i = (py * VEIL_SIZE + px) * 4;
       image.data[i] = Math.min(255, 255 * (0.35 * v + 0.6 * Math.max(0, v - 0.6)));
       image.data[i + 1] = Math.min(255, 255 * (0.75 * v));

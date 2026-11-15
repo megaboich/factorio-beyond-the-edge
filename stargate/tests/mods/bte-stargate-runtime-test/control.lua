@@ -519,7 +519,9 @@ local steps = {
     remote.call("bte-stargate-test", "set_station", g2.unit_number, "left")
     expect("two lanes of three rails", #ra.find_entities_filtered({name = "bte-stargate-rail"}), 6)
     local tracks = ra.find_entities_filtered({name = "bte-stargate-tracks", area = {{-8, -8}, {10, 10}}})
-    expect("a two-track station draws its track", #tracks == 1 and tracks[1].graphics_variation, 2)
+    expect("a two-track station draws its track, chevrons for its layout", #tracks == 1 and tracks[1].graphics_variation, 2)
+    local partner_tracks = rb.find_entities_filtered({name = "bte-stargate-tracks", area = {{-8, -8}, {10, 10}}})
+    expect("the left layout has its own chevrons", #partner_tracks == 1 and partner_tracks[1].graphics_variation, 3)
     local body = ra.find_entities_filtered({name = "bte-stargate-body", area = {{-8, -8}, {10, 10}}})[1]
     expect("its body has the track cut out (two tracks, red while charging)", body.graphics_variation, 6)
     expect("and three hidden behind the ring", #ra.find_entities_filtered({name = "bte-stargate-rail-hidden"}), 6)

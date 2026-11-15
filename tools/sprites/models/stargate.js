@@ -60,7 +60,7 @@ const OPENING_FRAMES = 30;
 const CLOSING_FRAMES = 18;
 // The passage plays once over two loops (128 ticks in game, scripts/transfer.lua TRANSIT_TICKS).
 const PASSAGE_FRAMES = 32;
-const SPLASH_FRAMES = 16;
+const SPLASH_FRAMES = 32;
 
 export default {
   tiles: [14, 14],
@@ -91,6 +91,9 @@ export default {
     // (stargate/scripts/railway.lua); hidden from every other layer.
     { name: "rails-single", tag: "rails", variant: "rails-single", frames: 1 },
     { name: "rails-double", tag: "rails", variant: "rails-double", frames: 1 },
+    // The two-track station's direction chevrons, one picture per layout, drawn over its track.
+    { name: "chevrons-right", tag: "rails", variant: "chevrons-right", frames: 1 },
+    { name: "chevrons-left", tag: "rails", variant: "chevrons-left", frames: 1 },
     // The building with the track cut out where it passes over the ring's lower arc into the ring,
     // so the track (drawn under the building) shows there: main for a station gate.
     { name: "main-single", tag: "body", variant: "body-single", frames: 1 },
@@ -100,7 +103,7 @@ export default {
     { name: "glow-lights-double", tag: "light", glow: true, variant: "lights-double", frames: 1 },
     { name: "glow-lights-red-single", tag: "light", glow: true, variant: "alarm-single", frames: 1 },
     { name: "glow-lights-red-double", tag: "light", glow: true, variant: "alarm-double", frames: 1 },
-    // One train carriage passing the veil, drawn by scripts/railway.lua at its lane, 16 frames at 2 ticks.
+    // One train carriage passing the veil, drawn by scripts/railway.lua at its lane, 32 frames at 2 ticks.
     { name: "glow-splash", tag: "veil", glow: true, variant: "splash", frames: SPLASH_FRAMES, span: 0.5 },
     // Drawn over the veil by script while someone passes through.
     { name: "glow-passage", tag: "veil", glow: true, variant: "passage", frames: PASSAGE_FRAMES, span: 2, preview: { variant: "passage" } }
@@ -156,11 +159,21 @@ export default {
       const body = String(name).startsWith("body-");
       // A station's lights: "lights-<mode>" cyan, "alarm-<mode>" red.
       const station = /^(lights|alarm)-(single|double)$/.exec(String(name));
-      if (track !== undefined) {
+      const chevrons = mesh.userData.chevrons;
+      if (chevrons !== undefined) {
+        // Only in its own layer: flat on the floor, it hides nothing in the building.
+        mesh.visible = name === `chevrons-${chevrons}`;
+        if (mesh.visible) mesh.material = mesh.userData.railMaterial ??= Object.assign(mesh.material.clone(), { userData: { tag: "rails" } });
+      } else if (String(name).startsWith("chevrons-")) {
+        mesh.visible = false;
+      } else if (track !== undefined) {
         // Shown in its own layer, and untagged in the building's and the lights', where it hides them.
         const mode = String(name).startsWith("rails-") ? String(name).slice(6) : body ? String(name).slice(5) : station?.[2];
         mesh.visible = (TRACK_LANES[mode] ?? []).includes(track);
         if (mesh.visible && !body && !station) mesh.material = mesh.userData.railMaterial ??= Object.assign(mesh.material.clone(), { userData: { tag: "rails" } });
+      } else if (String(name).startsWith("rails-")) {
+        // The track's own layer: nothing else, so no part of the building shadows it.
+        mesh.visible = false;
       } else if (station) {
         if (light) mesh.material = lightMaterial(mesh.material, station[1] === "lights" ? "cyan" : "alarm");
       } else if (body) {
@@ -183,8 +196,17 @@ export default {
         mesh.material = lightMaterial(mesh.material, String(name));
       }
     });
+    // A station gate's building is cut wherever the veil's disc lies on screen, so the open veil
+    // shows its whole oval over the track and the ring's lower arc alike, whichever the game draws
+    // first (render.js `cutsLayers`).
+    const station = /^body-(single|double)$/.test(String(name));
     root.traverse((object) => {
-      if (object.isMesh && object.userData.original?.userData.tag === "veil") object.visible = VEILS.includes(name) || name === "passage" || name === "splash";
+      if (!object.isMesh || object.userData.original?.userData.tag !== "veil") return;
+      object.visible = VEILS.includes(name) || name === "passage" || name === "splash" || station;
+      if (station) {
+        object.material = object.userData.cutMaterial ??= Object.assign(object.material.clone(), { userData: { cutsLayers: true } });
+        object.renderOrder = -10;
+      }
     });
     // The passage is drawn whole, by script.
     root.userData.veil.material.clippingPlanes = !VEILS.includes(name) ? null : name.endsWith("-high") ? topClip : lowClip;

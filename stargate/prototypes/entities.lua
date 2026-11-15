@@ -238,12 +238,16 @@ local function companion(name, render_layer, picture, lights)
     random_variation_on_create = false
   }
   if lights == "track" then
-    -- The station track (scripts/railway.lua): variation 1 one track, 2 two tracks.
-    entity.pictures = {}
-    for _, mode in pairs({"single", "double"}) do
-      entity.pictures[#entity.pictures + 1] = {layers = {util.sprite_load(gate_sprites .. "rails-" .. mode,
-        {scale = 0.5, priority = "high", shift = {0, -BODY}})}}
+    -- The station track (scripts/railway.lua): variation 1 one track, 2 and 3 two tracks with
+    -- chevrons for the "right" and "left" layouts, pointing the way each lane's trains run.
+    local function track(name)
+      return util.sprite_load(gate_sprites .. name, {scale = 0.5, priority = "high", shift = {0, -BODY}})
     end
+    entity.pictures = {
+      {layers = {track("rails-single")}},
+      {layers = {track("rails-double"), track("chevrons-right")}},
+      {layers = {track("rails-double"), track("chevrons-left")}}
+    }
   elseif lights and picture == "main" then
     -- Cyan and red, for no station track, one track, and two tracks: the station's pictures have the
     -- track cut out of the building where it runs over the ring's lower arc, and their lights hidden
@@ -318,7 +322,7 @@ data:extend({passage, arrival})
 
 -- One train carriage passing the veil (models/stargate.js, glow-splash): SPLASH_FRAMES frames at two
 -- ticks each, drawn once at the carriage's lane by scripts/railway.lua as it vanishes or appears.
-local SPLASH_FRAMES = 16
+local SPLASH_FRAMES = 32
 local splash = sprite(gate_sprites .. "glow-splash", {
   frame_count = SPLASH_FRAMES,
   blend_mode = "additive",
