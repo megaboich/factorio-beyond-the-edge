@@ -58,6 +58,9 @@ script.on_nth_tick(UPDATE_TICKS, function()
   Gate.prune()
   Gui.update()
 end)
+-- Gates fed in full run their steady draw without the script (scripts/power_bank.lua, direct mode);
+-- this checks the network gave it.
+script.on_nth_tick(60, Gate.check_power)
 script.on_nth_tick(Gate.TRANSFER_TICKS, function()
   Gate.update(Transfer.start)
   Railway.check()
@@ -142,6 +145,9 @@ if script.active_mods["bte-stargate-runtime-test"] then
     end,
     bank = function(id)
       return Gate.get(id).bank
+    end,
+    power_flow = function(id)
+      return Gate.power_flow(Gate.get(id))
     end,
     request = function(id)
       return Gate.request(Gate.get(id))

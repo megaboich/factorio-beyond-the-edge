@@ -16,6 +16,8 @@ end
 -- The power-sharing case (see its steps).
 SHARE = {supply = 400e6, load = 300e6, gates = 3}
 SHARE_TICKS = 900
+-- The factory beside the direct-mode gates.
+DIRECT_LOAD = 300e6
 
 local function surface()
   return game.surfaces.nauvis
@@ -499,6 +501,56 @@ local steps = {
     storage.share = nil
   end},
 
+  -- Direct mode (scripts/power_bank.lua): two paired, open gates beside a 300 MW factory on a 3 GW
+  -- supply hand their steady draw to the engine once full and fed for five seconds, and stay so;
+  -- cutting the supply below the total sends them back to the adaptive request within a check, and
+  -- the factory keeps its power.
+  {5, function()
+    local s = game.create_surface("bte-test-direct")
+    s.generate_with_lab_tiles = true
+    s.request_to_generate_chunks({0, 0}, 3)
+    s.force_generate_chunk_requests()
+    s.create_entity({name = "substation", position = {-8, -6}, force = "player"})
+    s.create_entity({name = "substation", position = {8, -6}, force = "player"})
+    local source = s.create_entity({name = "bte-stargate-test-power", position = {0, -10}, force = "player"})
+    source.power_production, source.electric_buffer_size = 3e9 / 60, 3e9 / 60
+    local load = s.create_entity({name = "bte-stargate-test-load", position = {0, -8}, force = "player"})
+    load.power_production, load.power_usage, load.electric_buffer_size = 0, DIRECT_LOAD / 60, DIRECT_LOAD / 60
+    local a = s.create_entity({name = GATE, position = {-8, 0}, force = "player", raise_built = true})
+    local b = s.create_entity({name = GATE, position = {8, 0}, force = "player", raise_built = true})
+    remote.call("bte-stargate-test", "pair", a.unit_number, b.unit_number)
+    storage.direct = {gates = {a, b}, source = source, load = load, fed = 0, n = 0}
+  end},
+  {600, function()
+    local direct = storage.direct
+    for _, gate in pairs(direct.gates) do
+      expect("an open gate fed in full goes direct", remote.call("bte-stargate-test", "bank", gate.unit_number).direct ~= nil, true)
+      -- The window's figures: the test's 30 MW upkeep and the full 0.3 GJ store's 1.5 MW leak, and
+      -- nothing left to charge.
+      local flow = remote.call("bte-stargate-test", "power_flow", gate.unit_number)
+      expect("the window shows the upkeep (" .. flow.upkeep .. ")", math.abs(flow.upkeep - 30e6) < 1e3, true)
+      expect("the window shows the leak (" .. flow.leak .. ")", math.abs(flow.leak - 1.5e6) < 1e3, true)
+      expect("the window shows no charging (" .. flow.charging .. ")", flow.charging < 1e3, true)
+    end
+    -- The factory and the gates' upkeep (about 66 MW with the test's figures) on 330 MW.
+    direct.source.power_production, direct.source.electric_buffer_size = 330e6 / 60, 330e6 / 60
+    direct.cut = true
+  end},
+  {90, function()
+    local direct = storage.direct
+    for _, gate in pairs(direct.gates) do
+      local bank = remote.call("bte-stargate-test", "bank", gate.unit_number)
+      expect("a direct gate short of power returns to the adaptive request", bank.direct, nil)
+      expect("its shortfall comes out of the store", bank.charge < 0.3e9 * 0.999, true)
+    end
+    local fed = direct.fed / direct.n
+    expect("the factory keeps its power once the gates back off (" .. fed .. ")", fed > 0.98, true)
+    for _, gate in pairs(direct.gates) do
+      gate.destroy()
+    end
+    storage.direct = nil
+  end},
+
   -- Station mode: gate R1 on one surface sends a train to R2 on another. R1 departs on its right lane
   -- (x 3) and R2 receives on its left-mode arrival lane (also x 3); vanilla rails lead south from both.
   {5, function()
@@ -673,6 +725,14 @@ script.on_event(defines.events.on_tick, function()
       share.fed, share.got, share.n = share.fed + fed, share.got + got, share.n + 1
       share.lost = (share.lost or 0) + (1 - fed) * SHARE.load / 60
     end
+  end
+  local direct = storage.direct
+  -- Up to a second can pass before the check finds the shortage; the factory is judged from then on,
+  -- including the few ticks the adaptive request takes to back off.
+  if direct and direct.cut and not remote.call("bte-stargate-test", "bank", direct.gates[1].unit_number).direct
+    and not remote.call("bte-stargate-test", "bank", direct.gates[2].unit_number).direct then
+    direct.fed = direct.fed + direct.load.energy / direct.load.electric_buffer_size
+    direct.n = direct.n + 1
   end
   for _, entity in pairs(surface().find_entities_filtered({name = ASSEMBLING})) do
     storage.stages_seen = storage.stages_seen or {}

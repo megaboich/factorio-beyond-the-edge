@@ -656,9 +656,9 @@ local function update_active_warp(record, platform, direction, charge_buffer)
   -- refills. Delivery below the support and the leak means the reserve is draining: hold the
   -- level, and leave warp when it runs dry. Otherwise climb, unless the bank fell short recently.
   if game.tick >= (record.support_check_after or 0) then
-    -- What reaches the reserve after conversion losses, against the support and the leak of a
-    -- full reserve (the level a refilled reserve must hold).
-    local stored_watts = delivered_watts * PowerBank.EFFICIENCY
+    -- What reaches the reserve, against the support and the leak of a full reserve (the level a
+    -- refilled reserve must hold).
+    local stored_watts = delivered_watts
     local watts_per_level = support_watts_per_level(platform)
     local leak = PowerBank.leak(charge)
     local power_limit = watts_per_level > 0 and math.max(0, stored_watts - leak) / watts_per_level or 0
@@ -998,8 +998,7 @@ function Warp.snapshot(record)
     -- How long the current reserve would carry a complete power outage during warp.
     -- The level's support and the leak (a share of what is stored) both come out of the reserve.
     outage_seconds = PowerBank.cover_seconds(stored_charge, support_required),
-    power_ready = (record.support_power or 0) * PowerBank.EFFICIENCY
-      >= support_required * SUPPORT_POWER_TOLERANCE,
+    power_ready = (record.support_power or 0) >= support_required * SUPPORT_POWER_TOLERANCE,
     cooldown_ready = game.tick >= record.cooldown_until,
     cooldown_seconds = math.max(0, record.cooldown_until - game.tick) / TICKS_PER_SECOND
   }

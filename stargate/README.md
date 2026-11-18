@@ -74,16 +74,17 @@ Each gate runs on its own **power bank**, a `10 GJ` store of capacitors charged 
 | --- | --- |
 | Store | `10 GJ` of superconducting capacitors, the gate's alone: it powers nothing else and is not shown as accumulator storage |
 | Leak | 0.5 % of the charge a second (`50 MW` when full); a store left alone fades to a third in 200 seconds |
-| Efficiency | 95 % of the power drawn reaches the store |
-| Charging, closed | up to `1.105 GW`: `1 GW` into the store plus the leak; about 10 seconds from empty |
+| Charging, closed | up to `1.05 GW`: `1 GW` into the store plus the leak; about 10 seconds from empty |
 | Opening | needs a full store and spends `8 GJ` of it, leaving `2 GJ` |
-| Open | `1 GW` upkeep from the store; draws up to `1.316 GW` (upkeep, leak, and `200 MW` to refill), `1.105 GW` once full again |
+| Open | `1 GW` upkeep from the store; draws up to `1.25 GW` (upkeep, leak, and `200 MW` to refill), `1.05 GW` once full again |
 
 A gate that is switched on and allowed by its circuit condition opens once its store is full: the veil forms in its ring with a rush and a shimmer. Right after opening, the `2 GJ` left carries the upkeep for two seconds on its own, and the network refills the store while the gate stays open, in about 37 seconds with enough spare power. If the network cannot keep up, the store drains, and when it runs dry the gate closes and must charge fully before it opens again.
 
-The gate never takes power your factory needs: it asks the network for a little more every tick while it gets everything it asks for, backs off at once when the network falls short, and waits two seconds before asking again, so your machines see at most a brief dip. Several gates on one network share the spare power between them. Like any machine, it is fed by your accumulators when the generators fall short.
+The gate never takes power your factory needs: it asks the network for a little more every tick while it gets everything it asks for, backs off at once when the network falls short, and waits two seconds before asking again, so your machines see at most a brief dip. Several gates on one network share the spare power between them. Like any machine, it is fed by your accumulators when the generators fall short. A full gate fed without a break for five seconds draws its steady need without any script work, and returns to asking tick by tick within a second of a shortage.
 
-A gate switched off or closed by its circuit condition stops charging and its store runs down, unless **Keep charged when deactivated** is ticked in its window: then it keeps the store full (`52.6 MW`) and opens as soon as it is activated again.
+The gate's window shows what it draws from the network now, in three lines: keeping the portal open, charging the store, and covering the store's leak.
+
+A gate switched off or closed by its circuit condition stops charging and its store runs down, unless **Keep charged when deactivated** is ticked in its window: then it keeps the store full (`50 MW`) and opens as soon as it is activated again.
 
 The gate's status lights are cyan, and turn red while a switched-on gate charges, or while an open gate gets less than its upkeep. The window shows the charge and why the gate is closed.
 

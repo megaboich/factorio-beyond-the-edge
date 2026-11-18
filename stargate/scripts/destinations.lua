@@ -29,8 +29,22 @@ function Destinations.planets(force)
   return planets
 end
 
+-- Asked for every unpaired open gate every few ticks, and each answer walks every planet (about
+-- 40 microseconds in a real save), so it is kept for a second. In storage, not a module local, so
+-- every multiplayer client gives the same answer.
+local ANY_TICKS = 60
 function Destinations.any(force)
-  return #Destinations.planets(force) > 0
+  local cache = storage.destinations_any
+  if not cache or game.tick >= cache.tick + ANY_TICKS or game.tick < cache.tick then
+    cache = {tick = game.tick, forces = {}}
+    storage.destinations_any = cache
+  end
+  local any = cache.forces[force.index]
+  if any == nil then
+    any = #Destinations.planets(force) > 0
+    cache.forces[force.index] = any
+  end
+  return any
 end
 
 -- The uncharted chunk closest to `center` (a chunk position), ties at random. Searches square rings

@@ -530,7 +530,14 @@ function Railway.update()
       if not train then
         finish(index, transfer)
       else
-        local front, front_y, rear = leading(train)
+        -- The train's northmost carriage, found once: afterwards each carriage sent leaves the next
+        -- one in front, so transfer.car stays it without walking every carriage's box each tick.
+        if not transfer.led then
+          transfer.car, transfer.led = leading(train), true
+        end
+        local front = transfer.car
+        local box = front.bounding_box
+        local front_y, rear = box.left_top.y, box.right_bottom.y
         local c = center(record)
         local lead = SPEED * SPLASH_PEAK_TICKS
         transfer.flashed = transfer.flashed or {}
@@ -552,11 +559,11 @@ function Railway.update()
           if send(transfer, record, target, front) then
             transfer.car = rest
             train = rest and rest.valid and rest.train
+            rear = train and rest.bounding_box.right_bottom.y
           end
         end
         if train and train.valid then
-          local _, _, next_rear = leading(train)
-          if next_rear <= c.y + RING_PLANE then
+          if rear <= c.y + RING_PLANE then
             train.manual_mode = true
             train.speed = 0
           else

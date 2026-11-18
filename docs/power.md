@@ -11,18 +11,17 @@ A bank holds up to its **capacity** $C$. It is not an accumulator: it belongs to
 The store is a bank of superconducting capacitors, and like any real store it is not perfect:
 
 - It **leaks**: it loses half a percent of its charge every second, whether the machine is running or not. Self-discharge scales with what is stored, so a full store loses the most and a nearly empty one almost nothing. (Real capacitors leak far slower; here the loss also covers the bank's cooling and containment.)
-- It loses energy **charging**: only 95 % of what the network delivers reaches the store; the rest becomes heat.
 
 $$
-P_{\mathrm{leak}} = \lambda E, \qquad \lambda = 0.005\ \mathrm{s^{-1}}, \qquad \eta = 0.95
+P_{\mathrm{leak}} = \lambda E, \qquad \lambda = 0.005\ \mathrm{s^{-1}}
 $$
 
-Left alone, a store decays exponentially, $E(t) = E_0\,e^{-\lambda t}$: to 37 % in 200 seconds, to 5 % in 10 minutes. A machine that should stay ready keeps drawing $\lambda C / \eta$ to stay full.
+Left alone, a store decays exponentially, $E(t) = E_0\,e^{-\lambda t}$: to 37 % in 200 seconds, to 5 % in 10 minutes. A machine that should stay ready keeps drawing $\lambda C$ to stay full.
 
 Each tick ($\Delta t = 1/60$ s) the store loses the machine's running **load** $L$ (the gate's portal, the drive's warp support) and the leak, and gains its share of what the network delivered, $P_{\mathrm{in}}$:
 
 $$
-E_{t+\Delta t} = \mathrm{clamp}\Big(E_t + \big(\eta\,P_{\mathrm{in}} - L - \lambda E_t\big)\,\Delta t,\ 0,\ C\Big)
+E_{t+\Delta t} = \mathrm{clamp}\Big(E_t + \big(P_{\mathrm{in}} - L - \lambda E_t\big)\,\Delta t,\ 0,\ C\Big)
 $$
 
 ## Activation
@@ -46,31 +45,31 @@ which grows as the store refills: the longer a machine has been running on ample
 A bank never asks for more than
 
 $$
-P_{\max} = \frac{L + \lambda C + R}{\eta}
+P_{\max} = L + \lambda C + R
 $$
 
-where $R$ is its **refill** allowance: how fast it may charge the store beyond covering the load and the leak of a full store. It also never asks for more than the store can take, so a full bank draws exactly $(L + \lambda C)/\eta$.
+where $R$ is its **refill** allowance: how fast it may charge the store beyond covering the load and the leak of a full store. It also never asks for more than the store can take, so a full bank draws exactly $L + \lambda C$.
 
 | | Stargate | Warp Drive (ship of mass $m$) |
 | --- | --- | --- |
 | Capacity $C$ | `10 GJ` | $m \cdot 100\ \mathrm{J/kg}$ |
 | Leak when full, $\lambda C$ | `50 MW` | $m \cdot 0.5\ \mathrm{W/kg}$ |
-| Kept full, idle | `52.6 MW` | — |
-| Charging (closed / engaged), $L = 0$ | $R$ = `1 GW`: draws up to `1.105 GW` | $R = m \cdot 10\ \mathrm{W/kg}$: draws up to $m \cdot 11.05\ \mathrm{W/kg}$ |
+| Kept full, idle | `50 MW` | — |
+| Charging (closed / engaged), $L = 0$ | $R$ = `1 GW`: draws up to `1.05 GW` | $R = m \cdot 10\ \mathrm{W/kg}$: draws up to $m \cdot 10.5\ \mathrm{W/kg}$ |
 | Activation spends | `8 GJ` (80 %), leaving `2 GJ` | $m \cdot 80\ \mathrm{J/kg}$, leaving $m \cdot 20\ \mathrm{J/kg}$ |
 | Running load $L$ | `1 GW` (open portal) | $m \cdot 10\ \mathrm{W/kg}$ per warp level |
-| Running refill $R$ | `200 MW`: draws up to `1.316 GW` | $m \cdot 10\ \mathrm{W/kg}$, plus the next level's support while climbing |
-| Running, store full | `1.105 GW` | $(\ell \cdot 10 + 0.5)\,m / 0.95\ \mathrm{W/kg}$ at level $\ell$ |
+| Running refill $R$ | `200 MW`: draws up to `1.25 GW` | $m \cdot 10\ \mathrm{W/kg}$, plus the next level's support while climbing |
+| Running, store full | `1.05 GW` | $(\ell \cdot 10 + 0.5)\,m\ \mathrm{W/kg}$ at level $\ell$ |
 
-With enough spare power the store fills at $\eta P_{\max} - L - \lambda E$ net, so from empty it takes $\frac{1}{\lambda}\ln\frac{R + \lambda C}{R} \approx 9.8$ seconds for both machines. After activation the running refill restores what was spent in about 37 seconds for the gate and 8 for the drive.
+With enough spare power the store fills at $P_{\max} - L - \lambda E$ net, so from empty it takes $\frac{1}{\lambda}\ln\frac{R + \lambda C}{R} \approx 9.8$ seconds for both machines. After activation the running refill restores what was spent in about 37 seconds for the gate and 8 for the drive.
 
 ![Stargate power cycle](power/stargate-cycle.svg)
 
-The gate above charges closed at `1.105 GW`, then is held closed for a few seconds with **Keep charged when deactivated**, full and drawing only `52.6 MW` to cover its leak. It opens at 15 s: the store drops to `2 GJ`, and the gate draws `1.316 GW` (the `1 GW` upkeep, the leak, and `200 MW` of refill, over the 95 % efficiency) until the store is full again, then `1.105 GW`.
+The gate above charges closed at `1.05 GW`, then is held closed for a few seconds with **Keep charged when deactivated**, full and drawing only `50 MW` to cover its leak. It opens at 15 s: the store drops to `2 GJ`, and the gate draws `1.25 GW` (the `1 GW` upkeep, the leak, and `200 MW` of refill) until the store is full again, then `1.05 GW`.
 
 ![Warp Drive power cycle](power/warp-drive-cycle.svg)
 
-The drive above is on a `10,000 t` ship: it charges its `1 GJ` reserve at `110.5 MW`, jumps, and climbs half a level a second to Warp-5. While it climbs it draws the next level's support plus the refill, so the reserve is full again by the time it reaches Warp-5. From then on it draws `532 MW`: `500 MW` of support and the `5 MW` leak, over the 95 % efficiency.
+The drive above is on a `10,000 t` ship: it charges its `1 GJ` reserve at `105 MW`, jumps, and climbs half a level a second to Warp-5. While it climbs it draws the next level's support plus the refill, so the reserve is full again by the time it reaches Warp-5. From then on it draws `505 MW`: `500 MW` of support and the `5 MW` leak.
 
 ## Sharing the network
 
@@ -116,6 +115,10 @@ Above, three gates switch on a third of a second apart beside a `300 MW` factory
 
 The Stargate's runtime test runs the hardest case, three gates sharing `100 MW`, in the game itself: the factory keeps 99.97 % of its power and the gates take about 80 % of the spare.
 
+## Steady draw
+
+A bank whose store is full and that the network has fed in full for five seconds needs only a steady draw: its load and its leak. It then hands that draw to the game, which takes it every tick with no script running, and the mod checks once a second, from the network's power statistics (the figures the power screen shows), that the bank's interfaces got all of it. If they did not, the missing energy comes out of the store and the bank returns to asking tick by tick, as above; any change of load or limit (opening, closing, switching off, a full store being spent) does the same. So a shortage costs a bank up to one second at its full steady draw before it backs off, and costs no script time at all while there is none.
+
 ## Things to know
 
 - **Spare means spare generation, and accumulators count.** A bank is an ordinary machine, so when generators fall short, accumulators discharge into it as into any assembler, until they run empty. A gate held open on an accumulator bank drains it.
@@ -129,4 +132,5 @@ The Stargate's runtime test runs the hardest case, three gates sharing `100 MW`,
 - Interface modes and buffer sizes are saved per entity and survive prototype changes, so `PowerBank.tick` sets both every tick.
 - Asking for the network's measured spare generation (`LuaElectricNetwork.flow_last_tick`) instead of probing was tried and reverted: every bank on a network sees the same spare at once, and several of them oscillated.
 - Test fixtures that supply "exactly" some power with an `electric-energy-interface` must give it a buffer of one tick of output. A larger buffer stores whatever a backing-off bank leaves unused, then releases it all at once, above the intended limit.
+- Steady draw: the interface's `power_usage` is the need and its buffer one tick of it, and `PowerBank.expected` (what the bank believes it drew, exact while ticked) summed over a network is compared with the change in that network's `get_input_count(<interface prototype>)`, which is in joules and matched the banks' own sums to a few joules in 846 MJ. A network seen for the first time is only measured. Warp Drive does not use it yet; the Stargate's `Gate.check_power` does.
 - Change the module in Warp Drive, copy it to the Stargate, and keep the charts current: `python3 tools/power-charts.py` regenerates [`docs/power/`](power/) from the same rules.

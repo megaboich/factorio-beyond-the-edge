@@ -48,7 +48,7 @@ cp "$PACKAGE" "$RUN_MODS/"
 cp -R "$ROOT_DIR/tests/mods/bte-stargate-runtime-test" "$RUN_MODS/"
 "$FACTORIO_BIN" --mod-directory "$RUN_MODS" --create "$TEST_ROOT/run-save.zip" --map-gen-seed 12345
 "$FACTORIO_BIN" --mod-directory "$RUN_MODS" --benchmark "$TEST_ROOT/run-save.zip" \
-  --benchmark-ticks 4400 --benchmark-runs 1 2>&1 | tee "$TEST_ROOT/run.log"
+  --benchmark-ticks 5200 --benchmark-runs 1 2>&1 | tee "$TEST_ROOT/run.log"
 
 if ! grep -q 'STARGATE_TEST_PASS: filters, exact slots, completion, staged build, replacement, grid snapping, gate pairing, power, circuit, transfer, vehicle and enemy transfer, train transfer, and mining paths completed' "$TEST_ROOT/run.log"; then
   printf 'Stargate runtime test did not emit its pass marker\n' >&2

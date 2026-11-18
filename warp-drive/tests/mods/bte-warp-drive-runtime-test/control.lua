@@ -1069,9 +1069,8 @@ script.on_nth_tick(10, function()
       if not charge or math.abs(reserve_energy(platform) - required_charge) > 1 then
         fail("delivered active power did not replenish the warp reserve to full")
       end
-      -- With the reserve full, the draw is the Warp-5 support plus the reserve's leak (0.5 W/kg),
-      -- grossed up for the bank's 95 % charging efficiency.
-      local expected_watts = platform.weight * (10 * 5 + 0.5) / 0.95
+      -- With the reserve full, the draw is the Warp-5 support plus the reserve's leak (0.5 W/kg).
+      local expected_watts = platform.weight * (10 * 5 + 0.5)
       if math.abs(support.input_flow_limit * 60 - expected_watts) > expected_watts * 0.001 then
         fail(string.format("Warp-5 did not draw five times the mass-scaled Warp-1 power plus the leak: %s, expected %s",
           support.input_flow_limit * 60, expected_watts))

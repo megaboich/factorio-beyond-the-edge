@@ -13,8 +13,7 @@
 -- several ticks' worth in one tick and dipped the network each time.
 --
 -- Each tick:
--- - the store loses the machine's load and its leak, and gains EFFICIENCY of what the network
---   delivered (the rest is lost in conversion). The leak is LEAK_PER_SECOND of the charge per second,
+-- - the store loses the machine's load and its leak, and gains what the network delivered. The leak is LEAK_PER_SECOND of the charge per second,
 --   as a real store's self-discharge scales with what it holds: a full store loses 0.5 % a second, an
 --   almost empty one almost nothing, and one left alone decays exponentially (to 37 % in 200 s);
 -- - the request adapts: a tick delivered in full raises it by the step, which grows by
@@ -26,13 +25,20 @@
 --   the constants were tuned with stargate/tests/power-model.py;
 -- - the interface asks for the request, at most options.max_draw and what the store can take.
 --
+-- Direct mode: a full store that has been fed in full for DIRECT_AFTER_TICKS needs only a steady
+-- draw (its load and leak), so the bank hands that draw to the engine: the interface consumes it as
+-- its power_usage every tick and the script stops ticking the bank. The caller checks once a second
+-- from the network's flow statistics that the interfaces got what direct mode assumed
+-- (PowerBank.expected), and on any shortfall charges it to the store and leaves direct mode
+-- (PowerBank.shortfall), so the adaptive request takes over again within a second. A change of
+-- load or draw limit leaves direct mode too (PowerBank.direct_need).
+--
 -- A bank table holds only numbers, so it can live in storage: charge, request, step, hold_until,
--- applied, received, tick, and the delivery sums read by PowerBank.delivered.
+-- applied, received, tick, fed_since, direct, direct_from, drawn, and the delivery sums read by
+-- PowerBank.delivered.
 local PowerBank = {}
 
 PowerBank.LEAK_PER_SECOND = 0.005
--- The share of delivered energy that reaches the store; the rest is lost in conversion.
-PowerBank.EFFICIENCY = 0.95
 -- Activation spends this share of a full store, leaving the rest as the running reserve.
 PowerBank.ACTIVATION_SHARE = 0.8
 
@@ -44,6 +50,10 @@ local HOLD_TICKS = 120
 -- A delivery below this share of what was asked counts as a shortfall.
 local MET = 0.999
 local TICKS_PER_SECOND = 60
+-- How long a full store must be fed in full before it goes direct.
+PowerBank.DIRECT_AFTER_TICKS = 300
+-- A store this close to its capacity counts as full for direct mode.
+local FULL = 0.999
 
 --- The leak of a store holding `charge` joules, in watts.
 function PowerBank.leak(charge)
@@ -51,9 +61,9 @@ function PowerBank.leak(charge)
 end
 
 --- The most a bank should ask for: what keeps a full store of `capacity` joules full under `load`
---- watts, plus `refill` watts into the store, all grossed up for conversion losses.
+--- watts, plus `refill` watts into the store.
 function PowerBank.max_draw(capacity, load, refill)
-  return (load + PowerBank.leak(capacity) + refill) / PowerBank.EFFICIENCY
+  return load + PowerBank.leak(capacity) + refill
 end
 
 --- How long a store holding `charge` joules carries `load` watts with no input, in seconds.
@@ -82,6 +92,7 @@ function PowerBank.tick(bank, unit, options)
   local got = unit.energy
   unit.energy = 0
   bank.received = got
+  bank.drawn = (bank.drawn or 0) + got
   bank.delivered_joules = (bank.delivered_joules or 0) + got
   bank.delivered_ticks = (bank.delivered_ticks or 0) + ticks
 
@@ -90,7 +101,7 @@ function PowerBank.tick(bank, unit, options)
   if not options.sink then
     local charge = bank.charge or 0
     charge = charge - (load + PowerBank.leak(charge)) * ticks / TICKS_PER_SECOND
-    bank.charge = math.max(0, math.min(capacity, charge + got * PowerBank.EFFICIENCY))
+    bank.charge = math.max(0, math.min(capacity, charge + got))
   end
 
   local request = bank.request or MAX_STEP
@@ -98,6 +109,7 @@ function PowerBank.tick(bank, unit, options)
   local asked = math.min(unit.electric_buffer_size, (bank.applied or 0) / TICKS_PER_SECOND * ticks)
   if ticks > 0 and asked > 1 then
     if got < asked * MET then
+      bank.fed_since = nil
       local missing = (asked - got) * TICKS_PER_SECOND / ticks
       -- No lower than half of what arrived: a sudden large drop (accumulators running empty, a
       -- generator lost) would otherwise cut the request to nothing and hold it there.
@@ -106,11 +118,14 @@ function PowerBank.tick(bank, unit, options)
       step = MIN_STEP
       -- Nothing arrived: the network has nothing to protect, so climb again as soon as it does.
       bank.hold_until = got > 0 and game.tick + HOLD_TICKS or nil
-    elseif game.tick >= (bank.hold_until or 0) and (bank.applied or 0) >= request then
-      -- Raised only when the whole request was asked for: a draw capped by max_draw or a nearly
-      -- full store says nothing about whether the network could give more.
-      request = request + step
-      step = math.min(MAX_STEP, step * STEP_GROWTH)
+    else
+      bank.fed_since = bank.fed_since or game.tick
+      if game.tick >= (bank.hold_until or 0) and (bank.applied or 0) >= request then
+        -- Raised only when the whole request was asked for: a draw capped by max_draw or a nearly
+        -- full store says nothing about whether the network could give more.
+        request = request + step
+        step = math.min(MAX_STEP, step * STEP_GROWTH)
+      end
     end
   elseif ticks > 0 and request < MIN_STEP then
     request = MIN_STEP
@@ -121,8 +136,7 @@ function PowerBank.tick(bank, unit, options)
   bank.request, bank.step = request, step
 
   local room = options.sink and math.huge
-    or ((capacity - bank.charge) * TICKS_PER_SECOND + load + PowerBank.leak(bank.charge))
-      / PowerBank.EFFICIENCY
+    or (capacity - bank.charge) * TICKS_PER_SECOND + load + PowerBank.leak(bank.charge)
   local applied = math.max(0, math.min(request, max_draw, room))
   bank.applied = applied
   unit.power_usage = 0
@@ -138,6 +152,74 @@ function PowerBank.delivered(bank)
   local watts = ticks > 0 and (bank.delivered_joules or 0) * TICKS_PER_SECOND / ticks or 0
   bank.delivered_joules, bank.delivered_ticks = 0, 0
   return watts
+end
+
+--- The steady draw, in watts, that keeps a full store of `options.capacity` full under its load, if
+--- the bank may run direct with these options: it stores, and may draw at least that much.
+function PowerBank.direct_need(options)
+  if options.sink or (options.max_draw or 0) <= 0 then
+    return nil
+  end
+  local need = (options.load or 0) + PowerBank.leak(options.capacity)
+  if need > options.max_draw then
+    return nil
+  end
+  return need
+end
+
+--- Whether a bank ticked by PowerBank.tick with `options` should go direct: its store is full, the
+--- network has met every request for DIRECT_AFTER_TICKS, and its learned request covers the need.
+function PowerBank.ready_for_direct(bank, options)
+  local need = PowerBank.direct_need(options)
+  return need ~= nil and (bank.charge or 0) >= options.capacity * FULL and bank.fed_since ~= nil
+    and game.tick - bank.fed_since >= PowerBank.DIRECT_AFTER_TICKS and (bank.request or 0) >= need
+end
+
+--- Hands the bank's steady draw, `need` watts (PowerBank.direct_need), to its interface `unit`: from
+--- the next tick the engine draws it and consumes it, and the store stays full until the bank leaves.
+function PowerBank.enter_direct(bank, unit, need, capacity)
+  bank.direct, bank.direct_from = need, game.tick
+  bank.charge = capacity
+  bank.received = need / TICKS_PER_SECOND
+  unit.power_usage = need / TICKS_PER_SECOND
+  unit.input_flow_limit = need / TICKS_PER_SECOND
+  unit.electric_buffer_size = math.max(1, need / TICKS_PER_SECOND)
+end
+
+--- Returns a direct bank to the adaptive request, ticked by PowerBank.tick from this tick on.
+function PowerBank.leave_direct(bank, unit)
+  if not bank.direct then
+    return
+  end
+  bank.drawn = (bank.drawn or 0) + bank.direct / TICKS_PER_SECOND * (game.tick - bank.direct_from)
+  -- The network must earn direct mode again, and the first tick back judges nothing.
+  bank.request = math.max(bank.request or 0, bank.direct)
+  bank.direct, bank.direct_from, bank.fed_since, bank.applied = nil, nil, nil, 0
+  bank.tick = game.tick
+  if unit and unit.valid then
+    unit.power_usage = 0
+    unit.energy = 0
+  end
+end
+
+--- The joules the bank assumes its interface drew since the last call: what arrived while ticked,
+--- and its steady draw while direct. Compare their sum over a network with the interfaces' input
+--- count in the network's flow statistics.
+function PowerBank.expected(bank)
+  local joules = bank.drawn or 0
+  if bank.direct then
+    joules = joules + bank.direct / TICKS_PER_SECOND * (game.tick - bank.direct_from)
+    bank.direct_from = game.tick
+  end
+  bank.drawn = 0
+  return joules
+end
+
+--- Charges `joules` the interface did not get, though direct mode assumed it, to the store, and
+--- leaves direct mode.
+function PowerBank.shortfall(bank, unit, joules)
+  bank.charge = math.max(0, (bank.charge or 0) - joules)
+  PowerBank.leave_direct(bank, unit)
 end
 
 --- Spends ACTIVATION_SHARE of a store of `capacity` joules. Returns false, spending nothing, unless
@@ -156,6 +238,7 @@ end
 --- Empties the store and forgets the learned request, as for a machine switched off for good.
 function PowerBank.reset(bank)
   bank.charge = 0
+  bank.direct, bank.direct_from, bank.fed_since = nil, nil, nil
   bank.request, bank.step, bank.hold_until, bank.applied = nil, nil, nil, nil
   bank.delivered_joules, bank.delivered_ticks = 0, 0
 end

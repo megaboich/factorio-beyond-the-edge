@@ -49,8 +49,13 @@ local VEIL_LIGHT_UP = 1.6
 -- The gate's power (prototypes/entities.lua): the store's capacity, the open portal's upkeep
 -- (1 GW), and the most a closed gate charges at (charge_rate) or an open one refills at beyond its
 -- upkeep (refill), both on top of the leak: 1.05 GW while charging, 1.25 GW while open and refilling.
+-- Cached: reading `data` converts the whole prototype table to Lua on every call, and the power is
+-- read for every gate every tick. Prototypes cannot change while a save runs, and the cache is a
+-- module local rebuilt with the script on every load.
+local power_data
 local function power()
-  return prototypes.mod_data["bte-stargate-power"].data
+  power_data = power_data or prototypes.mod_data["bte-stargate-power"].data
+  return power_data
 end
 local function capacity()
   return power().capacity
@@ -195,16 +200,108 @@ end
 
 -- One tick of the gate's power: a gate that is switched off, or closed by its circuit, charges
 -- only if set to keep charged; otherwise its charge leaks away.
+local OPTIONS = {}
 local function collect(record)
   local spec = power()
   local cap = spec.capacity
-  local charging = record.keep_charged or (record.enabled and Gate.circuit_allows(record))
+  -- record.ready is the switch and circuit condition as apply() last read them, every few ticks.
+  local charging = record.keep_charged or record.ready
   local load = record.open and spec.upkeep or 0
   local refill = record.open and spec.refill or spec.charge_rate
-  PowerBank.tick(bank(record), capacitor(record), {
-    capacity = cap, load = load,
-    max_draw = charging and PowerBank.max_draw(cap, load, refill) or 0
-  })
+  -- One table refilled for every gate, every tick: a new one each time was garbage the collector
+  -- then spent longer on than the rest of a direct gate's tick.
+  local options = OPTIONS
+  options.capacity, options.load = cap, load
+  options.max_draw = charging and PowerBank.max_draw(cap, load, refill) or 0
+  local store = bank(record)
+  if store.direct then
+    -- The engine draws the steady need (PowerBank.enter_direct) and Gate.check_power watches it; a
+    -- change of state, or opening spending the store, ends that. Plain Lua: nothing here calls the game.
+    if store.direct == PowerBank.direct_need(options) and store.charge >= cap * FULL then
+      return
+    end
+    PowerBank.leave_direct(store, record.capacitor)
+  end
+  local unit = capacitor(record)
+  PowerBank.tick(store, unit, options)
+  if PowerBank.ready_for_direct(store, options) then
+    PowerBank.enter_direct(store, unit, PowerBank.direct_need(options), cap)
+  end
+end
+
+-- Once a second: compares what each network's capacitors drew, from its flow statistics, with what
+-- the gates' banks assumed (PowerBank.expected), and charges any shortfall to the direct banks there,
+-- returning them to the adaptive request. The statistics are per network and prototype, so the
+-- gates of one network are judged together: in a shortage the engine gives each the same share.
+-- A network seen for the first time, or after it changed, is only measured, not judged.
+local POLE_REACH = 20
+local function network_pole(record, id)
+  local pole = record.pole
+  if pole and pole.valid and pole.electric_network_id == id then
+    return pole
+  end
+  local c = center(record)
+  record.pole = nil
+  for _, candidate in pairs(record.entity.surface.find_entities_filtered({type = "electric-pole",
+      area = {{c.x - POLE_REACH, c.y - POLE_REACH}, {c.x + POLE_REACH, c.y + POLE_REACH}}})) do
+    if candidate.electric_network_id == id then
+      record.pole = candidate
+      return candidate
+    end
+  end
+end
+
+function Gate.check_power()
+  local networks = {}
+  for _, record in pairs(storage.gates) do
+    local store = record.bank
+    if store and record.entity.valid and record.capacitor and record.capacitor.valid then
+      local id = record.capacitor.electric_network_id
+      if not id then
+        -- Off every network: it draws nothing, so it cannot stay direct.
+        PowerBank.expected(store)
+        PowerBank.leave_direct(store, record.capacitor)
+      else
+        local network = networks[id] or {records = {}, expected = 0, direct = 0}
+        networks[id] = network
+        local joules = PowerBank.expected(store)
+        network.records[#network.records + 1] = {record = record, joules = joules}
+        network.expected = network.expected + joules
+        if store.direct then
+          network.direct = network.direct + joules
+          network.any_direct = true
+        end
+      end
+    end
+  end
+  local counts = {}
+  for id, network in pairs(networks) do
+    local pole
+    for _, entry in pairs(network.records) do
+      pole = pole or network_pole(entry.record, id)
+    end
+    local count = pole and pole.electric_network_statistics.get_input_count(CAPACITOR)
+    counts[id] = count
+    local last = storage.power_counts and storage.power_counts[id]
+    if network.any_direct and count and last then
+      local missing = network.expected - (count - last)
+      -- Smart banks' figures are exact, so what is missing is the direct banks'; a tick's worth of
+      -- timing slack is allowed.
+      if missing > network.direct / 60 + 1e3 then
+        for _, entry in pairs(network.records) do
+          local store = entry.record.bank
+          if store.direct then
+            PowerBank.shortfall(store, entry.record.capacitor, missing * entry.joules / network.direct)
+          end
+        end
+      end
+    elseif network.any_direct and not count then
+      for _, entry in pairs(network.records) do
+        PowerBank.leave_direct(entry.record.bank, entry.record.capacitor)
+      end
+    end
+  end
+  storage.power_counts = counts
 end
 
 -- Runs every tick: charges every gate's store from its capacitor.
@@ -223,7 +320,28 @@ end
 
 -- Whether an open gate's store is draining: the network gave less than the upkeep last tick.
 function Gate.short_of_power(record)
-  return record.open and (bank(record).received or 0) * 60 * PowerBank.EFFICIENCY < power().upkeep * 0.999
+  return record.open and (bank(record).received or 0) * 60 < power().upkeep * 0.999
+end
+
+-- What the gate draws from the network, in watts, split by use: the open portal's upkeep, the
+-- store's leak, and charging. The draw covers the upkeep first and
+-- the leak next; what is left charges the store. Averaged since the last call (a direct bank draws
+-- its steady need), and kept for the rest of the tick so every open window shows the same figures.
+function Gate.power_flow(record)
+  local flow = record.flow
+  if flow and flow.tick == game.tick then
+    return flow
+  end
+  local store = bank(record)
+  local drawn = PowerBank.delivered(store)
+  if store.direct then
+    drawn = store.direct
+  end
+  local upkeep = math.min(drawn, record.open and power().upkeep or 0)
+  local leak = math.min(drawn - upkeep, PowerBank.leak(store.charge or 0))
+  flow = {tick = game.tick, upkeep = upkeep, leak = leak, charging = math.max(0, drawn - upkeep - leak)}
+  record.flow = flow
+  return flow
 end
 
 -- The store's fill, 0 to 1.
@@ -364,10 +482,17 @@ end
 
 -- Opens or closes the portal from the switch, pairing, circuit condition, and charge, and keeps the
 -- engine's state, the capacitor's draw, the lights, and the barriers in step.
-local function apply(record)
-  capacitor(record)
+--
+-- With `quick` (the frequent update), the companions are only touched when what they show changes:
+-- checking each one every few ticks cost more than the rest of the gate's script. They are
+-- indestructible, and every other call, including configuration changes, checks them all.
+local function apply(record, quick)
+  if not quick then
+    capacitor(record)
+  end
   -- A gate without a partner opens too: it sends travellers to random destinations.
   local ready = record.enabled and Gate.circuit_allows(record)
+  record.ready = ready
   local was_open = record.open
   local store = bank(record)
   if record.open then
@@ -376,9 +501,18 @@ local function apply(record)
     -- Opening spends 80 % of the full store; the upkeep then runs from the rest.
     record.open = PowerBank.activate(store, capacity() * FULL)
   end
-  record.entity.disabled_by_script = not record.open
+  if was_open ~= record.open or not quick then
+    record.entity.disabled_by_script = not record.open
+  end
   -- Red while a switched-on gate charges, or while an open one is short of power.
   local red = record.enabled and (record.open and Gate.short_of_power(record) or (not record.open and Gate.charge(record) < FULL))
+  -- Everything the companions show; the veil appears once the opening animation has played.
+  local shown = (record.railway or "") .. (red and "|red" or "|") .. (record.open and "|open" or "|")
+    .. (game.tick >= (record.veil_from or 0) and "|veil" or "|")
+  if quick and shown == record.shown and was_open == record.open then
+    return
+  end
+  record.shown = shown
   show_body(record, red)
   show_veil(record, was_open)
   if was_open ~= record.open and (was_open or record.open) then
@@ -564,7 +698,7 @@ end
 function Gate.update(enter)
   for _, record in pairs(storage.gates) do
     if record.entity.valid then
-      apply(record)
+      apply(record, true)
       if Gate.is_open(record) then
         local area = portal_area(record)
         -- Large enough for a tank's box to reach the zone from its centre.

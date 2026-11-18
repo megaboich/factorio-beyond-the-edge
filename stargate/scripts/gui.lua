@@ -76,6 +76,17 @@ end
 
 -- Updates the status line. The partner list is filled when the window opens and after a pick, not
 -- here, since refilling a drop-down closes it under the player's cursor.
+-- `value` watts as the game writes power: three significant figures and an SI prefix.
+local PREFIXES = {"", "k", "M", "G", "T"}
+local function watts(value)
+  local index = 1
+  while value >= 999.5 and index < #PREFIXES do
+    value, index = value / 1000, index + 1
+  end
+  local digits = (value >= 99.95 or value < 0.005) and 0 or value >= 9.995 and 1 or 2
+  return {"bte-stargate-gui.watts", string.format("%." .. digits .. "f", value), PREFIXES[index]}
+end
+
 local function refresh(player, record)
   local window = window_of(player)
   if not window then
@@ -92,7 +103,11 @@ local function refresh(player, record)
   local charge = Gate.charge(record)
   local bar = find(window, "bte_stargate_charge")
   bar.value = charge
-  bar.caption = {"bte-stargate-gui.charge", math.floor(charge * 100 + 0.5)}
+  find(window, "bte_stargate_charge_label").caption = {"bte-stargate-gui.charge", math.floor(charge * 100 + 0.5)}
+  local flow = Gate.power_flow(record)
+  for _, key in pairs({"upkeep", "charging", "leak"}) do
+    find(window, "bte_stargate_power_" .. key).caption = watts(flow[key])
+  end
 end
 
 local function close(player)
@@ -133,9 +148,25 @@ local function open(player, record, beside)
   status_row.style.vertical_align = "center"
   status_row.add({type = "sprite", name = "bte_stargate_status_light"})
   status_row.add({type = "label", name = "bte_stargate_status"})
-  local bar = inner.add({type = "progressbar", name = "bte_stargate_charge", tooltip = {"bte-stargate-gui.charge-tooltip"}})
+  -- The charge as a label beside the bar: a progress bar's own caption does not fit inside it.
+  local charge_row = inner.add({type = "flow", direction = "horizontal"})
+  charge_row.style.vertical_align = "center"
+  charge_row.style.top_margin = 4
+  charge_row.add({type = "label", name = "bte_stargate_charge_label", tooltip = {"bte-stargate-gui.charge-tooltip"}})
+  local bar = charge_row.add({type = "progressbar", name = "bte_stargate_charge", tooltip = {"bte-stargate-gui.charge-tooltip"}})
   bar.style.horizontally_stretchable = true
-  bar.style.bottom_margin = 4
+  -- What the gate takes from the network, by use (Gate.power_flow), filled in by refresh().
+  local power = inner.add({type = "flow", direction = "vertical"})
+  power.style.top_margin = 6
+  power.style.bottom_margin = 6
+  power.style.vertical_spacing = 2
+  for _, key in pairs({"upkeep", "charging", "leak"}) do
+    local tooltip = {"bte-stargate-gui.power-" .. key .. "-tooltip"}
+    local row = power.add({type = "flow", direction = "horizontal"})
+    row.add({type = "label", caption = {"bte-stargate-gui.power-" .. key}, tooltip = tooltip})
+    row.add({type = "empty-widget"}).style.horizontally_stretchable = true
+    row.add({type = "label", name = "bte_stargate_power_" .. key, tooltip = tooltip})
+  end
   local preview = inner.add({type = "frame", style = "deep_frame_in_shallow_frame"})
   local camera = preview.add({type = "camera", position = {entity.position.x + 1, entity.position.y + 1},
     surface_index = entity.surface.index, zoom = 0.35})

@@ -3,7 +3,7 @@
 Run: python3 tools/power-charts.py
 
 Each chart is a small tick-by-tick simulation of the same rules the mods run: the store leaks
-0.5 % of its charge a second, takes in 95 % of what arrives, activation spends 80 % of a full store, the draw is capped at the
+0.5 % of its charge a second, takes in all that arrives, activation spends 80 % of a full store, the draw is capped at the
 load, the leak, and a refill allowance, and the adaptive request climbs in 10-50 MW steps and backs
 off on shortfalls. Output is deterministic, so rerunning over unchanged sources leaves git clean.
 """
@@ -13,7 +13,6 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "docs", "power")
 TPS = 60
 LEAK = 0.005
-EFFICIENCY = 0.95
 ACTIVATION = 0.8
 MIN_STEP, MAX_STEP, GROWTH, FACTOR, HOLD, MET = 10e6, 50e6, 1.1, 2, 120, 0.999
 
@@ -30,14 +29,14 @@ class Bank:
         self.charge, self.request, self.step, self.hold, self.applied = 0.0, MAX_STEP, MAX_STEP, 0, 0.0
 
     def ask(self, capacity, load, max_draw, sink=False):
-        room = float("inf") if sink else ((capacity - self.charge) * TPS + load + self.charge * LEAK) / EFFICIENCY
+        room = float("inf") if sink else ((capacity - self.charge) * TPS + load + self.charge * LEAK)
         self.applied = max(0.0, min(self.request, max_draw, room))
         return self.applied
 
     def receive(self, capacity, load, got, tick, sink=False):
         if not sink:
             self.charge = max(0.0, min(capacity, self.charge - (load + self.charge * LEAK) / TPS
-                                       + got * EFFICIENCY / TPS))
+                                       + got / TPS))
         asked = self.applied
         if asked > 1:
             if got < asked * MET:
@@ -72,7 +71,7 @@ def stargate_cycle():
             opened = True
         load = upkeep if opened else 0
         allowance = refill if opened else charge_rate
-        ask = bank.ask(capacity, load, (load + capacity * LEAK + allowance) / EFFICIENCY)
+        ask = bank.ask(capacity, load, (load + capacity * LEAK + allowance))
         _, (got,) = share(1.5e9 + 300e6, 300e6, [ask])
         bank.receive(capacity, load, got, tick)
         rows.append((tick / TPS, got / 1e6, bank.charge / capacity * 100, opened))
@@ -95,7 +94,7 @@ def warp_cycle():
             level = min(5.0, level + 10 / TPS / 2)
         load = per_level * level if state == "warp" else 0
         top = per_level * min(5.0, level + 10 / TPS / 2) if state == "warp" else 0
-        ask = bank.ask(capacity, load, (top + capacity * LEAK + refill) / EFFICIENCY)
+        ask = bank.ask(capacity, load, (top + capacity * LEAK + refill))
         _, (got,) = share(2e9, 0, [ask])
         bank.receive(capacity, load, got, tick)
         rows.append((tick / TPS, got / 1e6, bank.charge / capacity * 100, level))
@@ -110,7 +109,7 @@ def shared_gates():
     for tick in range(int(12 * TPS)):
         asks = []
         for i, bank in enumerate(banks):
-            asks.append(bank.ask(capacity, 0, 1.05e9 / EFFICIENCY) if tick >= 20 * i else 0.0)
+            asks.append(bank.ask(capacity, 0, 1.05e9) if tick >= 20 * i else 0.0)
         ratio, gots = share(500e6, 300e6, asks)
         for i, bank in enumerate(banks):
             if tick >= 20 * i:
@@ -194,7 +193,7 @@ def main():
     chart = Chart("Stargate: charge closed, open, refill while open (1.5 GW to spare)")
     bands = [(0, opened, "closed: charging"), (opened, 75, "open: 1 GW upkeep from the store")]
     chart.panel(75, 1400, "Draw (MW)", [("draw from the network", [(t, d) for t, d, _, _ in rows], False)],
-                bands=bands, y_ticks=[0, 250, 500, 750, 1105, 1316], x_step=5)
+                bands=bands, y_ticks=[0, 250, 500, 750, 1050, 1250], x_step=5)
     chart.panel(75, 100, "Store (%)", [("store charge", [(t, c) for t, _, c, _ in rows], False)],
                 bands=bands, x_label="Seconds", x_step=5)
     chart.write("stargate-cycle.svg")
@@ -206,7 +205,7 @@ def main():
     chart.panel(45, 700, "Draw (MW)", [
         ("draw from the network", [(t, d) for t, d, _, _ in rows], False),
         ("level support (load)", [(t, lvl * 100) for t, _, _, lvl in rows], True)],
-        bands=bands, y_ticks=[0, 111, 200, 300, 400, 532, 700], x_step=5)
+        bands=bands, y_ticks=[0, 105, 200, 300, 400, 505, 700], x_step=5)
     chart.panel(45, 100, "Reserve (%)", [("reserve charge", [(t, c) for t, _, c, _ in rows], False)],
                 bands=bands, x_label="Seconds", x_step=5)
     chart.write("warp-drive-cycle.svg")
