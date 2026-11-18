@@ -2,7 +2,7 @@
 
 **Document role:** this is the maintainer reference for audio assets, synthesis,
 runtime playback, persistent scheduling state, and regeneration. `README.md` is
-authoritative for player-facing behavior; `BUILDING.md` covers the composite
+authoritative for player-facing behavior; [`building.md`](building.md) covers the composite
 entity and electrical lifecycle.
 
 ## Sound Bank
@@ -108,7 +108,7 @@ distance and zoom like other machines. `bte-warp-drive-field-hum` is a hidden
 any entity plays its working sound continuously, as Vulcanus's chimney vents do. The
 background update creates it while the drive is in warp (fading in over 120 ticks
 beneath the activation) and destroys it on exit. Companion recovery adopts or removes
-it like the other companions; see `BUILDING.md`.
+it like the other companions; see [`building.md`](building.md).
 
 Factorio exposes neither a runtime sound handle nor a stop operation. Playback is
 therefore composed from one-shots and serialized deadlines rather than stoppable

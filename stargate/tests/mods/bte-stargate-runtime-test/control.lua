@@ -551,6 +551,142 @@ local steps = {
     storage.direct = nil
   end},
 
+  -- A train sent towards a partner with no track beyond its own: the locomotive comes out and stops
+  -- at the partner's edge; the wagon behind it, not yet out of the ring, and the last wagon are
+  -- smashed, and the last one's driver lands beside the arrival lane, towards the gate's centre.
+  {5, function()
+    local function lab(name)
+      local s = game.create_surface(name)
+      s.generate_with_lab_tiles = true
+      s.request_to_generate_chunks({0, 0}, 3)
+      s.force_generate_chunk_requests()
+      return s
+    end
+    local ca, cb = lab("bte-test-crash-a"), lab("bte-test-crash-b")
+    local a = ca.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
+    local b = cb.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
+    ca.create_entity({name = "substation", position = {-10, -6}, force = "player"})
+    local source = ca.create_entity({name = "bte-stargate-test-power", position = {-12, -6}, force = "player"})
+    source.power_production, source.electric_buffer_size, source.energy = 1e9, 1e10, 1e10
+    remote.call("bte-stargate-test", "set_station", a.unit_number, "right")
+    remote.call("bte-stargate-test", "set_station", b.unit_number, "left")
+    remote.call("bte-stargate-test", "pair", a.unit_number, b.unit_number)
+    for y = 9, 41, 2 do
+      ca.create_entity({name = "straight-rail", position = {3, y}, direction = defines.direction.north, force = "player"})
+    end
+    ca.create_entity({name = "locomotive", position = {3, 22}, direction = defines.direction.north, force = "player"})
+    ca.create_entity({name = "cargo-wagon", position = {3, 29}, direction = defines.direction.north, force = "player"})
+    local wagon = ca.create_entity({name = "cargo-wagon", position = {3, 36}, direction = defines.direction.north, force = "player"})
+    storage.crash_driver = ca.create_entity({name = "character", position = {6, 36}, force = "player"})
+    wagon.set_driver(storage.crash_driver)
+    storage.crash = {ca = ca, cb = cb}
+    -- A second pair at x 40 with four tiles of track beyond the partner's edge: the locomotive gets
+    -- out, and the one wagon behind it, sent with room to spare, stops before it has emerged and is
+    -- crushed with nothing left to send.
+    local a2 = ca.create_entity({name = GATE, position = {40, 0}, force = "player", raise_built = true})
+    local b2 = cb.create_entity({name = GATE, position = {40, 0}, force = "player", raise_built = true})
+    ca.create_entity({name = "substation", position = {30, -6}, force = "player"})
+    local source2 = ca.create_entity({name = "bte-stargate-test-power", position = {28, -6}, force = "player"})
+    source2.power_production, source2.electric_buffer_size, source2.energy = 1e9, 1e10, 1e10
+    remote.call("bte-stargate-test", "set_station", a2.unit_number, "right")
+    remote.call("bte-stargate-test", "set_station", b2.unit_number, "left")
+    remote.call("bte-stargate-test", "pair", a2.unit_number, b2.unit_number)
+    for y = 9, 41, 2 do
+      ca.create_entity({name = "straight-rail", position = {43, y}, direction = defines.direction.north, force = "player"})
+    end
+    for y = 9, 11, 2 do
+      cb.create_entity({name = "straight-rail", position = {43, y}, direction = defines.direction.north, force = "player"})
+    end
+    ca.create_entity({name = "locomotive", position = {43, 22}, direction = defines.direction.north, force = "player"})
+    ca.create_entity({name = "cargo-wagon", position = {43, 29}, direction = defines.direction.north, force = "player"})
+  end},
+  {200, function()
+    local cars = storage.crash.ca.find_entities_filtered({type = {"locomotive", "cargo-wagon"}})
+    local where = {}
+    for _, car in pairs(cars) do
+      where[#where + 1] = car.name .. "@" .. car.position.y .. "/" .. #car.train.carriages
+    end
+    expect("the crash trains are whole before they go (" .. table.concat(where, " ") .. ")", #cars, 5)
+    local trains = {}
+    for _, car in pairs(cars) do
+      trains[car.train.id] = car.train
+    end
+    for _, train in pairs(trains) do
+      train.manual_mode = true
+      train.speed = (train.front_stock.position.y < train.back_stock.position.y and 1 or -1) * 0.3
+    end
+  end},
+  {700, function()
+    local crash = storage.crash
+    local STOCK = {"locomotive", "cargo-wagon"}
+    expect("the whole train left", crash.ca.count_entities_filtered({type = STOCK}), 0)
+    local first, second = {{-8, -8}, {10, 40}}, {{32, -8}, {50, 40}}
+    expect("the locomotive came through", crash.cb.count_entities_filtered({type = "locomotive", area = first}), 1)
+    expect("no wagon survives", crash.cb.count_entities_filtered({type = "cargo-wagon", area = first}), 0)
+    expect("both left remnants", crash.cb.count_entities_filtered({name = "cargo-wagon-remnants", area = first}), 2)
+    local loco = crash.cb.find_entities_filtered({type = "locomotive", area = second})[1]
+    expect("the second locomotive got out", loco and loco.position.y > 3, true)
+    local w = crash.cb.find_entities_filtered({type = "cargo-wagon", area = second})[1]
+    expect("its wagon, the last one sent, was crushed in the ring (" .. (w and w.position.y or "-") .. ", loco " .. (loco and loco.position.y or "-") .. ")", crash.cb.count_entities_filtered({type = "cargo-wagon", area = second}), 0)
+    expect("and left remnants", crash.cb.count_entities_filtered({name = "cargo-wagon-remnants", area = second}), 1)
+    local driver = storage.crash_driver
+    expect("the wagon's driver was thrown clear at the partner", driver.valid and driver.surface.name, "bte-test-crash-b")
+    -- The partner is a left-hand gate: its arrival lane is at x 3, the centre at x 1.
+    expect("between the tracks (" .. serpent.line(driver.position) .. ")", math.abs(driver.position.x - 2) < 1 and driver.position.y > 3, true)
+    expect("no transfer is left running", remote.call("bte-stargate-test", "rail_transfers"), 0)
+    storage.crash, storage.crash_driver = nil, nil
+  end},
+
+  -- The fallback hold: an automatic train already past the closed entry signal, at the station,
+  -- which is only a waypoint in its schedule. It finds no path to its next stop on the other surface
+  -- and is held in manual mode instead, then sent once the gate opens, arriving in automatic mode.
+  {5, function()
+    local function lab(name)
+      local s = game.create_surface(name)
+      s.generate_with_lab_tiles = true
+      s.request_to_generate_chunks({0, 0}, 3)
+      s.force_generate_chunk_requests()
+      return s
+    end
+    local ha, hb = lab("bte-test-hold-a"), lab("bte-test-hold-b")
+    local a = ha.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
+    local b = hb.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
+    ha.create_entity({name = "substation", position = {-10, -6}, force = "player"})
+    local source = ha.create_entity({name = "bte-stargate-test-power", position = {-12, -6}, force = "player"})
+    source.power_production, source.electric_buffer_size, source.energy = 1e9, 1e10, 1e10
+    remote.call("bte-stargate-test", "set_station", a.unit_number, "right")
+    remote.call("bte-stargate-test", "set_station", b.unit_number, "left")
+    remote.call("bte-stargate-test", "pair", a.unit_number, b.unit_number)
+    remote.call("bte-stargate-test", "set_enabled", a.unit_number, false)
+    for y = 9, 41, 2 do
+      ha.create_entity({name = "straight-rail", position = {3, y}, direction = defines.direction.north, force = "player"})
+      hb.create_entity({name = "straight-rail", position = {3, y}, direction = defines.direction.north, force = "player"})
+    end
+    hb.create_entity({name = "train-stop", position = {1, 31}, direction = defines.direction.south, force = "player"}).backer_name = "bte-test-hold-far"
+    -- Its front at the station, 0.6 inside the gate's edge, past the entry signal.
+    local loco = ha.create_entity({name = "locomotive", position = {3, 10}, direction = defines.direction.north, force = "player"})
+    loco.insert({name = "coal", count = 20})
+    local schedule = loco.train.get_schedule()
+    schedule.add_record({station = remote.call("bte-stargate-test", "station", a.unit_number).backer_name, wait_conditions = {}})
+    schedule.add_record({station = "bte-test-hold-far", wait_conditions = {{type = "time", ticks = 6000}}})
+    schedule.go_to_station(1)
+    loco.train.manual_mode = false
+    storage.hold = {ha = ha, hb = hb, a = a, loco = loco}
+  end},
+  {120, function()
+    local hold = storage.hold
+    expect("a train past the closed entry signal is held, not left without a path",
+      hold.loco.valid and hold.loco.train.manual_mode and hold.loco.train.state ~= defines.train_state.no_path, true)
+    remote.call("bte-stargate-test", "set_enabled", hold.a.unit_number, true)
+  end},
+  {400, function()
+    local hold = storage.hold
+    local arrived = hold.hb.find_entities_filtered({type = "locomotive"})[1]
+    expect("the held train is sent once the gate opens", arrived ~= nil and not hold.loco.valid, true)
+    expect("and arrives in automatic mode", arrived and arrived.train.manual_mode, false)
+    storage.hold = nil
+  end},
+
   -- Station mode: gate R1 on one surface sends a train to R2 on another. R1 departs on its right lane
   -- (x 3) and R2 receives on its left-mode arrival lane (also x 3); vanilla rails lead south from both.
   {5, function()
@@ -638,11 +774,40 @@ local steps = {
     local station = remote.call("bte-stargate-test", "station", storage.g1.unit_number)
     expect("and its station moves to the edge", station.connected_rail and station.connected_rail.position.y, 7)
     local waiting = storage.ra.find_entities_filtered({name = "locomotive", area = {{2, 0}, {4, 80}}})[1]
-    expect("a train waits at the station while the gate is off", waiting and waiting.train.state, defines.train_state.wait_station)
-    expect("with its front at the gate's edge (" .. tostring(waiting and waiting.bounding_box.left_top.y) .. ")",
-      waiting and math.abs(waiting.bounding_box.left_top.y - 7.4) < 0.2, true)
+    -- At the gate's entry signal, red while the gate cannot send: still heading for the station, so
+    -- it never looks for a path beyond the gate.
+    expect("a train waits at the closed entry signal while the gate is off", waiting and waiting.train.state, defines.train_state.wait_signal)
+    expect("in automatic mode", waiting and waiting.train.manual_mode, false)
+    expect("with its front just outside the gate's edge (" .. tostring(waiting and waiting.bounding_box.left_top.y) .. ")",
+      waiting and waiting.bounding_box.left_top.y > 8 and waiting.bounding_box.left_top.y < 9.5, true)
     remote.call("bte-stargate-test", "set_enabled", storage.g1.unit_number, true)
+    -- A wagon on R1's arrival lane, inside the gate.
+    local parked = storage.ra.create_entity({name = "cargo-wagon", position = {-1, 4}, direction = defines.direction.north, force = "player"})
     expect("a station gate with a train on its rails keeps its mode", remote.call("bte-stargate-test", "set_station", storage.g1.unit_number, nil), false)
+    parked.destroy()
+    -- Each station has an exit signal on its arrival lane and an entry signal on its departure lane;
+    -- a wagon on the track out of R2 holds R1's train at R1's entry signal.
+    for _, s in pairs({storage.ra, storage.rb}) do
+      for _, signal in pairs(s.find_entities_filtered({name = {"bte-stargate-exit-signal", "bte-stargate-entry-signal"}})) do
+        expect("the gate's signal is on its rail", #signal.get_connected_rails(), 1)
+      end
+    end
+    expect("every station gate has an exit and an entry signal",
+      storage.rb.count_entities_filtered({name = {"bte-stargate-exit-signal", "bte-stargate-entry-signal"}}), 4)
+    expect("each entry signal has its switch, wired to it",
+      #storage.rb.find_entities_filtered({name = "bte-stargate-entry-control"})[1].get_wire_connector(defines.wire_connector_id.circuit_red).connections, 1)
+    storage.rail_blocker = storage.rb.create_entity({name = "cargo-wagon", position = {3, 40}, direction = defines.direction.north, force = "player"})
+  end},
+
+  {120, function()
+    local exit = storage.rb.find_entities_filtered({name = "bte-stargate-exit-signal", area = {{-8, 0}, {10, 10}}})[1]
+    expect("the exit signal reads the blocked track", exit.signal_state, defines.signal_state.closed)
+    local waiting = storage.ra.find_entities_filtered({name = "locomotive", area = {{2, 0}, {4, 80}}})[1]
+    expect("a train waits at the entry signal while the way out of the partner is blocked",
+      waiting and waiting.train.state, defines.train_state.wait_signal)
+    storage.rail_blocker.destroy()
+    -- The blocker was seen as an arrival.
+    storage.rail_watch.first_arrival_rear = nil
   end},
 
   {700, function()

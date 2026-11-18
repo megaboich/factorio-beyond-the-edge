@@ -130,51 +130,13 @@ Cars, tanks, spidertrons, and units (`unit`, `spider-unit`, any force) travel th
 - Checked in game: car, tank, and spidertron trips, driving in at low and high speed, and a car left rolling in after its driver jumps out (it travels empty).
 - Still open: visible checks of riding players' cutscenes and skipping them, spidertron legs settling; robots out of a spidertron's roboport are left behind.
 
-## 6. Train logistics: Rift Rail adaptation
+## 6. Train logistics: Rift Rail's technique
 
 Train passage is part of standalone Stargate, developed after reliable paired player travel. Homecoming uses it for capstone supply chains; neither mod should implement a second transfer engine.
 
-### Train station (implemented, first version)
+### Train station (implemented)
 
-`scripts/railway.lua` and `prototypes/rails.lua`. What was taken from RiftRail and what differs:
-
-- Same core: carriage-by-carriage `clone` to the destination surface, the source carriage disconnected and `rotate()`d first so the clone faces the right way, then destroyed; the entry train pushed in and the exit train pushed out at a fixed speed every tick; a lock so one destination lane takes one train; drivers moved by hand (`clone` does not copy them); carriage-GUI viewers reopened on the clone; schedule copied with `rail` records dropped and the portal stop skipped (or removed if temporary), with groups and interrupts.
-- Trigger: RiftRail kills a 1-HP collider on the track. Here the gate's existing 3-tick check looks for rolling stock whose leading edge is within 0.6 of the ring's plane on the departure lane, moving in or stopped; no collider, no damage events.
-- No leader locomotive: setting `speed` on a manual train works without locomotives or fuel (headless probe: a lone cargo wagon kept the speed it was given), so the arriving part is simply driven out every tick.
-- The schedule is copied once, to the complete train, after the last carriage. RiftRail copies it on the first carriage and then strips "fake interrupt" temporary stops that cargo interrupts insert while the consist is still incomplete; copying once avoids creating them, and the train's own temporary stops are kept.
-- Start waits for a free arrival lane, so a train that cannot go stays under its schedule instead of being held in manual mode.
-- Single-track mode: arrivals are guarded for 300 ticks (`storage.rail_guard`) and only northbound or stopped trains are taken, so an arrival on the shared lane is never sent back.
-- Measured (headless): a station at the ring's cell stops a train with its front 0.4 short of the ring's plane; clones auto-couple when placed exactly one coupling length (`(joint_distance + connection_distance) / 2` per car, 7 for vanilla) behind the previous one, even with 0.37 tiles of overshoot; a locomotive with its front at the rail end has its centre 3.5 tiles from it.
-- Visibility: vanilla rail layers are all below `floor`, where the gate's concrete is drawn. The game's rails are therefore never drawn (`render_layers` all `zero`); the gate draws its own track on a ramp (a riveted steel deck with grating between the rails, grey ties and light blue rails at the game's sizes and gauge measured from its rail sheets, cyan edge studs; it runs on through the ring until the ring's upper part hides its end; its layer is rendered with the building hidden so both lanes are shaded alike) from its edge over the ring's lower arc an eighth of a tile into the ring (`lib/stargate-parts.js` `laneTrack`), as the `bte-stargate-tracks` companion on `floor-mechanics`, while the body switches to a picture with the track cut out where it crosses the arc and lights hidden behind it (6 variations: none, one, two tracks; cyan, red). Track continues behind the ring to 5 tiles north of the centre as `bte-stargate-rail-hidden`, drawn on `zero` under the ground: a carriage is taken once its rear passes the ring's plane, and arrivals appear there behind the partner's veil. The station is at the gate's south edge (a waiting train's front 0.6 inside it); a train is taken when its front crosses the edge.
-- Upgrades: `record.rail_layout` (`LAYOUT`) marks the layout version; `Railway.check` adds missing pieces and moves the station for older gates without removing rails under a train. A reinstall with the same mod version raises no `on_configuration_changed`, which is why it is checked there (a gate built before the hidden rails left trains grinding against the old rail end in the ring).
-- Layout: the gate never rotates, so lanes are always north-south, trains enter northbound and leave southbound. Rails at the lane's x, centres 2, 4, 6 tiles south of the gate's centre (ending one tile north of the ring's plane, at the cell edge), on the `rail` collision layer only so they fit the gate's mask; the station has no collision box.
-- GUI: the gate opens the station's native train stop window (`player.opened = station`, which works although the stop is not selectable) with the gate window as a relative GUI anchored to the right of `train_stop_gui`, filtered to `bte-stargate-station`.
-- Tests: `stargate/tests/mods/bte-stargate-runtime-test` sends a three-carriage train in a train group with a driver across surfaces through a two-track pair and checks cargo, fluid, orientation, driver, schedule index, group, and next stop; pushes a manual two-carriage train through a single-track pair; checks the mode cannot change with a train on the rails and that removing a gate removes its rails.
-- Still open: visible checks of the GUI, the look of trains at the ring, players riding through; LTN/Cybersyn; power cost per train; brownout policy (a started train always finishes); a stuck arrival lane (dead end) holds the sender indefinitely; single-track deadlock between two waiting trains; quality and spoilage preservation by `clone` is assumed, not tested.
-
-### Pinned reference and source map
-
-- Upstream: <https://github.com/VariousTrick/RiftRail>, [Mod Portal](https://mods.factorio.com/mod/RiftRail).
-- Local checkout: `../factorio-rift-rail/` relative to repository root; mod root `RiftRail/`.
-- Inspected **0.14.3**, Factorio **2.1**, commit **`f9cc5effbf14d426baeff45a741019c36721690c`**, 2026-11-08; re-read at **`6f8279fada47eba8bf5f9b33d9749f24d753726a`** (2026-11-14) for the implementation below.
-- **MIT**, copyright 2026 VariousTrick. Retain the notice and record copied/adapted provenance. Source inspection is not a compatibility test.
-
-Paths relative to the upstream repository:
-
-| Source | Relevant behavior observed |
-| --- | --- |
-| `RiftRail/scripts/logic.lua`, `Logic.teleport_player` | Directional landing offset, collision search, player teleport |
-| `RiftRail/scripts/teleport.lua`, `Teleport.on_collider_died` | Rolling-stock collider death triggers entry; not simply a hidden-signal callback |
-| Same file, `initialize_teleport_session` | Destination lock and session setup |
-| Same file, `Teleport.process_transfer_step` | Exit check, next carriage, clone, schedule/identity transfer, old-carriage destruction |
-| `RiftRail/scripts/teleport_system/teleport_factory.lua`, `spawn_next_car_intelligently` | Orientation, source disconnection/rotation, exit-rail cloning, driver transfer |
-| `RiftRail/scripts/teleport_system/teleport_math.lua` | Orientation, spacing, movement-direction geometry |
-| `RiftRail/scripts/schedule.lua`, `Schedule.copy_schedule` and cleanup | Full schedules, groups/interrupts, portal-stop adjustment, surface-specific temporary records, incomplete-consist interrupts |
-| `RiftRail/scripts/teleport_system/teleport_utils.lua` | Train state restoration and carriage-GUI viewer remapping |
-| `RiftRail/scripts/teleport.lua`, finalization | Helper locomotive, restored movement, reacquiring train after helper removal |
-| `RiftRail/scripts/remote.lua`, `doc/API_EN.md` | Departure, first-carriage handoff, arrival integration events |
-
-The documented remote API is not evidence of a reusable arbitrary-entity `teleport_train` service. Substantially reuse suitable internals under Stargate ownership, without a RiftRail runtime dependency. Preserve useful decomposition, not its whole architecture.
+The implemented station mode, its measurements, its known limits, how it differs from RiftRail, and the RiftRail provenance are in [`docs/railway.md`](docs/railway.md). Still open here: LTN and Cybersyn integration; routing to more than one gate; power cost per train and a brownout policy (a started train always finishes today); visible checks of trains at the ring and players riding through; and tests that `clone` keeps quality and spoilage.
 
 ### Adaptation and failure contract
 
@@ -234,7 +196,7 @@ Homecoming owns story permission and artifacts; Stargate owns final transfer pre
 | S1 — Experimental construction | Research/kit/material-fed assembly and power work without any family mod |
 | S2 — First uncontrolled jump | Bounded destination selection, practical landing/recovery, successful experiment unlocks paid controlled research |
 | S3 — Controlled pairs | Player-built remote endpoint, reciprocal pairing, lifecycle/access failures, repeated powered travel |
-| T1 — Rift Rail spike | Attributed borrowed core works under Stargate names with real conservation/orientation/schedule tests |
+| T1 — Rift Rail spike | Rift Rail's clone technique works in Stargate's own code with real conservation/orientation/schedule tests |
 | T2 — Rail logistics | Powered paired portals, persistent partial transfers, deterministic recovery, useful sustained throughput |
 | S4 — Campaign integration/release | Versioned site/policy interface, standalone regression coverage, documentation, generated assets, package audit |
 

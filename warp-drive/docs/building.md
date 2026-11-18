@@ -1,6 +1,6 @@
 # Warp Drive Composite Building
 
-**Document role:** this is the maintainer reference for the Warp Drive's composite entity: its prototypes, companion ownership, electrical roles, lifecycle, wiring, and rendering. It does not specify gameplay balance, research routing, location calculations, or audio implementation. `README.md` is authoritative for player-facing behavior and values; `AUDIO.md` covers sound assets and runtime playback.
+**Document role:** this is the maintainer reference for the Warp Drive's composite entity: its prototypes, companion ownership, electrical roles, lifecycle, wiring, and rendering. It does not specify gameplay balance, research routing, location calculations, or audio implementation. `README.md` is authoritative for player-facing behavior and values; [`audio.md`](audio.md) covers sound assets and runtime playback.
 
 ## Why It Is Composite
 
@@ -18,7 +18,7 @@ The controller owns the composite. Companions are never independently placeable,
 | Persistent warp support reserve | The power bank's store, a serialized joule value in the drive record |
 | Scripted circuit output | Hidden output combinator |
 
-The shared power interface uses consumer-only secondary-input mode, the same priority as ordinary machines. Factorio classifies every tertiary interface buffer as accumulator storage even when it cannot output power; secondary mode keeps this interface out of the accumulator-charge display. A power bank (`scripts/power_bank.lua`, whose behaviour, formulas, and charts are in [`docs/power.md`](../docs/power.md); the Stargate carries a verbatim copy) empties the interface's one-tick buffer into the serialized reserve every tick and adapts the interface's request. Switching from experimental to practical mode resets the bank, so detector energy never becomes activation charge.
+The shared power interface uses consumer-only secondary-input mode, the same priority as ordinary machines. Factorio classifies every tertiary interface buffer as accumulator storage even when it cannot output power; secondary mode keeps this interface out of the accumulator-charge display. A power bank (`scripts/power_bank.lua`, whose behaviour, formulas, and charts are in [`docs/power.md`](../../docs/power.md); the Stargate carries a verbatim copy) empties the interface's one-tick buffer into the serialized reserve every tick and adapts the interface's request. Switching from experimental to practical mode resets the bank, so detector energy never becomes activation charge.
 
 ## Prototype Composition
 
@@ -66,7 +66,7 @@ Control registers one `on_tick` handler for the work that cannot wait for the 10
 
 Drive audio is owned by the warp lifecycle. Event sounds play ship-wide without an
 entity; only the positional field hum needs one, the warp-only companion above, which the
-warp sound update creates and removes. See [`AUDIO.md`](AUDIO.md) for assets, runtime
+warp sound update creates and removes. See [`audio.md`](audio.md) for assets, runtime
 scheduling, persistent state, and regeneration.
 
 The symmetric footprint reuses one circuit connection definition in all directions. When adjusting it:
@@ -119,7 +119,7 @@ Each 10-tick update sets the platform's name to whatever precedes the ` [color=c
 
 ### Detector
 
-The `detector_on` latch gates the shared power interface before Practical research, and while the drive is `idle` after it. In both modes, each powered drive checks whether any laboratory buildings exist on its own platform surface: when laboratories exist on the platform (`local`), `100%` of the drive's signal applies exclusively to working laboratories on that platform; when no laboratories exist on the platform (`relay`), `10%` (`10x` remote-transfer loss) applies to working planetary laboratories. While enabled, the power bank asks for up to `1 GW` in `sink` mode: delivery is spent at once rather than stored. The bank empties the interface's one-tick buffer every tick, and every 10 ticks runtime reads the average delivered power since the last update (`PowerBank.delivered`). The bank adapts its request as described in [`docs/power.md`](../docs/power.md): up by a step of `10` to `50 MW` per fully supplied tick, and on a shortfall down below delivery, followed by a two-second hold. It settles a few percent below generation left over after ordinary ship demand while continuing to probe changing capacity. Research scales against a `100 MW` reference, so the power factor ranges continuously from `0` to `10`. The interface's zero output limit prevents sampled energy from powering the ship.
+The `detector_on` latch gates the shared power interface before Practical research, and while the drive is `idle` after it. In both modes, each powered drive checks whether any laboratory buildings exist on its own platform surface: when laboratories exist on the platform (`local`), `100%` of the drive's signal applies exclusively to working laboratories on that platform; when no laboratories exist on the platform (`relay`), `10%` (`10x` remote-transfer loss) applies to working planetary laboratories. While enabled, the power bank asks for up to `1 GW` in `sink` mode: delivery is spent at once rather than stored. The bank empties the interface's one-tick buffer every tick, and every 10 ticks runtime reads the average delivered power since the last update (`PowerBank.delivered`). The bank adapts its request as described in [`docs/power.md`](../../docs/power.md): up by a step of `10` to `50 MW` per fully supplied tick, and on a shortfall down below delivery, followed by a two-second hold. It settles a few percent below generation left over after ordinary ship demand while continuing to probe changing capacity. Research scales against a `100 MW` reference, so the power factor ranges continuously from `0` to `10`. The interface's zero output limit prevents sampled energy from powering the ship.
 
 ### Charge
 

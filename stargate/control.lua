@@ -77,6 +77,7 @@ script.on_event(defines.events.on_tick, function()
   end
 end)
 
+script.on_event(defines.events.on_train_changed_state, Railway.on_train_changed_state)
 script.on_event({defines.events.on_cutscene_cancelled, defines.events.on_cutscene_finished}, Transfer.on_cutscene_cancelled)
 script.on_event(defines.events.on_gui_opened, Gui.on_opened)
 -- A gate's station renamed in its train stop window renames the gate.
@@ -109,6 +110,9 @@ if script.active_mods["bte-stargate-runtime-test"] then
     end,
     set_keep_charged = function(id, keep)
       Gate.set_keep_charged(Gate.get(id), keep)
+    end,
+    rail_transfers = function()
+      return #storage.rail_transfers
     end,
     set_station = function(id, mode)
       return Railway.set_mode(Gate.get(id), mode)

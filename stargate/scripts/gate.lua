@@ -160,7 +160,15 @@ function Gate.remove_railway(record)
   if record.station and record.station.valid then
     record.station.destroy()
   end
-  record.rails, record.station = nil, nil
+  for _, signal in pairs(record.signals or {}) do
+    if signal.valid then
+      signal.destroy()
+    end
+  end
+  if record.entry_control and record.entry_control.valid then
+    record.entry_control.destroy()
+  end
+  record.rails, record.station, record.signals, record.entry_control, record.entry_open = nil, nil, nil, nil, nil
 end
 
 local function remove_companions(record)

@@ -229,7 +229,7 @@ Implemented mechanics eventually live in `homecoming-journey/README.md` with mat
 
 ## 10. Evidence and remaining decisions
 
-- [Stargate plan](../stargate/PLAN.md): preserved player/energy/train safety, Rift Rail source map, pinned MIT reference and preservation matrix.
+- [Stargate plan](../stargate/PLAN.md): preserved player/energy/train safety and preservation matrix; the Rift Rail source map and pinned reference are in [Stargate's railway notes](../stargate/docs/railway.md#provenance).
 - [Mechanoids plan](../mechanoids/PLAN.md): preserved candidate combat stats, finite-roster bookkeeping, AI details, pinned Robot Army/Castra/AbandonedRuins references and licensing.
 - [Warp Drive composition](../warp-drive/control.lua), [research/route calculation](../warp-drive/scripts/research.lua), [power](../warp-drive/scripts/warp.lua).
 - [Platform distance](https://lua-api.factorio.com/2.1.24/classes/LuaSpacePlatform.html#distance), [game state](https://lua-api.factorio.com/2.1.24/classes/LuaGameScript.html#set_game_state), [vanilla planet/location source](https://github.com/wube/factorio-data/blob/master/space-age/prototypes/planet/planet.lua) (moving upstream source; recheck resolved prototypes).

@@ -1,38 +1,27 @@
--- The gate as a train station: rails through its lanes and trains sent through the ring, one carriage
--- at a time, to the partner's arrival lane.
+-- The gate as a train station: rails, a station, and signals through its lanes, and trains sent
+-- through the ring one carriage at a time to the partner's arrival lane. How it works, what was
+-- measured, and how it differs from RiftRail, whose carriage-by-carriage clone technique it follows:
+-- docs/railway.md.
 --
--- Layout. A gate in station mode (record.railway) has vanilla straight rails (bte-stargate-rail, which
--- only the script places, drawn just above the gate's floor) laid from its south edge to the ring, where
--- they seem to end, rails drawn under the ground (bte-stargate-rail-hidden) on behind the ring, and a
--- hidden train stop (bte-stargate-station) named after the gate beside the departure lane at its edge,
--- where trains wait for the gate. LAYOUTS gives the lanes'
--- x offsets from the gate's centre: one central track used both ways, or two tracks with departures
--- on the right or on the left (as seen by a train driving into the gate). Trains always enter heading
--- north and come out of the partner heading south, so the two gates' lanes are always parallel.
---
--- Sending. Every Gate.TRANSFER_TICKS, an open gate whose partner is also a station takes any train
--- whose front has reached the gate's edge on its departure lane (a train stopping at the station stops
--- there, and a manually driven one passes it). From then on, every tick (Railway.update), the train is
--- held in manual mode and driven into the ring at SPEED; each carriage that has passed wholly behind
--- the veil is rotated, cloned onto the partner's arrival lane (clone keeps its cargo, fuel, fluid, equipment,
--- health, colour, and name), and removed, as in the RiftRail mod. The clones couple as they are
--- placed behind the partner's veil, each a coupling length behind the last, while the arriving part is driven out at the same speed. Crew
--- move with their carriage. When the last carriage is through, the arriving train gets the old
--- train's schedule, interrupts, and group, its current stop moved past the gate's station, and leaves
--- in the mode it came in.
---
--- Each carriage gets its own splash and sound at its lane on both gates (splash()), started early
--- enough that the flash is at its brightest as it vanishes and appears.
---
--- Unlike RiftRail, the schedule is copied only once, to the complete train, so cargo interrupts never
--- see a half-arrived train, and no leading locomotive is needed: the script drives the train while
--- it is assembled. A gate's arrival lane takes one train at a time (it is locked by the transfer).
+-- In short: the entry signal at the departure edge is red until the gate could send a train, so
+-- trains wait in front of it under their schedule. Railway.check (every Gate.TRANSFER_TICKS) syncs
+-- that signal and takes a train whose front crosses the edge; Railway.update (every tick) drives it
+-- in, clones each carriage behind the veil onto the partner's arrival lane, drives the arriving part
+-- out, smashes carriages that cannot come out, and gives the complete train its schedule back.
 local Gate = require("scripts.gate")
 
 local Railway = {}
 
 local RAIL = "bte-stargate-rail"
 local STATION = "bte-stargate-station"
+local EXIT_SIGNAL = "bte-stargate-exit-signal"
+local ENTRY_SIGNAL = "bte-stargate-entry-signal"
+local ENTRY_CONTROL = "bte-stargate-entry-control"
+-- The entry signal closes while its control sends this signal.
+local CLOSE_SIGNAL = {type = "virtual", name = "signal-red"}
+-- Signals sit beside a lane's rail end: west of it facing north guards southbound trains, east of it
+-- facing south northbound ones (measured; any other side or direction is placed but never attached).
+local SIGNAL_DX = 1.5
 local ROLLING_STOCK = {"locomotive", "cargo-wagon", "fluid-wagon", "artillery-wagon", "infinity-cargo-wagon"}
 -- The building's centre is one tile south-east of its position (prototypes/entities.lua).
 local CENTER = 1
@@ -69,6 +58,13 @@ local NORTH = defines.direction.north
 function Railway.init_storage()
   storage.rail_transfers = storage.rail_transfers or {}
   storage.rail_guard = storage.rail_guard or {}
+  storage.rail_held = storage.rail_held or {}
+end
+
+-- Held trains by id; created on first use too, for saves from before holding.
+local function held_trains()
+  storage.rail_held = storage.rail_held or {}
+  return storage.rail_held
 end
 
 local function center(record)
@@ -118,7 +114,7 @@ local function busy(record)
 end
 
 -- The layout's version: gates built with an earlier one get the missing pieces and a moved station.
-local LAYOUT = 2
+local LAYOUT = 5
 
 -- Places the rails and station for record.railway, adding whatever is missing (after a configuration
 -- change, or a layout from an earlier version: then a train may stand on the rails, so nothing is
@@ -167,14 +163,59 @@ local function build(record)
       record.station = station
     end
   end
+  local signals = {}
+  for _, old in pairs(record.signals or {}) do
+    if old.valid then
+      signals[#signals + 1] = old
+    end
+  end
+  local function signal(name, dx, direction)
+    local position = {c.x + dx, c.y + EDGE - 0.5}
+    local found = surface.find_entity(name, position)
+    if found then
+      return found
+    end
+    local created = surface.create_entity({name = name, position = position, direction = direction,
+      force = gate.force, create_build_effect_smoke = false})
+    if created then
+      created.destructible = false
+      signals[#signals + 1] = created
+    end
+    return created
+  end
+  signal(EXIT_SIGNAL, spec.arrive - SIGNAL_DX, NORTH)
+  local entry = signal(ENTRY_SIGNAL, spec.depart + SIGNAL_DX, defines.direction.south)
+  record.signals = signals
+  -- The entry signal's switch, closed until Railway.check finds the gate ready.
+  if entry and not (record.entry_control and record.entry_control.valid) then
+    local control = surface.create_entity({name = ENTRY_CONTROL, position = entry.position, force = gate.force,
+      create_build_effect_smoke = false})
+    if control then
+      control.destructible = false
+      local behavior = control.get_or_create_control_behavior()
+      behavior.get_section(1).set_slot(1, {value = {type = CLOSE_SIGNAL.type, name = CLOSE_SIGNAL.name, quality = "normal"}, min = 1})
+      behavior.enabled = true
+      control.get_wire_connector(defines.wire_connector_id.circuit_red, true).connect_to(
+        entry.get_wire_connector(defines.wire_connector_id.circuit_red, true), false, defines.wire_origin.script)
+      local signal_behavior = entry.get_or_create_control_behavior()
+      signal_behavior.close_signal = true
+      signal_behavior.circuit_condition = {first_signal = CLOSE_SIGNAL, comparator = ">", constant = 0}
+      record.entry_control, record.entry_open = control, false
+    end
+  end
   record.rail_layout = LAYOUT
 end
 
--- Removes the rails and station (Gate.remove_railway also clears carriages off them).
-local function clear(record)
-  Gate.remove_railway(record)
+-- Whether the block out of `target`'s arrival lane is free and not reserved, as its exit signal
+-- shows. A gate without the signal (it could not be placed) is not held back.
+local function exit_clear(target)
+  for _, signal in pairs(target.signals or {}) do
+    if signal.valid and signal.name == EXIT_SIGNAL then
+      return signal.signal_state == defines.signal_state.open
+    end
+  end
+  return true
 end
-Railway.clear = clear
 
 -- Switches station mode: nil (off) or one of Railway.MODES. Refused, returning false and a reason,
 -- while a train is on the gate's rails or passing through either way.
@@ -185,7 +226,8 @@ function Railway.set_mode(record, mode)
   if record.railway and (busy(record) or #stock_on_rails(record, record.railway) > 0) then
     return false, {"bte-stargate-gui.station-occupied"}
   end
-  clear(record)
+  -- Removes the rails, station, and signals, and clears carriages off them.
+  Gate.remove_railway(record)
   record.railway = mode
   build(record)
   Gate.refresh(record)
@@ -238,7 +280,7 @@ local function drive(train, south)
   train.speed = SPEED * south_sign(train) * (south and 1 or -1)
 end
 
--- The carriage of `train` furthest in (northmost), its leading edge, and its rear.
+-- The carriage of `train` furthest in (northmost).
 local function leading(train)
   local best, best_y
   for _, car in pairs(train.carriages) do
@@ -247,16 +289,12 @@ local function leading(train)
       best, best_y = car, y
     end
   end
-  return best, best_y, best and best.bounding_box.right_bottom.y
-end
-
-local function stock_prototype(name)
-  return prototypes.entity[name]
+  return best
 end
 
 -- The distance between the centres of two coupled carriages, from their prototypes (7 for vanilla).
 local function half_length(name)
-  local prototype = stock_prototype(name)
+  local prototype = prototypes.entity[name]
   return ((prototype.joint_distance or 4) + (prototype.connection_distance or 3)) / 2
 end
 
@@ -342,7 +380,10 @@ local DEPART_LEAD_TICKS = 11
 
 local function start(record, target, train, car)
   local schedule = train.get_schedule()
-  local saved = {manual = train.manual_mode}
+  -- A held train came in automatic.
+  local held = held_trains()
+  local saved = {manual = train.manual_mode and not held[train.id]}
+  held[train.id] = nil
   if schedule then
     saved.records = schedule.get_records()
     saved.interrupts = schedule.get_interrupts()
@@ -351,27 +392,122 @@ local function start(record, target, train, car)
   end
   saved.station = record.station and record.station.valid and record.station.backer_name or record.name
   storage.rail_transfers[#storage.rail_transfers + 1] = {
-    from = record.entity.unit_number, to = target.entity.unit_number, car = car, saved = saved, start = game.tick
+    from = record.entity.unit_number, to = target.entity.unit_number, car = car, saved = saved
   }
   drive(train, false)
 end
 
+-- How far beyond the gate's edge a held train may stand and still be held; a train moved further
+-- away (by hand) goes back to its schedule.
+local HOLD_REACH = 12
+
+-- Whether `train` stands on `record`'s departure lane, between the ring and HOLD_REACH beyond the edge.
+local function on_departure_lane(record, train)
+  local front = train.front_stock
+  if not (front and front.valid and front.surface == record.entity.surface) then
+    return false
+  end
+  local c, spec = center(record), layout(record)
+  for _, car in pairs({front, train.back_stock}) do
+    local position = car.position
+    if math.abs(position.x - c.x - spec.depart) < 1 and position.y > c.y + RAIL_END and position.y < c.y + EDGE + HOLD_REACH then
+      return true
+    end
+  end
+  return false
+end
+
+local function hold(train, record)
+  held_trains()[train.id] = {train = train, gate = record.entity.unit_number}
+  train.manual_mode = true
+  train.speed = 0
+end
+
+-- The station gate whose waypoint `train` has just passed without stopping and whose departure lane
+-- it is on: the record before its current one names that gate's station.
+local function passed_gate(train)
+  local schedule = train.get_schedule()
+  local count = schedule and schedule.get_record_count() or 0
+  if count == 0 then
+    return nil
+  end
+  local previous = schedule.get_record({schedule_index = (schedule.current - 2) % count + 1})
+  if not (previous and previous.station) then
+    return nil
+  end
+  for _, record in pairs(storage.gates) do
+    if record.railway and record.name == previous.station and record.entity.valid and on_departure_lane(record, train) then
+      return record
+    end
+  end
+end
+
+-- The fallback for a train past the entry signal that the gate cannot take yet (there before the
+-- signal closed, or a fast train past a waypoint between checks): once it leaves the gate's station,
+-- its wait over or at once if the station is only a waypoint, it finds no path to its next stop on
+-- the other surface. Catching that here, in the same tick, holds it in manual mode before the game
+-- raises the "no path" alert (seen in a visible game). Arrived trains are guarded, so not held.
+function Railway.on_train_changed_state(event_data)
+  local train = event_data.train
+  if not (train.valid and not train.manual_mode and train.state == defines.train_state.no_path)
+    or guarded(train.front_stock) then
+    return
+  end
+  local record = passed_gate(train)
+  if record and layout(record) then
+    hold(train, record)
+  end
+end
+
+-- Lets go of held trains the gate can no longer take: its gate is gone or out of station mode, the
+-- train was moved off the lane, or someone switched it back to automatic.
+local function release_held()
+  local trains = held_trains()
+  for id, held in pairs(trains) do
+    local train = held.train
+    if not (train.valid and train.manual_mode) then
+      trains[id] = nil
+    else
+      local record = Gate.get(held.gate)
+      if not (record and record.entity.valid and layout(record) and on_departure_lane(record, train)) then
+        trains[id] = nil
+        train.manual_mode = false
+      end
+    end
+  end
+end
+
 -- Sends any train that has reached the ring of an open station gate whose partner is a station too.
 function Railway.check()
+  if next(held_trains()) then
+    release_held()
+  end
   for _, record in pairs(storage.gates) do
     if record.railway and record.rail_layout ~= LAYOUT and record.entity.valid then
       build(record)
     end
     local spec = layout(record)
     local target = spec and record.entity.valid and Gate.partner(record)
-    if target and layout(target) and Gate.is_open(record) and not receiving(target) then
+    -- Whether a train could be sent now. The entry signal shows it, so trains wait in front of the
+    -- gate, still heading for its station, and none looks for a path beyond it; a train already past
+    -- the signal (driven by hand, or there before it closed) is taken below all the same. Room on the
+    -- partner's arrival lane is left to the send: an entity search per gate every check was three
+    -- quarters of this sync's cost (measured), and a free exit with no transfer running nearly
+    -- always means room.
+    local ready = (target and layout(target) and Gate.is_open(record) and not receiving(target)
+      and exit_clear(target)) == true
+    local control = spec and record.entry_control
+    if control and control.valid and record.entry_open ~= ready then
+      control.get_control_behavior().enabled = not ready
+      record.entry_open = ready
+    end
+    if ready then
       local c = center(record)
       for _, car in pairs(record.entity.surface.find_entities_filtered({type = ROLLING_STOCK,
           area = lane_area(record, spec.depart, RAIL_END - 0.5, EDGE + REACH)})) do
         local train = car.train
         if train and car.bounding_box.left_top.y <= c.y + EDGE + REACH and not guarded(car)
           and not in_transfer(train) and train.speed * south_sign(train) <= 0.01
-          -- Only into a free arrival lane, so a train that cannot go stays in its schedule.
           and room({}, target, car.name) then
           start(record, target, train, car)
           break
@@ -406,24 +542,26 @@ local function crew(car)
 end
 
 -- Moves one carriage through: from the departure lane to a clone on the partner's arrival lane.
+-- Returns false, with the carriage as it was, if it could not be turned or cloned.
 local function send(transfer, record, target, car)
   local position = spawn_position(target, car.name)
-  local driver, watchers = crew(car)
   -- The clone keeps the carriage's orientation, and it must leave the partner facing the way it
-  -- entered relative to its motion, so the carriage is turned first; turning needs it uncoupled.
+  -- entered relative to its motion: lanes always run north into one gate and south out of the other,
+  -- so every carriage is turned first, which needs it uncoupled.
   car.disconnect_rolling_stock(defines.rail_direction.front)
   car.disconnect_rolling_stock(defines.rail_direction.back)
-  car.rotate()
-  local clone = car.clone({position = position, surface = target.entity.surface, force = car.force, create_build_effect_smoke = false})
+  local turned = car.rotate()
+  local clone = turned and car.clone({position = position, surface = target.entity.surface, force = car.force,
+    create_build_effect_smoke = false})
   if not clone then
-    car.rotate()
+    if turned then
+      car.rotate()
+    end
     car.connect_rolling_stock(defines.rail_direction.front)
     car.connect_rolling_stock(defines.rail_direction.back)
-    if driver then
-      car.set_driver(driver)
-    end
     return false
   end
+  local driver, watchers = crew(car)
   if driver and driver.valid then
     driver.teleport(clone.position, clone.surface)
     clone.set_driver(driver)
@@ -437,6 +575,93 @@ local function send(transfer, record, target, car)
   storage.rail_guard[clone.unit_number] = game.tick + GUARD_TICKS
   transfer.last = clone
   return true
+end
+
+-- How many ticks the arrived part must stand still, with the next carriage due, before that carriage
+-- is smashed: a train pushed each tick moves on the next one unless something stops it.
+local STUCK_TICKS = 3
+
+-- Whether the next carriage can never come through: the arrived part has stopped (a dead end, or a
+-- train in its way), or something else stands on the arrival lane.
+local function blocked(transfer)
+  local last = transfer.last
+  if not (last and last.valid) then
+    return true
+  end
+  local y = last.position.y
+  if transfer.last_y == y then
+    transfer.stuck = (transfer.stuck or 0) + 1
+  else
+    transfer.last_y, transfer.stuck = y, 0
+  end
+  return transfer.stuck >= STUCK_TICKS
+end
+
+-- Destroys one carriage at `position` on `target`'s surface, with its cargo: its explosion and
+-- remnants appear there, and its driver lands on the floor beside the arrival lane, towards the
+-- gate's centre (between the tracks of a two-track gate, east of a single one: a train coming out
+-- has it on its left), clear of the track where carriages may stand and in front of the portal.
+local function wreck(target, car, position)
+  local surface = target.entity.surface
+  local driver = crew(car)
+  if driver and driver.valid then
+    local c, arrive = center(target), layout(target).arrive
+    local x = c.x + (arrive == 0 and 2 or arrive / 2)
+    local spot = surface.find_non_colliding_position("character", {x, c.y + EDGE - 1}, 4, 0.25)
+    driver.teleport(spot or {x, c.y + EDGE - 1}, surface)
+  end
+  local explosion = car.name .. "-explosion"
+  surface.create_entity({name = prototypes.entity[explosion] and explosion or "big-explosion", position = position})
+  local remnants = car.name .. "-remnants"
+  if prototypes.entity[remnants] then
+    surface.create_entity({name = remnants, position = position, direction = defines.direction.south})
+  end
+  car.destroy({raise_destroy = true})
+end
+
+-- How far a carriage's rear may still be behind the ring's plane for it to count as out: a
+-- locomotive stopped at the gate's edge, with no track beyond, has its rear 0.2 tiles behind.
+local EMERGED_SLACK = 0.5
+
+-- Whether `car`, arrived at `target`, has come out of the ring: wholly, or all but the slack.
+local function out_of_ring(target, car)
+  return car.bounding_box.left_top.y >= center(target).y + RING_PLANE - EMERGED_SLACK
+end
+
+-- Crushes the arrived carriages that have not come out of the ring once the arrived part has
+-- stopped: only what has come out survives.
+local function crush(transfer, target)
+  local last = transfer.last
+  while last and last.valid and not out_of_ring(target, last) do
+    local ahead
+    for _, direction in pairs({defines.rail_direction.front, defines.rail_direction.back}) do
+      local other = last.get_connected_rolling_stock(direction)
+      if other and other.position.y > last.position.y then
+        ahead = other
+      end
+    end
+    wreck(target, last, last.position)
+    last = ahead
+  end
+  transfer.last = last
+end
+
+-- Whether the arrived part's rearmost carriage has come out.
+local function emerged(transfer, target)
+  local last = transfer.last
+  return not (last and last.valid) or out_of_ring(target, last)
+end
+
+-- A carriage that finds no room at the partner crashes into what stands there: after the arrived
+-- carriages still in the ring (crush()), against the rear of the carriage ahead.
+local function crash(transfer, target, car)
+  crush(transfer, target)
+  local last = transfer.last
+  local position = spawn_position(target, car.name)
+  if last and last.valid then
+    position.y = last.bounding_box.left_top.y - 1
+  end
+  wreck(target, car, position)
 end
 
 -- The saved schedule with the gate's own stop passed: rail records name places on the old surface
@@ -528,7 +753,16 @@ function Railway.update()
       local car = transfer.car
       local train = car and car.valid and car.train
       if not train then
-        finish(index, transfer)
+        -- Everything is sent: the arrived part is driven out until its last carriage has emerged;
+        -- if it stops first, what is still in the ring is crushed.
+        if emerged(transfer, target) then
+          finish(index, transfer)
+        elseif blocked(transfer) then
+          crush(transfer, target)
+          finish(index, transfer)
+        else
+          drive(transfer.last.train, true)
+        end
       else
         -- The train's northmost carriage, found once: afterwards each carriage sent leaves the next
         -- one in front, so transfer.car stays it without walking every carriage's box each tick.
@@ -551,12 +785,27 @@ function Railway.update()
           splash(target, layout(target).arrive, "bte-stargate-car-out")
         end
         transfer.flashed[front.unit_number] = flashed
-        if rear <= c.y + RING_PLANE and room(transfer, target, front.name) then
+        local ready = rear <= c.y + RING_PLANE
+        local fits = ready and room(transfer, target, front.name)
+        if ready and (fits or blocked(transfer)) then
           local rest = front.get_connected_rolling_stock(defines.rail_direction.front)
           if not rest or rest == front then
             rest = front.get_connected_rolling_stock(defines.rail_direction.back)
           end
-          if send(transfer, record, target, front) then
+          local gone = fits and send(transfer, record, target, front)
+          if gone then
+            transfer.failed = nil
+          elseif fits then
+            -- A carriage that cannot be turned or cloned (something else in the way at the partner)
+            -- is tried again next tick, but a started train must finish: after STUCK_TICKS failures
+            -- it counts as blocked.
+            transfer.failed = (transfer.failed or 0) + 1
+          end
+          if not gone and (not fits or transfer.failed >= STUCK_TICKS) then
+            crash(transfer, target, front)
+            transfer.failed, gone = nil, true
+          end
+          if gone then
             transfer.car = rest
             train = rest and rest.valid and rest.train
             rear = train and rest.bounding_box.right_bottom.y
@@ -572,9 +821,6 @@ function Railway.update()
         end
         if transfer.last and transfer.last.valid and transfer.last.train then
           drive(transfer.last.train, true)
-        end
-        if not (transfer.car and transfer.car.valid) then
-          finish(index, transfer)
         end
       end
     end

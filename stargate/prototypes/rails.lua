@@ -52,4 +52,58 @@ stop.drawing_boxes = nil
 stop.water_reflection = nil
 stop.working_sound = nil
 
-data:extend({rail, hidden, stop})
+-- Hidden signals at the gate's edge (scripts/railway.lua): one on the arrival lane, read before a
+-- train is sent here, and one on the departure lane for trains heading in, which the gate holds red
+-- until it can take a train (and which keeps a single track two-way for the pathfinder). Drawn under the ground, without lights, like the rails.
+-- `visible` keeps the vanilla pictures and lights: the entry signal shows players whether the gate
+-- is ready for a train.
+local function hidden_signal(type, name, visible)
+  local signal = table.deepcopy(data.raw[type][type])
+  signal.name = name
+  signal.localised_name = {"entity-name." .. type}
+  signal.flags = {"placeable-neutral", "player-creation", "not-blueprintable", "not-deconstructable",
+    "not-upgradable", "no-copy-paste", "not-in-kill-statistics"}
+  signal.minable = nil
+  signal.placeable_by = nil
+  signal.hidden = true
+  signal.selectable_in_game = false
+  -- Signals must collide with signals; `rail` alone does, and keeps the gate's own layers out.
+  signal.collision_mask = {layers = {rail = true}}
+  signal.fast_replaceable_group = nil
+  signal.next_upgrade = nil
+  signal.corpse = nil
+  signal.dying_explosion = nil
+  for _, set in pairs(visible and {} or {signal.ground_picture_set, signal.elevated_picture_set}) do
+    set.structure = {layers = {set.structure.layers[1]}}
+    set.structure_render_layer = "zero"
+    set.rail_piece = nil
+    for _, light in pairs(set.lights) do
+      light.light.intensity = 0
+    end
+  end
+  return signal
+end
+
+-- The entry signal's switch: a hidden constant combinator on the same spot, wired to it by script.
+-- A signal ignores its circuit condition without a network, so the script cannot close it alone.
+local control = table.deepcopy(data.raw["constant-combinator"]["constant-combinator"])
+control.name = "bte-stargate-entry-control"
+control.localised_name = {"entity-name.constant-combinator"}
+control.flags = {"placeable-neutral", "player-creation", "not-blueprintable", "not-deconstructable",
+  "not-upgradable", "no-copy-paste", "not-in-kill-statistics", "not-on-map"}
+control.minable = nil
+control.placeable_by = nil
+control.hidden = true
+control.selectable_in_game = false
+control.collision_mask = {layers = {}}
+control.fast_replaceable_group = nil
+control.next_upgrade = nil
+control.corpse = nil
+control.dying_explosion = nil
+control.sprites = util.empty_sprite()
+control.activity_led_sprites = util.empty_sprite()
+control.activity_led_light = nil
+control.draw_circuit_wires = false
+
+data:extend({rail, hidden, stop, hidden_signal("rail-signal", "bte-stargate-exit-signal"),
+  hidden_signal("rail-signal", "bte-stargate-entry-signal", true), control})
