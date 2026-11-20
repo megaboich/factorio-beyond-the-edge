@@ -84,13 +84,16 @@ local MID_CASES = {
   {gates = {"a"}, at = 0, wagons = 8, from = 600, manual = 1.38},
   {gates = {"b"}, at = 2},
   {gates = {"a", "b"}, at = 3},
+  -- No gate switched off: the train from a save that came out with its last two wagons loose. Its
+  -- part already out, lighter than the whole train, drives itself away faster than the rest is fed.
+  {gates = {}, at = 0, wagons = 6, from = 600, fuel = "rocket-fuel"},
 }
 
 local function start_mid(case)
   local fast = storage.fast
   remote.call("bte-stargate-test", "set_enabled", fast.a.unit_number, true)
   remote.call("bte-stargate-test", "set_enabled", fast.b.unit_number, true)
-  fast.entry, fast.top, fast.close, fast.loco, fast.mid = nil, 0, false, fast.train(case.from or 370, nil, case.wagons or 4), case
+  fast.entry, fast.top, fast.close, fast.loco, fast.mid = nil, 0, false, fast.train(case.from or 370, nil, case.wagons or 4, case.cargo, case.fuel), case
   if case.manual then
     fast.loco.train.manual_mode = true
     fast.loco.train.speed = case.manual
@@ -105,10 +108,11 @@ local function check_mid()
   local whole = 1 + (fast.mid.wagons or 4)
   expect(case .. ": it arrives whole", #cars, whole)
   expect(case .. ": and coupled", cars[1] and #cars[1].train.carriages, whole)
+  expect(case .. ": every carriage appears behind the veil (" .. tostring(fast.outside) .. ")", (fast.outside or 0) <= 3, true)
   for _, car in pairs(cars) do
     car.destroy()
   end
-  fast.mid, fast.mid_closed = nil, nil
+  fast.mid, fast.mid_closed, fast.seen, fast.outside = nil, nil, nil, nil
 end
 
 -- Each step runs once, `delay` ticks after the previous one; the mod checks its sites every 30 ticks.
@@ -756,12 +760,15 @@ local steps = {
       fb.create_entity({name = "straight-rail", position = {3, y}, direction = defines.direction.north, force = "player"})
     end
     fb.create_entity({name = "train-stop", position = {1, 391}, direction = defines.direction.south, force = "player"}).backer_name = "bte-test-fast-far"
-    local function train(y, destination, wagons)
+    local function train(y, destination, wagons, cargo, fuel)
       local loco = fa.create_entity({name = "locomotive", position = {3, y}, direction = defines.direction.north, force = "player"})
       for k = 1, wagons or 2 do
-        fa.create_entity({name = "cargo-wagon", position = {3, y + 7 * k}, direction = defines.direction.north, force = "player"})
+        local wagon = fa.create_entity({name = "cargo-wagon", position = {3, y + 7 * k}, direction = defines.direction.north, force = "player"})
+        if cargo then
+          wagon.insert({name = cargo, count = 10000})
+        end
       end
-      loco.insert({name = "nuclear-fuel", count = 2})
+      loco.insert({name = fuel or "nuclear-fuel", count = 2})
       local schedule = loco.train.get_schedule()
       schedule.add_record({station = remote.call("bte-stargate-test", "station", a.unit_number).backer_name, wait_conditions = {}})
       schedule.add_record({station = destination or "bte-test-fast-far", wait_conditions = {{type = "time", ticks = 6000}}})
@@ -800,7 +807,8 @@ local steps = {
   {1500, function() check_mid() start_mid(MID_CASES[3]) end},
   {1500, function() check_mid() start_mid(MID_CASES[4]) end},
   {1500, function() check_mid() start_mid(MID_CASES[5]) end},
-  {1200, function()
+  {1500, function() check_mid() start_mid(MID_CASES[6]) end},
+  {1500, function()
     check_mid()
     local fast = storage.fast
     -- A red signal 50 tiles beyond the partner, a wagon standing behind it: the fast arrival drives
@@ -1074,6 +1082,17 @@ script.on_event(defines.events.on_tick, function()
         fast.reserved = entry and entry.signal_state == defines.signal_state.reserved
         remote.call("bte-stargate-test", "set_enabled", fast.a.unit_number, false)
         fast.closed = true
+      end
+    end
+    if fast.mid then
+      -- Each carriage's first position on the partner: its rear must still be behind the veil (the
+      -- ring's plane, y 3), or the rest of the train fell behind the part already out.
+      fast.seen = fast.seen or {}
+      for _, car in pairs(fast.fb.find_entities_filtered({type = {"locomotive", "cargo-wagon"}})) do
+        if not fast.seen[car.unit_number] then
+          fast.seen[car.unit_number] = true
+          fast.outside = math.max(fast.outside or -math.huge, car.bounding_box.right_bottom.y)
+        end
       end
     end
     if fast.mid and fast.mid.manual and fast.loco.valid and fast.loco.surface == fast.fa

@@ -848,6 +848,13 @@ function Railway.update()
       if acceleration <= 0 then
         speed = math.max(speed, SPEED)
       end
+      -- Once out, the train drives itself and may pull away faster than the script feeds it: the
+      -- part still going in keeps up, as the rest of one train would, or the next carriage appears
+      -- falling behind and does not couple (seen in game).
+      local out = transfer.last
+      if out and out.valid and out.train then
+        speed = math.max(speed, math.abs(out.train.speed))
+      end
       transfer.speed = speed
       local car = transfer.car
       local train = car and car.valid and car.train
