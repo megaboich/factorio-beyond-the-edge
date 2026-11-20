@@ -637,9 +637,9 @@ local steps = {
     storage.crash, storage.crash_driver = nil, nil
   end},
 
-  -- The fallback hold: an automatic train already past the closed entry signal, at the station,
-  -- which is only a waypoint in its schedule. It finds no path to its next stop on the other surface
-  -- and is held in manual mode instead, then sent once the gate opens, arriving in automatic mode.
+  -- The stop at the edge: an automatic train inside a gate whose partner cannot take it (not paired
+  -- yet) stops at the edge, held in manual mode, instead of driving on into the ring; once paired it
+  -- is sent, arriving in automatic mode. Then a train driven by hand into a closed gate is not taken.
   {5, function()
     local function lab(name)
       local s = game.create_surface(name)
@@ -656,35 +656,182 @@ local steps = {
     source.power_production, source.electric_buffer_size, source.energy = 1e9, 1e10, 1e10
     remote.call("bte-stargate-test", "set_station", a.unit_number, "right")
     remote.call("bte-stargate-test", "set_station", b.unit_number, "left")
-    remote.call("bte-stargate-test", "pair", a.unit_number, b.unit_number)
-    remote.call("bte-stargate-test", "set_enabled", a.unit_number, false)
     for y = 9, 41, 2 do
       ha.create_entity({name = "straight-rail", position = {3, y}, direction = defines.direction.north, force = "player"})
       hb.create_entity({name = "straight-rail", position = {3, y}, direction = defines.direction.north, force = "player"})
     end
     hb.create_entity({name = "train-stop", position = {1, 31}, direction = defines.direction.south, force = "player"}).backer_name = "bte-test-hold-far"
-    -- Its front at the station, 0.6 inside the gate's edge, past the entry signal.
-    local loco = ha.create_entity({name = "locomotive", position = {3, 10}, direction = defines.direction.north, force = "player"})
+    -- Inside the gate's block, just short of the edge.
+    local loco = ha.create_entity({name = "locomotive", position = {3, 12}, direction = defines.direction.north, force = "player"})
     loco.insert({name = "coal", count = 20})
     local schedule = loco.train.get_schedule()
     schedule.add_record({station = remote.call("bte-stargate-test", "station", a.unit_number).backer_name, wait_conditions = {}})
     schedule.add_record({station = "bte-test-hold-far", wait_conditions = {{type = "time", ticks = 6000}}})
     schedule.go_to_station(1)
     loco.train.manual_mode = false
-    storage.hold = {ha = ha, hb = hb, a = a, loco = loco}
+    storage.hold = {ha = ha, hb = hb, a = a, b = b, loco = loco}
   end},
   {120, function()
     local hold = storage.hold
-    expect("a train past the closed entry signal is held, not left without a path",
-      hold.loco.valid and hold.loco.train.manual_mode and hold.loco.train.state ~= defines.train_state.no_path, true)
-    remote.call("bte-stargate-test", "set_enabled", hold.a.unit_number, true)
+    expect("an automatic train at a gate with no partner is stopped at the edge",
+      hold.loco.valid and hold.loco.train.manual_mode and hold.loco.train.speed == 0
+      and hold.loco.bounding_box.left_top.y > 6.5, true)
+    remote.call("bte-stargate-test", "pair", hold.a.unit_number, hold.b.unit_number)
   end},
   {400, function()
     local hold = storage.hold
     local arrived = hold.hb.find_entities_filtered({type = "locomotive"})[1]
-    expect("the held train is sent once the gate opens", arrived ~= nil and not hold.loco.valid, true)
+    expect("the held train is sent once the gate is paired", arrived ~= nil and not hold.loco.valid, true)
     expect("and arrives in automatic mode", arrived and arrived.train.manual_mode, false)
+    arrived.destroy()
+    remote.call("bte-stargate-test", "set_enabled", hold.a.unit_number, false)
+    hold.loco = hold.ha.create_entity({name = "locomotive", position = {3, 20}, direction = defines.direction.north, force = "player"})
+    hold.loco.train.manual_mode = true
+    hold.loco.train.speed = (math.cos(hold.loco.orientation * 2 * math.pi) > 0 and 1 or -1) * 0.2
+  end},
+  {200, function()
+    local hold = storage.hold
+    expect("a train driven by hand into a closed gate is not taken", hold.loco.valid
+      and hold.hb.count_entities_filtered({type = "locomotive"}), 0)
     storage.hold = nil
+  end},
+
+  -- Speed: an automatic train from far off, heading for the gate's station behind the ring, still
+  -- crosses the edge at speed, gathers speed through the ring, and arrives coupled, at that speed.
+  {5, function()
+    local function lab(name)
+      local s = game.create_surface(name)
+      s.generate_with_lab_tiles = true
+      s.request_to_generate_chunks({0, 200}, 8)
+      s.force_generate_chunk_requests()
+      return s
+    end
+    local fa, fb = lab("bte-test-fast-a"), lab("bte-test-fast-b")
+    local a = fa.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
+    local b = fb.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
+    fa.create_entity({name = "substation", position = {-10, -6}, force = "player"})
+    local source = fa.create_entity({name = "bte-stargate-test-power", position = {-12, -6}, force = "player"})
+    source.power_production, source.electric_buffer_size, source.energy = 1e9, 1e10, 1e10
+    remote.call("bte-stargate-test", "set_station", a.unit_number, "right")
+    remote.call("bte-stargate-test", "set_station", b.unit_number, "left")
+    remote.call("bte-stargate-test", "pair", a.unit_number, b.unit_number)
+    for y = 9, 401, 2 do
+      fa.create_entity({name = "straight-rail", position = {3, y}, direction = defines.direction.north, force = "player"})
+      fb.create_entity({name = "straight-rail", position = {3, y}, direction = defines.direction.north, force = "player"})
+    end
+    fb.create_entity({name = "train-stop", position = {1, 391}, direction = defines.direction.south, force = "player"}).backer_name = "bte-test-fast-far"
+    local function train(y, destination)
+      local loco = fa.create_entity({name = "locomotive", position = {3, y}, direction = defines.direction.north, force = "player"})
+      fa.create_entity({name = "cargo-wagon", position = {3, y + 7}, direction = defines.direction.north, force = "player"})
+      fa.create_entity({name = "cargo-wagon", position = {3, y + 14}, direction = defines.direction.north, force = "player"})
+      loco.insert({name = "nuclear-fuel", count = 2})
+      local schedule = loco.train.get_schedule()
+      schedule.add_record({station = remote.call("bte-stargate-test", "station", a.unit_number).backer_name, wait_conditions = {}})
+      schedule.add_record({station = destination or "bte-test-fast-far", wait_conditions = {{type = "time", ticks = 6000}}})
+      schedule.go_to_station(1)
+      loco.train.manual_mode = false
+      return loco
+    end
+    storage.fast = {fa = fa, fb = fb, a = a, train = train, loco = train(370), top = 0}
+  end},
+  {900, function()
+    local fast = storage.fast
+    expect("a train heading for the gate's station crosses the edge at speed", (fast.entry or 0) > 0.25, true)
+    expect("it gathers speed through the ring and leaves at least as fast", (fast.top or 0) >= (fast.entry or 1), true)
+    expect("its locomotive comes out at the speed it went in, not standing", (fast.first or 0) >= (fast.entry or 1), true)
+    local arrived = fast.fb.find_entities_filtered({type = "locomotive"})[1]
+    expect("and arrives coupled", arrived and #arrived.train.carriages, 3)
+    log("STARGATE_TEST_INFO: edge speed " .. tostring(fast.entry) .. ", first out " .. tostring(fast.first) .. ", out " .. tostring(fast.top))
+    for _, car in pairs(fast.fb.find_entities_filtered({type = {"locomotive", "cargo-wagon"}})) do
+      car.destroy()
+    end
+    -- Commitment: the gate closes once the next train, 30 tiles out, has reserved its way through the
+    -- green signal; it is sent anyway.
+    fast.entry, fast.top, fast.loco, fast.close = nil, 0, fast.train(370), true
+  end},
+  {900, function()
+    local fast = storage.fast
+    expect("the gate closed once a train had reserved its way through the entry signal", fast.closed and fast.reserved, true)
+    expect("which is sent all the same", fast.fb.count_entities_filtered({type = "locomotive"}) == 1
+      and fast.fa.count_entities_filtered({type = "locomotive"}) == 0, true)
+    for _, car in pairs(fast.fb.find_entities_filtered({type = {"locomotive", "cargo-wagon"}})) do
+      car.destroy()
+    end
+    -- A red signal 50 tiles beyond the partner, a wagon standing behind it: the fast arrival drives
+    -- itself, automatic while still arriving, and stops at the signal.
+    fast.fb.create_entity({name = "rail-signal", position = {1.5, 59.5}, direction = defines.direction.north, force = "player"})
+    fast.blocker = fast.fb.create_entity({name = "cargo-wagon", position = {3, 80}, direction = defines.direction.north, force = "player"})
+    remote.call("bte-stargate-test", "set_enabled", fast.a.unit_number, true)
+    fast.entry, fast.top, fast.close, fast.loco, fast.auto = nil, 0, false, fast.train(370), nil
+  end},
+  {900, function()
+    local fast = storage.fast
+    local arrived = fast.fb.find_entities_filtered({type = "locomotive"})[1]
+    log("STARGATE_TEST_INFO: red signal: edge " .. tostring(fast.entry) .. ", auto while arriving " .. tostring(fast.auto)
+      .. ", loco " .. tostring(arrived and arrived.position.y) .. " cars " .. tostring(arrived and #arrived.train.carriages)
+      .. " blocker health " .. tostring(fast.blocker.valid and fast.blocker.health) .. " state " .. tostring(arrived and arrived.train.state))
+    expect("an arriving train drives itself while its carriages still come through", fast.auto, true)
+    expect("and stops at a red signal beyond the partner", arrived and arrived.train.carriages[1].valid
+      and arrived.position.y < 59.5 and fast.blocker.valid and fast.blocker.health == fast.blocker.max_health, true)
+    for _, car in pairs(fast.fb.find_entities_filtered({type = {"locomotive", "cargo-wagon"}})) do
+      car.destroy()
+    end
+    fast.fb.find_entity("rail-signal", {1.5, 59.5}).destroy()
+    -- A branch right after the partner: a curve off the straight track to a parallel one with T1 on
+    -- it. The arriving train must take the curve, as its path says, rather than run on straight.
+    for _, r in pairs({{"curved-rail-a", 3, 44, 10}, {"half-diagonal-rail", 1, 49, 2}, {"half-diagonal-rail", -1, 53, 2},
+        {"curved-rail-a", -3, 58, 2}}) do
+      fast.fb.create_entity({name = r[1], position = {r[2], r[3]}, direction = r[4], force = "player"})
+    end
+    for y = 61, 101, 2 do
+      fast.fb.create_entity({name = "straight-rail", position = {-3, y}, direction = defines.direction.north, force = "player"})
+    end
+    fast.fb.create_entity({name = "train-stop", position = {-5, 95}, direction = defines.direction.south, force = "player"}).backer_name = "bte-test-fast-t1"
+    fast.entry, fast.top, fast.auto, fast.loco = nil, 0, nil, fast.train(370, "bte-test-fast-t1")
+  end},
+  {900, function()
+    local fast = storage.fast
+    local arrived = fast.fb.find_entities_filtered({type = "locomotive"})[1]
+    log("STARGATE_TEST_INFO: branch: loco " .. tostring(arrived and serpent.line(arrived.position)) .. " state "
+      .. tostring(arrived and arrived.train.state) .. " cars " .. tostring(arrived and #arrived.train.carriages))
+    expect("an arriving train takes the branch its path needs", arrived and arrived.position.x < 0
+      and arrived.train.state == defines.train_state.wait_station and #arrived.train.carriages, 3)
+    for _, car in pairs(fast.fb.find_entities_filtered({type = {"locomotive", "cargo-wagon"}})) do
+      car.destroy()
+    end
+    -- Too little room: a red signal 6 tiles beyond the partner, shorter than the train, a wagon
+    -- standing right behind it. The train is pushed out until each carriage is out of the ring, so its
+    -- front survives and the carriages still to come are wrecked, not the locomotive.
+    fast.fb.create_entity({name = "rail-signal", position = {1.5, 13.5}, direction = defines.direction.north, force = "player"})
+    fast.fb.create_entity({name = "cargo-wagon", position = {3, 18}, direction = defines.direction.north, force = "player"})
+    fast.entry, fast.top, fast.auto, fast.loco = nil, 0, nil, fast.train(370)
+  end},
+  {900, function()
+    local fast = storage.fast
+    local arrived = fast.fb.find_entities_filtered({type = "locomotive"})[1]
+    log("STARGATE_TEST_INFO: short block: loco " .. tostring(arrived and serpent.line(arrived.position)) .. " cars "
+      .. tostring(arrived and #arrived.train.carriages) .. " remnants " .. fast.fb.count_entities_filtered({name = "cargo-wagon-remnants"}))
+    expect("with too little room the locomotive comes out and survives", arrived ~= nil and not fast.loco.valid, true)
+    expect("and the rear is wrecked", fast.fb.count_entities_filtered({name = "cargo-wagon-remnants"}) >= 1, true)
+    for _, e in pairs(fast.fb.find_entities_filtered({type = {"locomotive", "cargo-wagon", "rail-signal", "cargo-wagon-remnants", "locomotive-remnants"},
+        area = {{-10, 9}, {10, 60}}})) do
+      e.destroy()
+    end
+    -- Broken track 16 tiles beyond the partner: the train has no path, and is pushed out to the
+    -- rails' end rather than stopping in the ring, so its front survives.
+    for _, y in pairs({25, 27}) do
+      fast.fb.find_entity("straight-rail", {3, y}).destroy()
+    end
+    fast.entry, fast.top, fast.auto, fast.loco = nil, 0, nil, fast.train(370)
+  end},
+  {900, function()
+    local fast = storage.fast
+    local arrived = fast.fb.find_entities_filtered({type = "locomotive"})[1]
+    log("STARGATE_TEST_INFO: broken track: loco " .. tostring(arrived and serpent.line(arrived.position)) .. " cars "
+      .. tostring(arrived and #arrived.train.carriages))
+    expect("with the track broken beyond the partner the locomotive is pushed out and survives",
+      arrived ~= nil and arrived.position.y > 12 and not fast.loco.valid, true)
+    storage.fast = nil
   end},
 
   -- Station mode: gate R1 on one surface sends a train to R2 on another. R1 departs on its right lane
@@ -715,7 +862,7 @@ local steps = {
     expect("and three hidden behind the ring", #ra.find_entities_filtered({name = "bte-stargate-rail-hidden"}), 6)
     local station = remote.call("bte-stargate-test", "station", g1.unit_number)
     expect("the station is named after the gate", station.backer_name, remote.call("bte-stargate-test", "state", g1.unit_number).name)
-    expect("the station stands on the departure lane at the gate's edge", station.connected_rail and serpent.line(station.connected_rail.position), "{x = 3, y = 7}")
+    expect("the station stands on the departure lane behind the ring", station.connected_rail and serpent.line(station.connected_rail.position), "{x = 3, y = -3}")
     remote.call("bte-stargate-test", "pair", g1.unit_number, g2.unit_number)
     -- Off at first, so the train waits at the station; and laid out as an earlier version would be.
     remote.call("bte-stargate-test", "set_enabled", g1.unit_number, false)
@@ -772,7 +919,7 @@ local steps = {
     train.speed = (train.front_stock.position.y < train.back_stock.position.y and 1 or -1) * 0.3
     expect("an old layout gets its hidden rails back", #storage.ra.find_entities_filtered({name = "bte-stargate-rail-hidden", area = {{-8, -8}, {10, 10}}}), 6)
     local station = remote.call("bte-stargate-test", "station", storage.g1.unit_number)
-    expect("and its station moves to the edge", station.connected_rail and station.connected_rail.position.y, 7)
+    expect("and its station moves behind the ring", station.connected_rail and station.connected_rail.position.y, -3)
     local waiting = storage.ra.find_entities_filtered({name = "locomotive", area = {{2, 0}, {4, 80}}})[1]
     -- At the gate's entry signal, red while the gate cannot send: still heading for the station, so
     -- it never looks for a path beyond the gate.
@@ -868,6 +1015,28 @@ local steps = {
 }
 
 script.on_event(defines.events.on_tick, function()
+  local fast = storage.fast
+  if fast and fast.loco then
+    if fast.loco.valid and not fast.entry then
+      if remote.call("bte-stargate-test", "rail_transfers") > 0 then
+        fast.entry = fast.speed
+      end
+      fast.speed = math.abs(fast.loco.train.speed)
+      if fast.close and not fast.closed and fast.loco.bounding_box.left_top.y < 40 then
+        local entry = fast.fa.find_entities_filtered({name = "bte-stargate-entry-signal"})[1]
+        fast.reserved = entry and entry.signal_state == defines.signal_state.reserved
+        remote.call("bte-stargate-test", "set_enabled", fast.a.unit_number, false)
+        fast.closed = true
+      end
+    end
+    for _, loco in pairs(fast.fb.find_entities_filtered({type = "locomotive"})) do
+      fast.top = math.max(fast.top, math.abs(loco.train.speed))
+      fast.first = fast.first or math.abs(loco.train.speed)
+      if remote.call("bte-stargate-test", "rail_transfers") > 0 then
+        fast.auto = fast.auto or not loco.train.manual_mode
+      end
+    end
+  end
   local watch = storage.rail_watch
   if watch then
     for _, car in pairs(storage.ra.find_entities_filtered({type = {"locomotive", "cargo-wagon", "fluid-wagon"}, area = {{2, -10}, {4, 80}}})) do

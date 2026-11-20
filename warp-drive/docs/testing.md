@@ -6,7 +6,7 @@
 ./warp-drive/tests/run-runtime-tests.sh
 ```
 
-Use `FACTORIO_BIN` to override `/Applications/factorio.app/Contents/MacOS/factorio`. Set `KEEP_TEST_ARTIFACTS=1` to keep temporary saves, mods, and logs.
+Use `FACTORIO_BIN` to override `/Applications/factorio.app/Contents/MacOS/factorio`. Factorio runs through `tests/factorio.sh` (see `AGENTS.md`), so each case is the package and its helper mods added to the same base save. Set `KEEP_TEST_ARTIFACTS=1` to keep the temporary mods and logs.
 
 ## What it verifies
 

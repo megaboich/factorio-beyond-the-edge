@@ -6,7 +6,6 @@ REPO_DIR="$(cd "$ROOT_DIR/.." && pwd)"
 FACTORIO_BIN="${FACTORIO_BIN:-/Applications/factorio.app/Contents/MacOS/factorio}"
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/bte-stargate-tests.XXXXXX")"
 BUILD_MODS="$TEST_ROOT/build-mods"
-RUN_MODS="$TEST_ROOT/run-mods"
 
 cleanup() {
   if [[ "${KEEP_TEST_ARTIFACTS:-0}" == "1" ]]; then
@@ -17,12 +16,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [[ ! -x "$FACTORIO_BIN" ]]; then
-  printf 'Factorio executable not found: %s\n' "$FACTORIO_BIN" >&2
-  exit 1
-fi
+export FACTORIO_BIN
+RUN="$REPO_DIR/tests/factorio.sh"
 
-mkdir "$BUILD_MODS" "$RUN_MODS"
+mkdir "$BUILD_MODS"
 FACTORIO_MODS_DIR="$BUILD_MODS" "$REPO_DIR/make.sh" stargate
 
 PACKAGE="$(printf '%s\n' "$BUILD_MODS"/bte-stargate_*.zip)"
@@ -35,20 +32,11 @@ if unzip -Z1 "$PACKAGE" | grep -q '/tests/'; then
   exit 1
 fi
 
-# Fresh-save smoke test of the shipped package alone.
-SMOKE_MODS="$TEST_ROOT/smoke-mods"
-mkdir "$SMOKE_MODS"
-cp "$PACKAGE" "$SMOKE_MODS/"
-"$FACTORIO_BIN" --mod-directory "$SMOKE_MODS" --create "$TEST_ROOT/smoke-save.zip" --map-gen-seed 12345
-"$FACTORIO_BIN" --mod-directory "$SMOKE_MODS" --benchmark "$TEST_ROOT/smoke-save.zip" \
-  --benchmark-ticks 120 --benchmark-runs 1
+# Smoke test of the shipped package alone, added to a fresh save.
+"$RUN" run 120 "$PACKAGE" > "$TEST_ROOT/smoke.log"
 printf 'STARGATE_TEST_PASS: fresh-save smoke test\n'
 
-cp "$PACKAGE" "$RUN_MODS/"
-cp -R "$ROOT_DIR/tests/mods/bte-stargate-runtime-test" "$RUN_MODS/"
-"$FACTORIO_BIN" --mod-directory "$RUN_MODS" --create "$TEST_ROOT/run-save.zip" --map-gen-seed 12345
-"$FACTORIO_BIN" --mod-directory "$RUN_MODS" --benchmark "$TEST_ROOT/run-save.zip" \
-  --benchmark-ticks 6800 --benchmark-runs 1 2>&1 | tee "$TEST_ROOT/run.log"
+"$RUN" run 12700 "$PACKAGE" "$ROOT_DIR/tests/mods/bte-stargate-runtime-test" | tee "$TEST_ROOT/run.log"
 
 if ! grep -q 'STARGATE_TEST_PASS: filters, exact slots, completion, staged build, replacement, grid snapping, gate pairing, power, circuit, transfer, vehicle and enemy transfer, train transfer, and mining paths completed' "$TEST_ROOT/run.log"; then
   printf 'Stargate runtime test did not emit its pass marker\n' >&2

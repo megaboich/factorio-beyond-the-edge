@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
+shopt -s nullglob
 
 # Dumps resolved prototypes for vanilla Space Age, each mod alone, and every mod together,
-# then checks each mod's tests/prototypes.py expectations. Every run uses its own mod and
-# write-data directories, so installed mods and the user's script-output are untouched.
+# then checks each mod's tests/prototypes.py expectations. Factorio runs through tests/factorio.sh,
+# with its own mod and write-data directories, so installed mods and the user's script-output are
+# untouched.
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FACTORIO_BIN="${FACTORIO_BIN:-/Applications/factorio.app/Contents/MacOS/factorio}"
@@ -19,33 +21,23 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [[ ! -x "$FACTORIO_BIN" ]]; then
-  printf 'Factorio executable not found: %s\n' "$FACTORIO_BIN" >&2
-  exit 1
-fi
+export FACTORIO_BIN
 
 # dump_data <label> [mod-directory...]; prints the dump path.
 dump_data() {
   local label="$1"
   shift
   local run_dir="$TEST_ROOT/$label"
-  mkdir -p "$run_dir/mods" "$run_dir/write-data"
+  mkdir -p "$run_dir/mods"
   if [[ $# -gt 0 ]]; then
     FACTORIO_MODS_DIR="$run_dir/mods" "$REPO_DIR/make.sh" "$@" >/dev/null
   fi
-  printf '[path]\nread-data=__PATH__system-read-data__\nwrite-data=%s\n' "$run_dir/write-data" > "$run_dir/config.ini"
-  # Factorio performs one dump per launch: resolved prototypes, then the names and descriptions
-  # players see (<type>-locale.json beside it).
-  local dump
-  for dump in --dump-data --dump-prototype-locale; do
-    if ! "$FACTORIO_BIN" --config "$run_dir/config.ini" --mod-directory "$run_dir/mods" "$dump" \
-        > "$run_dir/factorio.log" 2>&1; then
-      printf 'Factorio failed to load mod set %s:\n' "$label" >&2
-      tail -20 "$run_dir/factorio.log" >&2
-      exit 1
-    fi
-  done
-  printf '%s\n' "$run_dir/write-data/script-output/data-raw-dump.json"
+  if ! "$REPO_DIR/tests/factorio.sh" dump "$run_dir/out" "$run_dir"/mods/*.zip; then
+    printf 'Factorio failed to load mod set %s:\n' "$label" >&2
+    tail -20 "$run_dir/out/factorio.log" >&2
+    exit 1
+  fi
+  printf '%s\n' "$run_dir/out/data-raw-dump.json"
 }
 
 check() {

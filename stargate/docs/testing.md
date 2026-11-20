@@ -34,7 +34,8 @@ The runner packages the mod, checks the ZIP excludes `tests/`, smoke-tests a fre
 - that it refuses a mode change with a train on the rails, and upgrades a gate laid out by an earlier version (hidden rails added, station moved to the edge);
 - that it keeps a train waiting at the gate's closed entry signal, in automatic mode, while the gate is off or the partner's exit block is occupied, and that each entry signal has its wired switch;
 - that it smashes the carriages that do not fit at a partner, including the last one sent when it stops still in the ring;
-- that a train past the closed entry signal, with the gate's station only a waypoint, is held instead of left without a path, then sent once the gate opens and arrives in automatic mode;
+- that an automatic train inside a gate whose partner cannot receive stops at the edge instead of driving into the ring, is sent once the gate is paired, and arrives in automatic mode; and that a train driven by hand into a closed gate is not taken;
+- that an automatic train heading for the gate's station crosses the edge at speed, gathers speed through the ring, and arrives coupled at least as fast; that a train which has reserved its way through the green entry signal is still sent when the gate closes; that an arriving train drives itself while still arriving and stops at a red signal beyond the partner; that it takes a branch right after the partner that its path needs; and that with a red signal and a standing wagon just beyond the partner, too close for the train, its locomotive comes out and survives and its rear is wrecked; that with the track broken beyond the partner (no path) the train is pushed out to the rails' end;
 - that it takes carriages only once they are behind the veil and lands arrivals behind the partner's;
 - that it leaves no rails behind a removed gate.
 

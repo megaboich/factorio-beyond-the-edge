@@ -22,10 +22,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [[ ! -x "$FACTORIO_BIN" ]]; then
-  printf 'Factorio executable not found: %s\n' "$FACTORIO_BIN" >&2
-  exit 1
-fi
+export FACTORIO_BIN
+RUN="$REPO_DIR/tests/factorio.sh"
 
 mkdir "$BUILD_MODS" "$BASIC_MODS" "$PLATFORM_MODS" "$RELAY_MODS" "$LOCAL_MODS" "$API_MODS"
 FACTORIO_MODS_DIR="$BUILD_MODS" "$REPO_DIR/make.sh" warp-drive
@@ -41,29 +39,13 @@ if unzip -Z1 "$PACKAGE" | grep -q '/tests/'; then
 fi
 
 cp "$PACKAGE" "$BASIC_MODS/"
-"$FACTORIO_BIN" \
-  --mod-directory "$BASIC_MODS" \
-  --create "$TEST_ROOT/basic-save.zip" \
-  --map-gen-seed 12345
-"$FACTORIO_BIN" \
-  --mod-directory "$BASIC_MODS" \
-  --benchmark "$TEST_ROOT/basic-save.zip" \
-  --benchmark-ticks 120 \
-  --benchmark-runs 1
+"$RUN" run 120 "$BASIC_MODS"/*
 printf 'WARP_TEST_PASS: fresh-save smoke test\n'
 
 cp "$PACKAGE" "$PLATFORM_MODS/"
 cp -R "$ROOT_DIR/tests/mods/aaa-bte-warp-drive-speed-test" "$PLATFORM_MODS/"
 cp -R "$ROOT_DIR/tests/mods/bte-warp-drive-runtime-test" "$PLATFORM_MODS/"
-"$FACTORIO_BIN" \
-  --mod-directory "$PLATFORM_MODS" \
-  --create "$TEST_ROOT/platform-save.zip" \
-  --map-gen-seed 12345
-"$FACTORIO_BIN" \
-  --mod-directory "$PLATFORM_MODS" \
-  --benchmark "$TEST_ROOT/platform-save.zip" \
-  --benchmark-ticks 3800 \
-  --benchmark-runs 1 2>&1 | tee "$TEST_ROOT/platform.log"
+"$RUN" run 3800 "$PLATFORM_MODS"/* | tee "$TEST_ROOT/platform.log"
 
 if ! grep -q 'WARP_TEST_PASS: detector, duplicate, warp visuals, asteroid suppression, ramp, speed grace, reserve, warnings, lockout, circuit condition, revocation, and relocation paths completed' "$TEST_ROOT/platform.log"; then
   printf 'Platform runtime test did not emit its pass marker\n' >&2
@@ -75,15 +57,7 @@ fi
 # message instead of silently changing balance.
 cp "$PACKAGE" "$API_MODS/"
 cp -R "$ROOT_DIR/tests/mods/bte-warp-drive-api-invariants-test" "$API_MODS/"
-"$FACTORIO_BIN" \
-  --mod-directory "$API_MODS" \
-  --create "$TEST_ROOT/api-save.zip" \
-  --map-gen-seed 12345
-"$FACTORIO_BIN" \
-  --mod-directory "$API_MODS" \
-  --benchmark "$TEST_ROOT/api-save.zip" \
-  --benchmark-ticks 320 \
-  --benchmark-runs 1 2>&1 | tee "$TEST_ROOT/api.log"
+"$RUN" run 320 "$API_MODS"/* | tee "$TEST_ROOT/api.log"
 
 if ! grep -qE 'WARP_TEST_PASS: .*invariants hold' "$TEST_ROOT/api.log"; then
   printf 'API invariants test did not emit its pass marker\n' >&2
@@ -103,15 +77,7 @@ run_branch_test() {
   for extra in "$@"; do
     cp -R "$ROOT_DIR/tests/mods/$extra" "$mods_dir/"
   done
-  "$FACTORIO_BIN" \
-    --mod-directory "$mods_dir" \
-    --create "$TEST_ROOT/$label-save.zip" \
-    --map-gen-seed 12345
-  "$FACTORIO_BIN" \
-    --mod-directory "$mods_dir" \
-    --benchmark "$TEST_ROOT/$label-save.zip" \
-    --benchmark-ticks 1830 \
-    --benchmark-runs 1 2>&1 | tee "$TEST_ROOT/$label.log"
+  "$RUN" run 1830 "$mods_dir"/* 2>&1 | tee "$TEST_ROOT/$label.log"
   if ! grep -q "$marker" "$TEST_ROOT/$label.log"; then
     printf '%s research branch test did not emit its pass marker\n' "$label" >&2
     exit 1
@@ -137,15 +103,7 @@ run_boost_test() {
   for extra in "$@"; do
     cp -R "$ROOT_DIR/tests/mods/$extra" "$mods_dir/"
   done
-  "$FACTORIO_BIN" \
-    --mod-directory "$mods_dir" \
-    --create "$TEST_ROOT/$label-save.zip" \
-    --map-gen-seed 12345
-  "$FACTORIO_BIN" \
-    --mod-directory "$mods_dir" \
-    --benchmark "$TEST_ROOT/$label-save.zip" \
-    --benchmark-ticks 860 \
-    --benchmark-runs 1 2>&1 | tee "$TEST_ROOT/$label.log"
+  "$RUN" run 860 "$mods_dir"/* 2>&1 | tee "$TEST_ROOT/$label.log"
   if ! grep -q 'WARP_TEST_PASS: Tachyon Science Boost' "$TEST_ROOT/$label.log"; then
     printf '%s Tachyon Science Boost test did not emit its pass marker\n' "$label" >&2
     exit 1

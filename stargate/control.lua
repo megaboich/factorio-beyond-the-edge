@@ -77,7 +77,6 @@ script.on_event(defines.events.on_tick, function()
   end
 end)
 
-script.on_event(defines.events.on_train_changed_state, Railway.on_train_changed_state)
 script.on_event({defines.events.on_cutscene_cancelled, defines.events.on_cutscene_finished}, Transfer.on_cutscene_cancelled)
 script.on_event(defines.events.on_gui_opened, Gui.on_opened)
 -- A gate's station renamed in its train stop window renames the gate.
