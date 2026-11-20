@@ -75,6 +75,42 @@ local BILL = {
 }
 local TIMED = BILL[#BILL]
 
+-- Switching gates off while a long train is partway through: it still arrives in one piece. Each
+-- case names the gates switched off and how many carriages have come out by then (0: as the
+-- transfer starts; on_tick), and optionally a train driven by hand at that speed into the gate.
+local MID_CASES = {
+  {gates = {"a"}, at = 0, wagons = 8, from = 600},
+  {gates = {"a"}, at = 3, wagons = 8, from = 600},
+  {gates = {"a"}, at = 0, wagons = 8, from = 600, manual = 1.38},
+  {gates = {"b"}, at = 2},
+  {gates = {"a", "b"}, at = 3},
+}
+
+local function start_mid(case)
+  local fast = storage.fast
+  remote.call("bte-stargate-test", "set_enabled", fast.a.unit_number, true)
+  remote.call("bte-stargate-test", "set_enabled", fast.b.unit_number, true)
+  fast.entry, fast.top, fast.close, fast.loco, fast.mid = nil, 0, false, fast.train(case.from or 370, nil, case.wagons or 4), case
+  if case.manual then
+    fast.loco.train.manual_mode = true
+    fast.loco.train.speed = case.manual
+  end
+end
+
+local function check_mid()
+  local fast = storage.fast
+  local cars = fast.fb.find_entities_filtered({type = {"locomotive", "cargo-wagon"}})
+  local case = serpent.line(fast.mid) .. " switched off"
+  expect(case .. ": switched off partway through", fast.mid_closed, true)
+  local whole = 1 + (fast.mid.wagons or 4)
+  expect(case .. ": it arrives whole", #cars, whole)
+  expect(case .. ": and coupled", cars[1] and #cars[1].train.carriages, whole)
+  for _, car in pairs(cars) do
+    car.destroy()
+  end
+  fast.mid, fast.mid_closed = nil, nil
+end
+
 -- Each step runs once, `delay` ticks after the previous one; the mod checks its sites every 30 ticks.
 -- The build lasts 240 ticks (helper data-final-fixes.lua) over six pictures, one every 40 ticks;
 -- on_tick records each picture shown (storage.stages_seen).
@@ -702,7 +738,7 @@ local steps = {
     local function lab(name)
       local s = game.create_surface(name)
       s.generate_with_lab_tiles = true
-      s.request_to_generate_chunks({0, 200}, 8)
+      s.request_to_generate_chunks({0, 340}, 11)
       s.force_generate_chunk_requests()
       return s
     end
@@ -715,15 +751,16 @@ local steps = {
     remote.call("bte-stargate-test", "set_station", a.unit_number, "right")
     remote.call("bte-stargate-test", "set_station", b.unit_number, "left")
     remote.call("bte-stargate-test", "pair", a.unit_number, b.unit_number)
-    for y = 9, 401, 2 do
+    for y = 9, 681, 2 do
       fa.create_entity({name = "straight-rail", position = {3, y}, direction = defines.direction.north, force = "player"})
       fb.create_entity({name = "straight-rail", position = {3, y}, direction = defines.direction.north, force = "player"})
     end
     fb.create_entity({name = "train-stop", position = {1, 391}, direction = defines.direction.south, force = "player"}).backer_name = "bte-test-fast-far"
-    local function train(y, destination)
+    local function train(y, destination, wagons)
       local loco = fa.create_entity({name = "locomotive", position = {3, y}, direction = defines.direction.north, force = "player"})
-      fa.create_entity({name = "cargo-wagon", position = {3, y + 7}, direction = defines.direction.north, force = "player"})
-      fa.create_entity({name = "cargo-wagon", position = {3, y + 14}, direction = defines.direction.north, force = "player"})
+      for k = 1, wagons or 2 do
+        fa.create_entity({name = "cargo-wagon", position = {3, y + 7 * k}, direction = defines.direction.north, force = "player"})
+      end
       loco.insert({name = "nuclear-fuel", count = 2})
       local schedule = loco.train.get_schedule()
       schedule.add_record({station = remote.call("bte-stargate-test", "station", a.unit_number).backer_name, wait_conditions = {}})
@@ -732,7 +769,7 @@ local steps = {
       loco.train.manual_mode = false
       return loco
     end
-    storage.fast = {fa = fa, fb = fb, a = a, train = train, loco = train(370), top = 0}
+    storage.fast = {fa = fa, fb = fb, a = a, b = b, train = train, loco = train(370), top = 0}
   end},
   {900, function()
     local fast = storage.fast
@@ -757,11 +794,21 @@ local steps = {
     for _, car in pairs(fast.fb.find_entities_filtered({type = {"locomotive", "cargo-wagon"}})) do
       car.destroy()
     end
+    start_mid(MID_CASES[1])
+  end},
+  {1500, function() check_mid() start_mid(MID_CASES[2]) end},
+  {1500, function() check_mid() start_mid(MID_CASES[3]) end},
+  {1500, function() check_mid() start_mid(MID_CASES[4]) end},
+  {1500, function() check_mid() start_mid(MID_CASES[5]) end},
+  {1200, function()
+    check_mid()
+    local fast = storage.fast
     -- A red signal 50 tiles beyond the partner, a wagon standing behind it: the fast arrival drives
     -- itself, automatic while still arriving, and stops at the signal.
     fast.fb.create_entity({name = "rail-signal", position = {1.5, 59.5}, direction = defines.direction.north, force = "player"})
     fast.blocker = fast.fb.create_entity({name = "cargo-wagon", position = {3, 80}, direction = defines.direction.north, force = "player"})
     remote.call("bte-stargate-test", "set_enabled", fast.a.unit_number, true)
+    remote.call("bte-stargate-test", "set_enabled", fast.b.unit_number, true)
     fast.entry, fast.top, fast.close, fast.loco, fast.auto = nil, 0, false, fast.train(370), nil
   end},
   {900, function()
@@ -1028,6 +1075,18 @@ script.on_event(defines.events.on_tick, function()
         remote.call("bte-stargate-test", "set_enabled", fast.a.unit_number, false)
         fast.closed = true
       end
+    end
+    if fast.mid and fast.mid.manual and fast.loco.valid and fast.loco.surface == fast.fa
+      and remote.call("bte-stargate-test", "rail_transfers") == 0 then
+      fast.loco.train.speed = fast.mid.manual
+    end
+    if fast.mid and not fast.mid_closed and (fast.mid.near and fast.loco.valid and fast.loco.surface == fast.fa and fast.loco.position.y < fast.mid.near
+      or fast.mid.at == 0 and remote.call("bte-stargate-test", "rail_transfers") > 0
+      or fast.mid.at > 0 and fast.fb.count_entities_filtered({type = {"locomotive", "cargo-wagon"}}) >= fast.mid.at) then
+      for _, gate in pairs(fast.mid.gates) do
+        remote.call("bte-stargate-test", "set_enabled", fast[gate].unit_number, false)
+      end
+      fast.mid_closed = true
     end
     for _, loco in pairs(fast.fb.find_entities_filtered({type = "locomotive"})) do
       fast.top = math.max(fast.top, math.abs(loco.train.speed))
