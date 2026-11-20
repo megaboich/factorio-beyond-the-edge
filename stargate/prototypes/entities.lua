@@ -148,6 +148,15 @@ data:extend({
     circuit_wire_max_distance = 9,
     open_sound = {filename = "__base__/sound/machine-open.ogg", volume = 0.5},
     close_sound = {filename = "__base__/sound/machine-close.ogg", volume = 0.5},
+    -- The open gate's hum (resources/audio/generate.py); the machine works exactly while the portal
+    -- is open, so the engine loops it then. It fades in under the end of bte-stargate-open.
+    working_sound = {
+      sound = {filename = "__bte-stargate__/resources/audio/stargate-hum.ogg", volume = 0.8},
+      fade_in_ticks = 90,
+      fade_out_ticks = 30,
+      audible_distance_modifier = 1.5,
+      max_sounds_per_prototype = 3
+    },
     -- People and vehicles move through the gate, so its picture is split (models/stargate.js): the
     -- concrete floor is the integration patch, drawn under everything (on `floor`, so rails laid
     -- through the gate later draw over it), and the building itself with its lights is
