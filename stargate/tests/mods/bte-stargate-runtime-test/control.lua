@@ -115,6 +115,181 @@ local function check_mid()
   fast.mid, fast.mid_closed, fast.seen, fast.outside = nil, nil, nil, nil
 end
 
+-- A long train through gates in a row: A to B, then B's track loops round into C, paired with D, and
+-- so on for `pairs` pairs. Its head reaches each next gate while its tail is still coming out of the
+-- one before. Cases: a locomotive leading; one pushing from the rear (`pushed`), so no locomotive
+-- faces out ahead when the head reaches the next gate; a train driven by hand (`manual`); one whose
+-- next stop is not the gate its track leads into (`skip`); and one meeting a closed gate (`closed`).
+-- The last two jam (`jam`): what was still coming out of the gate before is wrecked.
+local CHAIN_CASES = {
+  {id = 1, pairs = 4, wagons = 30},
+  {id = 2, pairs = 2, wagons = 14, pushed = true},
+  {id = 3, pairs = 2, wagons = 14, manual = true},
+  {id = 4, pairs = 2, wagons = 14, skip = true, jam = true},
+  {id = 5, pairs = 2, wagons = 14, manual = true, closed = true, jam = true},
+}
+
+local function start_chain(case)
+  local function lab(name, y, radius)
+    local s = game.create_surface(name)
+    s.generate_with_lab_tiles = true
+    s.request_to_generate_chunks({0, y}, radius)
+    s.force_generate_chunk_requests()
+    return s
+  end
+  local function straight(s, x, from, to)
+    for y = from, to, 2 do
+      s.create_entity({name = "straight-rail", position = {x, y}, direction = defines.direction.north, force = "player"})
+    end
+  end
+  local function gate(s, x, mode)
+    local g = s.create_entity({name = GATE, position = {x, 0}, force = "player", raise_built = true})
+    remote.call("bte-stargate-test", "set_station", g.unit_number, mode)
+    return g
+  end
+  local function power(s, x)
+    s.create_entity({name = "substation", position = {x - 10, -6}, force = "player"})
+    local source = s.create_entity({name = "bte-stargate-test-power", position = {x - 12, -6}, force = "player"})
+    source.power_production, source.electric_buffer_size, source.energy = 1e9, 1e10, 1e10
+  end
+  -- From the end of the track out of the gate at x 0, a U-turn: always the rail planner's sharpest
+  -- turn to the east until the track heads north again, then north to a gate's edge. Returns that
+  -- gate's x.
+  local function loop(s)
+    straight(s, 3, 9, 21)
+    local rail = s.find_entity("straight-rail", {3, 21})
+    local tail
+    for _, way in pairs({defines.rail_direction.front, defines.rail_direction.back}) do
+      local e = rail.get_rail_end(way)
+      if e.location.direction == defines.direction.south then
+        tail = e
+      end
+    end
+    for _ = 1, 40 do
+      local direction = tail.location.direction
+      if direction == defines.direction.north then
+        break
+      end
+      local best, turn
+      for _, extension in pairs(tail.get_rail_extensions("rail")) do
+        local t = (direction - extension.goal.direction) % 16
+        if extension.goal.rail_layer == 0 and t > 0 and t < 8 and (not turn or t < turn) then
+          best, turn = extension, t
+        end
+      end
+      local built = s.create_entity({name = best.name, position = best.position, direction = best.direction, force = "player"})
+      for _, way in pairs({defines.rail_direction.front, defines.rail_direction.back}) do
+        local e = built.get_rail_end(way)
+        local at = e.location.position
+        if e.location.direction == best.goal.direction and math.abs(at.x - best.goal.position.x) < 0.01
+          and math.abs(at.y - best.goal.position.y) < 0.01 then
+          tail = e
+        end
+      end
+    end
+    local lane = tail.location.position.x
+    straight(s, lane, 9, tail.location.position.y - 1)
+    -- The next gate's departure lane, on its right, is the new northbound track.
+    return lane - 3
+  end
+  local surfaces = {lab("bte-test-chain-" .. case.id .. "-1", 200, 8)}
+  straight(surfaces[1], 3, 9, 401)
+  local first = gate(surfaces[1], 0, "right")
+  power(surfaces[1], 0)
+  local departures, previous = {first}, first
+  for k = 2, case.pairs + 1 do
+    local s = lab("bte-test-chain-" .. case.id .. "-" .. k, 100, 6)
+    surfaces[k] = s
+    local arrival = gate(s, 0, "left")
+    remote.call("bte-stargate-test", "pair", previous.unit_number, arrival.unit_number)
+    power(s, 0)
+    if k <= case.pairs then
+      local x = loop(s)
+      previous = gate(s, x, "right")
+      power(s, x + 22)
+      departures[#departures + 1] = previous
+    else
+      straight(s, 3, 9, 401)
+      s.create_entity({name = "train-stop", position = {1, 391}, direction = defines.direction.south, force = "player"}).backer_name = "bte-test-chain-far"
+    end
+  end
+  storage.chain = {surfaces = surfaces, both = 0, case = case, departures = departures}
+end
+
+-- Releases the chain's train once every gate it goes through is open: fresh gates charge first, and a
+-- train driven by hand is taken only by an open gate.
+local function chain_train(chain)
+  local case, surfaces, departures = chain.case, chain.surfaces, chain.departures
+  for _, g in pairs(departures) do
+    if not remote.call("bte-stargate-test", "is_open", g.unit_number) then
+      return
+    end
+  end
+  -- The locomotive leads, or with `pushed` pushes from the rear, facing the same way.
+  local loco_at = case.pushed and case.wagons or 0
+  local loco
+  for k = 0, case.wagons do
+    local car = surfaces[1].create_entity({name = k == loco_at and "locomotive" or "cargo-wagon",
+      position = {3, 90 + 7 * k}, direction = defines.direction.north, force = "player"})
+    if k == loco_at then
+      loco = car
+    end
+  end
+  loco.insert({name = "nuclear-fuel", count = 2})
+  local schedule = loco.train.get_schedule()
+  local stops = case.skip and {departures[1]} or departures
+  for _, g in pairs(stops) do
+    schedule.add_record({station = remote.call("bte-stargate-test", "station", g.unit_number).backer_name, wait_conditions = {}})
+  end
+  schedule.add_record({station = "bte-test-chain-far", wait_conditions = {{type = "time", ticks = 6000}}})
+  schedule.go_to_station(1)
+  loco.train.manual_mode = false
+  if case.manual then
+    loco.train.manual_mode = true
+  end
+  if case.closed then
+    remote.call("bte-stargate-test", "set_enabled", departures[2].unit_number, false)
+  end
+  chain.loco = loco
+
+end
+
+local function check_chain()
+  local chain = storage.chain
+  storage.chain = nil
+  local case = chain.case
+  local stock = {type = {"locomotive", "cargo-wagon"}}
+  local counts = {}
+  for k, s in pairs(chain.surfaces) do
+    counts[k] = s.count_entities_filtered(stock)
+  end
+  local last = chain.surfaces[#chain.surfaces]
+  local cars = last.find_entities_filtered(stock)
+  local name = "chain " .. case.id .. ": "
+  log("STARGATE_TEST_INFO: " .. name .. "carriages per surface " .. serpent.line(counts) .. ", most transfers at once "
+    .. chain.both .. ", still running " .. remote.call("bte-stargate-test", "rail_transfers"))
+  expect(name .. "no transfer is left running", remote.call("bte-stargate-test", "rail_transfers"), 0)
+  expect(name .. "nothing is left at the first gate", counts[1], 0)
+  if case.jam then
+    -- The next gate cannot take it: what was still coming out of the gate before is wrecked.
+    expect(name .. "it stops at the next gate", counts[#counts], 0)
+    expect(name .. "and some of it is wrecked", counts[2] < case.wagons + 1, true)
+  else
+    local whole = case.wagons + 1
+    expect(name .. "it arrives whole through " .. case.pairs .. " gate pairs in a row", #cars, whole)
+    expect(name .. "and coupled", cars[1] and #cars[1].train.carriages, whole)
+    expect(name .. "its head went on through the next gate while its tail still came out of the one before",
+      chain.both >= math.min(case.pairs, 3), true)
+    if not case.manual then
+      local stop = cars[1] and (cars[1].train.station or cars[1].train.path_end_stop)
+      expect(name .. "and it drives on to its stop", stop and stop.backer_name, "bte-test-chain-far")
+    end
+  end
+  for _, s in pairs(chain.surfaces) do
+    game.delete_surface(s)
+  end
+end
+
 -- Each step runs once, `delay` ticks after the previous one; the mod checks its sites every 30 ticks.
 -- The build lasts 240 ticks (helper data-final-fixes.lua) over six pictures, one every 40 ticks;
 -- on_tick records each picture shown (storage.stages_seen).
@@ -1101,6 +1276,13 @@ local steps = {
     expect("it did not stand at B's ring before going back in (" .. loop.stood .. " ticks)", loop.stood <= 10, true)
   end},
 
+  {5, function() start_chain(CHAIN_CASES[1]) end},
+  {4900, function() check_chain() start_chain(CHAIN_CASES[2]) end},
+  {3100, function() check_chain() start_chain(CHAIN_CASES[3]) end},
+  {3100, function() check_chain() start_chain(CHAIN_CASES[4]) end},
+  {3100, function() check_chain() start_chain(CHAIN_CASES[5]) end},
+  {3100, check_chain},
+
   -- Mining a half-filled site returns the kit and everything delivered, and builds nothing.
   {5, function()
     local half = build_site(20)
@@ -1159,6 +1341,18 @@ script.on_event(defines.events.on_tick, function()
       if remote.call("bte-stargate-test", "rail_transfers") > 0 then
         fast.auto = fast.auto or not loco.train.manual_mode
       end
+    end
+  end
+  local chain = storage.chain
+  if chain and not chain.loco then
+    chain_train(chain)
+  end
+  if chain and chain.loco then
+    local running = remote.call("bte-stargate-test", "rail_transfers")
+    chain.both = math.max(chain.both or 0, running)
+    -- A train driven by hand: held at speed towards the first gate, as by a player, until it is taken.
+    if chain.case.manual and running == 0 and chain.loco.valid and chain.loco.surface == chain.surfaces[1] then
+      chain.loco.train.speed = 0.5
     end
   end
   local loop = storage.loop
