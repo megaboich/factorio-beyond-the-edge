@@ -48,7 +48,7 @@ No train looks for a path to its next stop, on the other surface, before it is t
 
    The departing part is driven at the transfer speed, raised each tick to the arrived part's when that drives itself faster: otherwise the next clone appeared at the rail end already falling behind and did not couple, and the train's rear came out loose (a seven-carriage train in a save, the arrived part at 0.69 tiles a tick, the rest fed at 0.51). A carriage waits at the ring's plane until the one before has moved on far enough.
 
-One transfer per arrival lane at a time (`receiving`). On a single track, arrivals start on the departure lane, so arrived carriages are not taken for 300 ticks (`storage.rail_guard`), and only trains moving in or stopped are taken.
+One transfer per arrival lane at a time (`receiving`). On a single track, arrivals start on the departure lane, so only trains moving in or stopped are taken, never the part of a transfer still coming out (`arriving()`), and an automatic train only when it is heading for the gate's station or standing at it (`bound_for()`), not one that stopped there on its way elsewhere. A train driven by hand that came out of a gate is not taken by that gate for 300 ticks (`storage.rail_guard`, per carriage and gate). A time guard on every arrival, at every gate, kept a train that came straight back into a gate standing at its ring with no path until it ran out (seen in game). Handing an arrived train its schedule sets its speed again (`keep_speed()`), which the game refuses with an error when its next stop lies behind it, a locomotive at its rear to take it back; it then brakes and turns by itself.
 
 ## Crashes
 

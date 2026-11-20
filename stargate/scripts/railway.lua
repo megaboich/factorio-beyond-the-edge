@@ -356,13 +356,31 @@ local function room(transfer, target, name)
     area = lane_area(target, layout(target).arrive, RAIL_END - 0.5, RAIL_END + 2 * half_length(name) + 0.5), limit = 1}) == 0
 end
 
-local function guarded(car)
-  local until_tick = storage.rail_guard[car.unit_number]
-  if until_tick and game.tick < until_tick then
-    return true
+-- Whether `car` came out of `record`'s gate less than GUARD_TICKS ago. Guards are kept per gate:
+-- a train that came out of one gate and drove straight into another was kept waiting there.
+local function guarded(car, record)
+  local guard = storage.rail_guard[car.unit_number]
+  if type(guard) == "table" and game.tick < guard.tick then
+    return guard.gate == record.entity.unit_number
   end
   storage.rail_guard[car.unit_number] = nil
   return false
+end
+
+-- Whether `train` is the part of a transfer still coming out.
+local function arriving(train)
+  for _, transfer in pairs(storage.rail_transfers) do
+    if transfer.last and transfer.last.valid and transfer.last.train == train then
+      return true
+    end
+  end
+  return false
+end
+
+-- Whether automatic `train` is heading for `record`'s station, or standing at it.
+local function bound_for(train, record)
+  local station = record.station
+  return station ~= nil and (train.path_end_stop == station or train.station == station)
 end
 
 local function in_transfer(train)
@@ -510,13 +528,19 @@ function Railway.check()
       for _, car in pairs(record.entity.surface.find_entities_filtered({type = ROLLING_STOCK,
           area = lane_area(record, spec.depart, RAIL_END - 0.5, EDGE + REACH)})) do
         local train = car.train
-        if train and car.bounding_box.left_top.y <= c.y + EDGE + REACH and not guarded(car)
-          and not in_transfer(train) and train.speed * south_sign(train) <= 0.01 then
+        local automatic = train and (not train.manual_mode or held_trains()[train.id])
+        -- On a single track, arrivals come out on this lane: the part still coming out is never
+        -- taken, nor an automatic train that stopped there on its way elsewhere, nor for
+        -- GUARD_TICKS one driven by hand that came out here. An automatic train heading back in goes
+        -- at once; a time guard on every arrival kept one standing there with no path (seen in game).
+        if train and car.bounding_box.left_top.y <= c.y + EDGE + REACH and not in_transfer(train)
+          and not arriving(train) and train.speed * south_sign(train) <= 0.01
+          and (automatic and (held_trains()[train.id] or bound_for(train, record))
+            or not automatic and not guarded(car, record)) then
           -- An automatic train is here only because the signal let it in, or it had reserved its way
           -- through before the signal closed and, as at any vanilla signal, kept going: it goes,
           -- whatever has changed since. A train driven by hand goes while the gate is open, as if
           -- it ran a red signal; carriages that cannot come out are wrecked.
-          local automatic = not train.manual_mode or held_trains()[train.id]
           if linked and (automatic or open) then
             start(record, target, train, car)
             break
@@ -586,7 +610,7 @@ local function send(transfer, record, target, car)
     end
   end
   car.destroy()
-  storage.rail_guard[clone.unit_number] = game.tick + GUARD_TICKS
+  storage.rail_guard[clone.unit_number] = {tick = game.tick + GUARD_TICKS, gate = transfer.to}
   transfer.last = clone
   return true
 end
@@ -730,6 +754,15 @@ local function restore_schedule(train, saved)
   end
 end
 
+-- Gives an automatic train a speed. The game refuses one against its path's direction, as when its
+-- next stop lies behind it and a locomotive at its rear will take it back (an error, found in a
+-- test); it then brakes and turns by itself.
+local function keep_speed(train, speed)
+  pcall(function()
+    train.speed = speed
+  end)
+end
+
 -- Once an automatic train's arrived part has a locomotive facing out, gives it its schedule back
 -- so that it can drive itself; transfer.stop, its current stop, marks that from then on.
 local function steer(transfer)
@@ -750,7 +783,7 @@ local function steer(transfer)
   if (schedule.get_record_count() or 0) > 0 then
     transfer.stop = schedule.current
   end
-  train.speed = current * south_sign(train)
+  keep_speed(train, current * south_sign(train))
 end
 
 -- Puts the arrived part (back) in automatic mode, heading for its stop, at the speed it has.
@@ -760,7 +793,7 @@ local function drive_itself(transfer, train)
   local current = train.speed
   train.get_schedule().go_to_station(transfer.stop)
   train.manual_mode = false
-  train.speed = current
+  keep_speed(train, current)
 end
 
 -- Moves the arrived part on each tick while carriages are still coming.
@@ -810,7 +843,7 @@ local function finish(index, transfer)
   end
   local train = last.train
   for _, car in pairs(train.carriages) do
-    storage.rail_guard[car.unit_number] = game.tick + GUARD_TICKS
+    storage.rail_guard[car.unit_number] = {tick = game.tick + GUARD_TICKS, gate = transfer.to}
   end
   if transfer.stop then
     -- It drives itself from here, at the speed it has.

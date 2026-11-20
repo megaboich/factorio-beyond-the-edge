@@ -1055,6 +1055,52 @@ local steps = {
     expect("a gone station gate leaves no rails", storage.rb.count_entities_filtered({name = {"bte-stargate-rail", "bte-stargate-rail-hidden", "bte-stargate-station"}}), 0)
   end},
 
+  -- A train coming straight back: a locomotive at each end, scheduled from A through the single-track
+  -- B and back to A. Coming out of B it reverses and drives back in at once; it must be taken as it
+  -- reaches the ring, not stand there with no path while its carriages count as just arrived.
+  {5, function()
+    local function lab(name)
+      local s = game.create_surface(name)
+      s.generate_with_lab_tiles = true
+      s.request_to_generate_chunks({0, 100}, 5)
+      s.force_generate_chunk_requests()
+      return s
+    end
+    local la, lb = lab("bte-test-loop-a"), lab("bte-test-loop-b")
+    local a = la.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
+    local b = lb.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
+    for _, s in pairs({la, lb}) do
+      s.create_entity({name = "substation", position = {-10, -6}, force = "player"})
+      local source = s.create_entity({name = "bte-stargate-test-power", position = {-12, -6}, force = "player"})
+      source.power_production, source.electric_buffer_size, source.energy = 1e9, 1e10, 1e10
+    end
+    remote.call("bte-stargate-test", "set_station", a.unit_number, "right")
+    remote.call("bte-stargate-test", "set_station", b.unit_number, "single")
+    remote.call("bte-stargate-test", "pair", a.unit_number, b.unit_number)
+    for y = 9, 201, 2 do
+      la.create_entity({name = "straight-rail", position = {3, y}, direction = defines.direction.north, force = "player"})
+      lb.create_entity({name = "straight-rail", position = {1, y}, direction = defines.direction.north, force = "player"})
+    end
+    local loco = la.create_entity({name = "locomotive", position = {3, 100}, direction = defines.direction.north, force = "player"})
+    la.create_entity({name = "cargo-wagon", position = {3, 107}, direction = defines.direction.north, force = "player"})
+    local back = la.create_entity({name = "locomotive", position = {3, 114}, direction = defines.direction.south, force = "player"})
+    loco.insert({name = "nuclear-fuel", count = 2})
+    back.insert({name = "nuclear-fuel", count = 2})
+    local schedule = loco.train.get_schedule()
+    for _, gate in pairs({a, b, a}) do
+      schedule.add_record({station = remote.call("bte-stargate-test", "station", gate.unit_number).backer_name, wait_conditions = {}})
+    end
+    schedule.go_to_station(1)
+    loco.train.manual_mode = false
+    storage.loop = {lb = lb, transfers = 0, stood = 0, last = 0}
+  end},
+  {1800, function()
+    local loop = storage.loop
+    storage.loop = nil
+    expect("the train came back through B (" .. loop.transfers .. " transfers)", loop.transfers >= 2, true)
+    expect("it did not stand at B's ring before going back in (" .. loop.stood .. " ticks)", loop.stood <= 10, true)
+  end},
+
   -- Mining a half-filled site returns the kit and everything delivered, and builds nothing.
   {5, function()
     local half = build_site(20)
@@ -1112,6 +1158,23 @@ script.on_event(defines.events.on_tick, function()
       fast.first = fast.first or math.abs(loco.train.speed)
       if remote.call("bte-stargate-test", "rail_transfers") > 0 then
         fast.auto = fast.auto or not loco.train.manual_mode
+      end
+    end
+  end
+  local loop = storage.loop
+  if loop then
+    local running = remote.call("bte-stargate-test", "rail_transfers")
+    if running > 0 and loop.last == 0 then
+      loop.transfers = loop.transfers + 1
+    end
+    loop.last = running
+    -- A train standing on B's lane at the ring, with nothing going through.
+    if running == 0 and loop.transfers == 1 then
+      for _, car in pairs(loop.lb.find_entities_filtered({type = "locomotive", area = {{0, -6}, {2, 12}}})) do
+        if car.train.speed == 0 then
+          loop.stood = loop.stood + 1
+          break
+        end
       end
     end
   end
