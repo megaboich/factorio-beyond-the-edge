@@ -6,7 +6,7 @@ Maintainer reference for the finished gate: its entity, power, collision, and th
 
 - The finished gate is an `assembling-machine` with the hidden no-op `bte-stargate-portal` recipe (no ingredients or results) as `fixed_recipe`, on a `void` energy source, which gives it the engine's circuit enable condition.
 - `scripts/gate.lua` keeps `record.open` (opens on a full charge when on and `LuaGenericOnOffControlBehavior.disabled` is false, paired or unpaired; closes on either failing or the buffer running dry) and sets `disabled_by_script = not open`.
-- The gate has no `minable` and is `not-deconstructable`, so it can only be destroyed.
+- The finished gate (along with the site and assembling gate) requires `gravity >= 0.1` (`surface_conditions`), so player-built gates cannot be placed on space platforms, and has no `minable` and is `not-deconstructable`, so it can only be destroyed.
 
 ## Power
 
@@ -22,7 +22,7 @@ Maintainer reference for the finished gate: its entity, power, collision, and th
 - The gate's collision mask drops `player` and `is_object` (characters collide on both) so characters walk into the portal; rails still collide on `object`.
 - `scripts/gate.lua` places hidden barrier entities over the machinery only (`BARRIERS`): `bte-stargate-side-block` over the west and east strips from 3 tiles out (capacitor banks, towers, housings, the ring's sides), `bte-stargate-cabinet-block` and `bte-stargate-rack-block` over the front corners. Everything else, the lanes through the ring and the floor in front and behind, is open.
 - The barriers sit on their own `bte-stargate-barrier` collision layer, which `data-final-fixes.lua` adds to every `character`, `spider-leg`, `car` (cars and tanks), and `unit` whose collision mask includes `player` (leaving modded flying vehicles or characters free), so all ground travellers hit the machinery and pass through the lanes; a layer of their own keeps them off everything else. `tests/prototypes.py` checks the masks, the runtime test where characters, a car, a tank, and a biter can stand. The barriers have no `minable` and are `not-deconstructable` either.
-- The portal zone triggers from either side: 3 tiles either side of the centre line (the whole gap between the side blocks, so nobody passes the ring's edge untriggered) and from 0.5 behind to 1.5 in front of the ring's plane, deeper than a fast runner covers between checks (`TRANSFER_TICKS`). Arrivals land 1.9 in front, clear of it.
+- The portal zone triggers every traveller by its centre from either side: 3 tiles either side of the centre line (the whole gap between the side blocks, so neither characters nor vehicles hugging the side slip past) and from 1.0 behind to 1.5 in front of the ring's plane (2.5 tiles deep, deeper than a fast car on refined concrete covers between `TRANSFER_TICKS` checks). Arrivals land 1.9 in front, clear of it; on a single-track station gate (`dx = -2.5`) they step out beside the centre rail, while two-track station gates keep the clear centre strip (`dx = 0`) between the two lanes.
 
 ## Drawing: companions and layers
 

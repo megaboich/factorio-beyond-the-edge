@@ -14,9 +14,9 @@ The core architecture is sound and addresses genuine Factorio engine constraints
 
 The review organized findings into four phases:
 - **Phase 1 — Critical Bugs, Leaks & Freezes:** Committed & pushed (`cebb51a`).
-- **Phase 2 — Documentation Contradictions, Collision/GUI Polish & Dead Code:** Prepared in working tree.
-- **Phase 3 — Gameplay Rule Decisions:** Open design questions for S2 / standalone progression.
-- **Phase 4 — Steady-State UPS Optimizations:** Profiled and prepared in working tree (**3× steady-state speedup** across 60 station gates, cutting `on_tick` cost by **98.6 %**).
+- **Phase 2 — Documentation Contradictions, Collision/GUI Polish & Dead Code:** Committed & pushed (`95e3c70`).
+- **Phase 3 — Gameplay Rule Decisions:** Approved & committed.
+- **Phase 4 — Steady-State UPS Optimizations:** Profiled, committed & pushed (`95e3c70`, **3× steady-state speedup** across 60 station gates, cutting `on_tick` cost by **98.7 %**).
 
 ---
 
@@ -31,7 +31,7 @@ The review organized findings into four phases:
 
 ---
 
-## Phase 2 — Documentation Contradictions, Collision/GUI Polish & Dead Code (Prepared in Working Tree)
+## Phase 2 — Documentation Contradictions, Collision/GUI Polish & Dead Code (Committed: `95e3c70`)
 
 1. **Resolved contradictions in `stargate/README.md`:**
    - Removed the stale collision tail at line 87 (*"Everything behind the ring is solid… While the gate is closed the portal is solid too"*), which contradicted line 63.
@@ -47,22 +47,20 @@ The review organized findings into four phases:
 
 ---
 
-## Phase 3 — Gameplay Rule Decisions (Open — Needs Author Confirmation)
+## Phase 3 — Gameplay Rule Decisions (Approved & Committed)
 
-1. **Space Platform placement & travel:**
-   - Currently zero-gravity placement is allowed (tested by the runtime suite's zero-gravity vehicle refusal check). Should `bte-stargate-construction-kit` / `bte-stargate-construction-site` eventually require `gravity >= 0.1` (blocking Space Platform placement until Homecoming Journey's dedicated orbital gate), or remain placeable in space with station mode and bare-character arrival restricted on zero-gravity surfaces?
-2. **Unpaired gate activation & random jumps (Milestone S2):**
-   - Should a gate stay closed (`record.open = false`, saving 8 GJ + 1.05 GW) when it has no partner and no valid destination (`not Destinations.any(force)`), eliminating the *"Open, but there is no planet to send you to"* state?
-   - Should unpaired random jumps ignore enemy `unit` / `spider-unit` entities (preventing biters from triggering cross-planet chunk generation onto player-visited worlds)?
-   - When `find_non_colliding_position` finds no land in the nearest uncharted chunk (e.g. ocean/oil/lava), should `Destinations.location` advance to the next uncharted chunk or refuse the jump instead of falling back to `or center` onto impassable terrain?
-3. **Foot/vehicle travel on Station Mode gates:**
-   - Currently `Gate.arrival` drops foot/vehicle travellers at `x = center.x` (on a single-track rail) and walks them 5 tiles south. Should foot/vehicle portal capture be disabled while `record.railway ~= nil`, or should arrivals be offset off active rail lanes?
-4. **Vehicle portal trigger box (`scripts/gate.lua`):**
-   - Now that the 6-tile corridor through the ring has no rear barriers, should cars/tanks trigger by center (or a smaller margin) like spidertrons and characters instead of as soon as their bounding box touches the portal zone?
+1. **Planetary gravity requirement (`prototypes/entities.lua`):**
+   - Added `surface_conditions = {{property = "gravity", min = 0.1}}` to `bte-stargate-construction-site`, `bte-stargate-assembling`, and `bte-stargate` so player-built gates require planetary/moon gravity and cannot be built on Space Platforms (leaving deep-space orbital gates to Homecoming Journey while keeping scripted zero-gravity gate creation functional).
+2. **Unpaired gate activation & random jumps (confirmed unchanged):**
+   - Kept unpaired random jumps dangerous by design (no ground check or enemy filtering; players decide whether to jump prepared with a jetpack/mech armor and whether to leave unpaired gates powered).
+3. **Foot/vehicle travel on Station Mode gates (`scripts/gate.lua`):**
+   - Kept foot, vehicle, and unit travel active on Station Mode gates: single-track gates offset arrivals beside the centre rail (`SINGLE_ARRIVAL_DX = -2.5`), while two-track gates keep `dx = 0` down the clear centre strip between the two lanes (`±2`).
+4. **Unified center-based portal trigger (`scripts/gate.lua`):**
+   - Unified `Gate.update` to check `in_portal(record, entity.position)` by center for cars and tanks just like characters, spidertrons, and units, widened `PORTAL_BACK` from `-0.5` to `-1.0` (`2.5`-tile portal depth so fast cars on refined concrete cannot skip a 3-tick check), and tightened `record.search_filter.area` to the `6 × 2.5` portal zone (`PORTAL_HALF_WIDTH = 3` covers the full 6-tile opening between side barriers so vehicles hugging the side still trigger).
 
 ---
 
-## Phase 4 — Steady-State UPS Optimizations (Profiled & Prepared in Working Tree)
+## Phase 4 — Steady-State UPS Optimizations (Committed: `95e3c70`)
 
 Measured in headless Factorio 2.1.24 with `helpers.create_profiler()` over 3,000 steady-state ticks on 60 station gates (15 open direct-mode pairs + 15 switched-off pairs):
 

@@ -21,17 +21,21 @@ local CENTER = 1
 -- The ring stands this far south of the centre (tools/sprites/lib/stargate-parts.js, RING_Z).
 -- Invisible blocks (prototypes/entities.lua, BARRIERS below) cover only the machinery: the west and
 -- east strips from PORTAL_HALF_WIDTH out, and the two front corners' cabinet and rack. Characters walk
--- anywhere else, through the ring and behind it, and vehicles go everywhere. A character is in the
--- portal, from either side, within PORTAL_HALF_WIDTH of the centre line (the whole gap between the
--- side blocks, so nobody slips past at the ring's edge) and from PORTAL_BACK to PORTAL_FRONT about the
--- ring's plane. The zone is two tiles deep, more than the fastest runner covers between two checks
--- (TRANSFER_TICKS). Travellers arrive in front of the partner's ring, just clear of its zone (Gate.arrival).
+-- anywhere else, through the ring and behind it, and vehicles go everywhere. A traveller is in the
+-- portal, from either side, when its centre lies within PORTAL_HALF_WIDTH of the centre line (the
+-- whole gap between the side blocks, so neither people nor vehicles hugging the side slip past) and
+-- from PORTAL_BACK to PORTAL_FRONT about the ring's plane. The zone is 2.5 tiles deep, more than a
+-- fast car on refined concrete covers between two checks (TRANSFER_TICKS). Travellers arrive in front
+-- of the partner's ring, just clear of its zone, and beside the rails on a station gate (Gate.arrival).
 local RING_Z = 2
 local PORTAL_HALF_WIDTH = 3
-local PORTAL_BACK = -0.5
+local PORTAL_BACK = -1
 local PORTAL_FRONT = 1.5
--- A character (box 0.2 from its centre) arrives 1.9 tiles south of the ring.
+-- A character (box 0.2 from its centre) arrives 1.9 tiles south of the ring; on a single-track
+-- station gate, where the rail runs down the middle, arrivals step out beside it (-2.5); two-track
+-- gates keep the centre strip between the two lanes.
 local ARRIVAL_MARGIN = 0.2
+local SINGLE_ARRIVAL_DX = -2.5
 -- Each block's prototype and centre, in tiles from the building's centre.
 local BARRIERS = {
   west = {"bte-stargate-side-block", -4.975, -1.675},
@@ -169,10 +173,9 @@ local function geometry(record)
     record.surface = gate.surface
     record.cx, record.cy = cx, cy
     record.center = {x = cx, y = ry - RING_Z}
-    -- Extended by 2 tiles front and back so a tank's bounding box reaches the zone from its centre.
     record.search_filter = {
       type = TRAVELLERS,
-      area = {{cx - PORTAL_HALF_WIDTH, ry + PORTAL_BACK - 2.3}, {cx + PORTAL_HALF_WIDTH, ry + PORTAL_FRONT + 2.3}}
+      area = {{cx - PORTAL_HALF_WIDTH, ry + PORTAL_BACK}, {cx + PORTAL_HALF_WIDTH, ry + PORTAL_FRONT}}
     }
   end
   return record.center
@@ -810,12 +813,14 @@ local function extent(name)
 end
 
 -- Where a gate receives a traveller (a prototype name, "character" by default): in front of its
--- portal, its box just clear of the zone, at the nearest free spot for its kind.
+-- portal (and west of the centre rail on a single-track station gate), its box just clear of the
+-- zone, at the nearest free spot for its kind.
 function Gate.arrival(target, name)
   name = name or "character"
   geometry(target)
   local surface = target.surface
-  local front = {target.cx, target.cy + RING_Z + PORTAL_FRONT + extent(name) + ARRIVAL_MARGIN}
+  local dx = target.railway == "single" and SINGLE_ARRIVAL_DX or 0
+  local front = {target.cx + dx, target.cy + RING_Z + PORTAL_FRONT + extent(name) + ARRIVAL_MARGIN}
   local position = surface.find_non_colliding_position(name, front, 8, 0.1) or front
   return surface, position
 end
@@ -829,22 +834,8 @@ function Gate.destination(record, position)
   return Gate.arrival(partner)
 end
 
--- Whether `entity` is in the portal. A car or tank stopped by the barriers behind or beside the lane
--- has its centre up to two tiles short of the zone, so it counts as soon as its box touches the zone;
--- everyone else (a spidertron by its body) by the centre.
-local function entering(record, entity)
-  if entity.type ~= "car" then
-    return in_portal(record, entity.position)
-  end
-  geometry(record)
-  local box = entity.bounding_box
-  local x, y = record.cx, record.cy + RING_Z
-  return box.left_top.x < x + PORTAL_HALF_WIDTH and box.right_bottom.x > x - PORTAL_HALF_WIDTH
-    and box.left_top.y < y + PORTAL_FRONT and box.right_bottom.y > y + PORTAL_BACK
-end
-
--- Updates every gate's barriers and calls `enter(entity, record)` for each traveller in an open portal.
--- A character in a vehicle travels with the vehicle.
+-- Updates every gate's barriers and calls `enter(entity, record)` for each traveller whose centre is
+-- in an open portal. A character in a vehicle travels with the vehicle.
 function Gate.update(enter)
   for _, record in pairs(storage.gates) do
     if record.entity.valid then
@@ -852,7 +843,7 @@ function Gate.update(enter)
       if Gate.is_open(record) then
         geometry(record)
         for _, entity in pairs(record.surface.find_entities_filtered(record.search_filter)) do
-          if entity.valid and not (entity.type == "character" and entity.vehicle) and entering(record, entity) then
+          if entity.valid and not (entity.type == "character" and entity.vehicle) and in_portal(record, entity.position) then
             enter(entity, record)
           end
         end

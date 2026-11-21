@@ -100,6 +100,7 @@ def check_buildings(t):
         t.check(f"{name} collision box", entity["collision_box"], [[-5.9, -5.9], [7.9, 7.9]])
         t.check(f"{name} selection box", entity["selection_box"], [[-6, -6], [8, 8]])
         t.check(f"{name} builds on the rails' 2x2 grid", entity.get("build_grid_size"), 2)
+        t.check(f"{name} requires planetary gravity", entity.get("surface_conditions"), [{"property": "gravity", "min": 0.1}])
     if site:
         t.check("construction site returns the kit when mined", site.get("minable", {}).get("result"),
                 "bte-stargate-construction-kit")

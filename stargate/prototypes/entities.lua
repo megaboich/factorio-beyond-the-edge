@@ -81,6 +81,7 @@ local function building(properties)
   end
   -- The 2x2 grid rails use.
   properties.build_grid_size = 2
+  properties.surface_conditions = {{property = "gravity", min = 0.1}}
   properties.corpse = "bte-stargate-remnants"
   properties.dying_explosion = "big-explosion"
   properties.impact_category = "stone"

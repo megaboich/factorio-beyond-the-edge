@@ -495,8 +495,8 @@ local steps = {
     expect("the portal sends to the partner's surface", to and to.surface, "nauvis")
     expect("the portal sends in front of the partner (" .. serpent.line(to) .. ")", math.abs(to.x - 21) < 2 and to.y > 3.5 and to.y < 7, true)
     expect("beside the portal sends nowhere", remote.call("bte-stargate-test", "destination", a.unit_number, 1, 5), nil)
-    expect("well behind the ring sends nowhere", remote.call("bte-stargate-test", "destination", a.unit_number, 1, 2.4), nil)
-    expect("just behind the ring sends too", remote.call("bte-stargate-test", "destination", a.unit_number, 1, 2.6) ~= nil, true)
+    expect("well behind the ring sends nowhere", remote.call("bte-stargate-test", "destination", a.unit_number, 1, 1.9), nil)
+    expect("just behind the ring sends too", remote.call("bte-stargate-test", "destination", a.unit_number, 1, 2.1) ~= nil, true)
     expect("the ring's edge by the side block sends too", remote.call("bte-stargate-test", "destination", a.unit_number, 3.9, 3) ~= nil, true)
     expect("off the portal's width sends nowhere", remote.call("bte-stargate-test", "destination", a.unit_number, 6, 3), nil)
     remote.call("bte-stargate-test", "set_enabled", b.unit_number, false)
@@ -581,20 +581,21 @@ local steps = {
     storage.traveller.destroy()
   end},
 
-  -- Vehicles and enemies, A to B on one surface. A car stopped behind the ring with only its box in the
-  -- zone (its centre 1.7, box to 2.7; the zone starts at 2.5) goes; one parked further back stays. An
-  -- enemy biter and a pentapod strafer (a spider-unit) in the portal go too, as clones.
+  -- Vehicles and enemies, A to B on one surface. Every traveller triggers by its centre: a car hugging
+  -- the east side block (x 3.2, side at 3.9 against the block at 4.0) goes; one parked just behind the
+  -- zone (centre 1.8, bumper reaching 2.8 inside 2.0..4.5) stays. An enemy biter and a pentapod
+  -- strafer (a spider-unit) in the portal go too, as clones.
   {5, function()
-    storage.car = surface().create_entity({name = "car", position = {1, 1.7}, force = "player"})
-    storage.parked = surface().create_entity({name = "car", position = {1, -3}, force = "player"})
+    storage.car = surface().create_entity({name = "car", position = {3.2, 3}, force = "player"})
+    storage.parked = surface().create_entity({name = "car", position = {1, 1.8}, force = "player"})
     storage.car.insert({name = "coal", count = 7})
     surface().create_entity({name = "small-biter", position = {3, 3.5}, force = "enemy"})
     surface().create_entity({name = "small-strafer-pentapod", position = {-1, 3.5}, force = "enemy"})
   end},
 
   {10, function()
-    expect("a car touching the zone is in transit", storage.car.surface.name, "bte-stargate-limbo")
-    expect("a car short of the zone stays", storage.parked.surface.name, "nauvis")
+    expect("a car hugging the side block in the zone is in transit", storage.car.surface.name, "bte-stargate-limbo")
+    expect("a car whose centre is outside the zone stays", storage.parked.surface.name, "nauvis")
     expect("a vehicle waits inactive", storage.car.active, false)
     local limbo = game.get_surface("bte-stargate-limbo")
     expect("the biter waits in limbo", limbo.count_entities_filtered({name = "small-biter"}), 1)
@@ -665,12 +666,16 @@ local steps = {
     for _, entity in pairs({tank, spider, storage.driver, storage.passenger, storage.pilot}) do
       entity.destroy()
     end
-    -- A gate on a surface without gravity takes no car: Space Age cars need gravity.
+    -- Sites cannot be built on zero-gravity surfaces, and a scripted zero-gravity gate refuses cars.
     local zero = game.create_surface("bte-test-zero-g")
     zero.generate_with_lab_tiles = true
     zero.request_to_generate_chunks({0, 0}, 2)
     zero.force_generate_chunk_requests()
     zero.set_property("gravity", 0)
+    expect("construction site can be built on a planet",
+      surface().can_place_entity({name = SITE, position = {60, 0}, force = "player", build_check_type = defines.build_check_type.manual}), true)
+    expect("construction site cannot be built without gravity",
+      zero.can_place_entity({name = SITE, position = {0, 0}, force = "player", build_check_type = defines.build_check_type.manual}), false)
     storage.z = zero.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
     remote.call("bte-stargate-test", "pair", storage.a.unit_number, storage.z.unit_number)
     storage.car = surface().create_entity({name = "car", position = {1, 3}, force = "player"})
@@ -1388,6 +1393,53 @@ local steps = {
     expect("expired rail_guard entries from earlier trains are pruned (" .. guards .. ")", guards <= 5, true)
     game.delete_surface(abort.da)
     game.delete_surface(abort.db)
+    -- Characters and vehicles still use station-mode gates: single-track gates place arrivals beside
+    -- the centre rail, while two-track gates keep the clear centre strip between the two lanes.
+    local ws = game.create_surface("bte-test-walkway")
+    ws.generate_with_lab_tiles = true
+    ws.request_to_generate_chunks({0, 0}, 3)
+    ws.force_generate_chunk_requests()
+    ws.create_entity({name = "substation", position = {-10, 0}, force = "player"})
+    ws.create_entity({name = "substation", position = {-10, 12}, force = "player"})
+    ws.create_entity({name = "substation", position = {-10, 22}, force = "player"})
+    local wp = ws.create_entity({name = "bte-stargate-test-power", position = {-14, 0}, force = "player"})
+    wp.power_production, wp.electric_buffer_size, wp.energy = 2e9, 1e10, 1e10
+    local g_single_src = ws.create_entity({name = GATE, position = {-24, 0}, force = "player", raise_built = true})
+    local g_single_dst = ws.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
+    local g_double_src = ws.create_entity({name = GATE, position = {-24, 24}, force = "player", raise_built = true})
+    local g_double_dst = ws.create_entity({name = GATE, position = {24, 0}, force = "player", raise_built = true})
+    remote.call("bte-stargate-test", "set_station", g_single_src.unit_number, "single")
+    remote.call("bte-stargate-test", "set_station", g_single_dst.unit_number, "single")
+    remote.call("bte-stargate-test", "pair", g_single_src.unit_number, g_single_dst.unit_number)
+    remote.call("bte-stargate-test", "set_station", g_double_src.unit_number, "right")
+    remote.call("bte-stargate-test", "set_station", g_double_dst.unit_number, "right")
+    remote.call("bte-stargate-test", "pair", g_double_src.unit_number, g_double_dst.unit_number)
+    for y = 9, 13, 2 do
+      ws.create_entity({name = "straight-rail", position = {1, y}, direction = defines.direction.north, force = "player"})
+      ws.create_entity({name = "straight-rail", position = {23, y}, direction = defines.direction.north, force = "player"})
+      ws.create_entity({name = "straight-rail", position = {27, y}, direction = defines.direction.north, force = "player"})
+    end
+    ws.create_entity({name = "cargo-wagon", position = {1, 7}, direction = defines.direction.north, force = "player"})
+    ws.create_entity({name = "cargo-wagon", position = {23, 7}, direction = defines.direction.north, force = "player"})
+    ws.create_entity({name = "cargo-wagon", position = {27, 7}, direction = defines.direction.north, force = "player"})
+    storage.walkway = {ws = ws, g_single_src = g_single_src, g_double_src = g_double_src}
+  end},
+  {90, function()
+    local w = storage.walkway
+    w.walker = w.ws.create_entity({name = "character", position = {-23, 3}, force = "player"})
+    w.tank = w.ws.create_entity({name = "tank", position = {-23, 27}, force = "player"})
+    w.tank.insert({name = "coal", count = 5})
+  end},
+  {270, function()
+    local w = storage.walkway
+    storage.walkway = nil
+    -- Single-track destination centre is (1, 1): rail is at x = 1, walkway at dx = -2.5 -> x = -1.5.
+    expect("character arrives off a single-track station's rail and walks south (" .. serpent.line(w.walker.position) .. ")",
+      w.walker.surface == w.ws and math.abs(w.walker.position.x - (-1.5)) < 0.3 and w.walker.position.y > 9.5, true)
+    -- Double-track destination centre is (25, 1): rails are at x = 23 and 27, so the centre x = 25 is clear.
+    expect("tank arrives between a double-track station's rails and drives south (" .. serpent.line(w.tank.position) .. ")",
+      w.tank.surface == w.ws and math.abs(w.tank.position.x - 25) < 0.3 and w.tank.position.y > 9.5, true)
+    game.delete_surface(w.ws)
   end},
 
   -- Mining a half-filled site returns the kit and everything delivered, and builds nothing.

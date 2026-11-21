@@ -24,9 +24,10 @@ The runner packages the mod, checks the ZIP excludes `tests/`, smoke-tests a fre
 
 **Travel** ([transfer.md](transfer.md))
 - that a character in the portal is sent to the front of the partner, through the limbo surface, and runs out of the ring (with a bare character entity, since headless runs have no player; the spectator view is untested);
-- that a car (triggered by its box), a biter, and a pentapod strafer travel A to B, inactive in limbo, a car arriving facing south with its fuel and driving out;
+- that a car (triggered by its centre even when hugging the side barrier, while one whose centre sits just outside stays), a biter, and a pentapod strafer travel A to B, inactive in limbo, a car arriving facing south with its fuel and driving out;
 - that a crewed tank and a piloted spidertron cross to another surface with everyone seated and the spidertron walking out;
-- that a zero-gravity surface refuses a car.
+- that characters and vehicles still travel through station-mode gates, stepping out beside the rail on a single-track gate and down the clear centre strip between the two rails on a double-track gate even when wagons stand on them;
+- that construction sites cannot be manually placed on a zero-gravity surface, and that a scripted zero-gravity gate refuses a car.
 
 **Trains** ([railway.md](railway.md))
 - that station mode lays rails, a named station, and its signals;
