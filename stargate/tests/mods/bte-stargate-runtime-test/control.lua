@@ -67,11 +67,10 @@ local function ground_count(item)
   return total
 end
 
--- The bill's bulk materials in slot order, each a whole number of stacks: slots 1-32, then the spare 33.
+-- The bill's bulk materials in slot order, each a whole number of stacks: slots 1-11, then the spare 12.
 local BILL = {
-  {"tungsten-plate", 1000, 1, 20}, {"superconductor", 200, 21, 21}, {"low-density-structure", 200, 22, 25},
-  {"refined-concrete", 200, 26, 27}, {"steel-plate", 200, 28, 29}, {"tungsten-carbide", 100, 30, 31},
-  {"advanced-circuit", 200, 32, 32}
+  {"tungsten-plate", 250, 1, 5}, {"holmium-plate", 300, 6, 8}, {"superconductor", 200, 9, 9},
+  {"supercapacitor", 200, 10, 11}
 }
 local TIMED = BILL[#BILL]
 
@@ -311,12 +310,12 @@ local steps = {
     surface().set_tiles(tiles)
     storage.site = build_site(0)
     local inventory = storage.site.get_inventory(defines.inventory.chest)
-    expect("slots (32 for the bill, 1 spare)", #inventory, 33)
+    expect("slots (11 for the bill, 1 spare)", #inventory, 12)
     for _, material in pairs(BILL) do
       expect(material[1] .. " first slot filter", inventory.get_filter(material[3]).name, material[1])
       expect(material[1] .. " last slot filter", inventory.get_filter(material[4]).name, material[1])
     end
-    expect("the spare slot is unfiltered", inventory.get_filter(33), nil)
+    expect("the spare slot is unfiltered", inventory.get_filter(12), nil)
   end},
 
   -- A delivery cannot overshoot: every material's slots hold exactly its amount.

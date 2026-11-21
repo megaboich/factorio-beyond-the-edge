@@ -7,16 +7,12 @@ from prototype_checks import KG
 
 # The bulk materials delivered to the construction site, each a whole number of stacks.
 REQUIREMENTS = [
-    ("tungsten-plate", 1000), ("superconductor", 200), ("low-density-structure", 200),
-    ("refined-concrete", 200), ("steel-plate", 200), ("tungsten-carbide", 100), ("advanced-circuit", 200),
+    ("tungsten-plate", 250), ("holmium-plate", 300), ("superconductor", 200), ("supercapacitor", 200),
 ]
-# The scarce high-end parts, which go into the construction kit instead of the site.
-SCARCE_KIT_PARTS = [
-    ("quantum-processor", 20), ("speed-module-3", 10), ("productivity-module-3", 10),
-    ("efficiency-module-3", 10), ("quality-module-3", 10), ("supercapacitor", 50), ("fusion-power-cell", 20),
+KIT_INGREDIENTS = [
+    ("quantum-processor", 16), ("supercapacitor", 10), ("quality-module-3", 8), ("tungsten-plate", 50),
+    ("refined-concrete", 100), ("superconductor", 50), ("holmium-plate", 50),
 ]
-# A little structural material as well, so the kit looks like a kit; the site takes the bulk of the same items.
-KIT_INGREDIENTS = SCARCE_KIT_PARTS + [("steel-plate", 100), ("refined-concrete", 100), ("low-density-structure", 50)]
 ITEM_TYPES = ["item", "module", "capsule", "tool", "ammo", "armor", "gun", "repair-tool",
               "item-with-entity-data", "rail-planner", "spidertron-remote", "space-platform-starter-pack"]
 STARGATE_PACKS = [
@@ -71,15 +67,13 @@ def check_construction_plan(t):
         t.check(f"{requirement['name']} slot layout", (requirement["first_slot"], requirement["slots"]), (first_slot, slots))
         first_slot += slots
     t.check("construction site slots hold the whole bill", site["inventory_size"], first_slot - 1)
-    t.check("construction site slot count", site["inventory_size"], 32)
+    t.check("construction site slot count", site["inventory_size"], 11)
     t.check("construction plan build time (ticks)", data["build_ticks"], 3600)
     t.check("construction plan stages", data["stages"], 6)
     # Whole stacks, so a delivery can never exceed the bill.
     t.check("every bulk amount is a whole number of stacks",
             [(r["name"], r["amount"] % stack_size(t, r["name"])) for r in data["requirements"]],
             [(name, 0) for name, _ in REQUIREMENTS])
-    t.check("no scarce kit part is also delivered to the site",
-            sorted({n for n, _ in SCARCE_KIT_PARTS} & {r["name"] for r in data["requirements"]}), [])
     t.check("construction site inventory has filters", site.get("inventory_type"), "with_filters_and_bar")
     t.check("construction site ignores quality slot bonus", site.get("quality_affects_inventory_size"), False)
     for name, _ in REQUIREMENTS:
@@ -87,6 +81,13 @@ def check_construction_plan(t):
 
 
 def check_buildings(t):
+    remnants = t.prototype("corpse", "bte-stargate-remnants")
+    if remnants:
+        t.check("remnants lie on the remnants layer", remnants.get("final_render_layer"), "remnants")
+    for type_name, name in [("container", BUILDINGS[0]), ("assembling-machine", BUILDINGS[2])]:
+        building = t.prototype(type_name, name)
+        if building:
+            t.check(f"{name} leaves the gate's remnants", building.get("corpse"), "bte-stargate-remnants")
     site = t.prototype("container", "bte-stargate-construction-site")
     assembling = t.prototype("simple-entity-with-owner", "bte-stargate-assembling")
     gate = t.prototype("assembling-machine", "bte-stargate")

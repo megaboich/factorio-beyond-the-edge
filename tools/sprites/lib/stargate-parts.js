@@ -15,6 +15,7 @@
 //             of the ring (8 tiles wide), inside hazard tape round the perimeter
 //   stage1-5  each adds to the last: more ring, the machinery housings, the clad towers,
 //             the west and east capacitor banks, then the towers' fans and a whole ring
+//   ruin      what a destroyed gate leaves: the floor and the ring's bottom, the rest wreckage on the deck
 //   complete  the finished gate: clamps and lights on the ring, lights on, markings; the tape is gone
 // Nothing but the finished gate lights up: before that its lamps are dark.
 // Lit parts carry `userData.glow = {layer: "lights"}`, exported as `glow-lights`; the earlier states have none.
@@ -56,7 +57,10 @@ const STATES = {
   stage3: { towers: 2, housing: 2, ring: [[150, 390]], banks: ["front", "west"] },
   stage4: { towers: 2, housing: 3, ring: [[115, 425]], banks: ["front", "west", "east"] },
   stage5: { towers: 3, housing: 3, ring: [[0, 360]], banks: ["front", "west", "east"] },
-  complete: { towers: 3, housing: 3, ring: [[0, 360]], banks: ["front", "west", "east"] }
+  complete: { towers: 3, housing: 3, ring: [[0, 360]], banks: ["front", "west", "east"] },
+  // What a destroyed gate leaves (the remnants): the floor, the stub of the ring's bottom in its
+  // trench, and the wreckage of the rest lying on the deck (ruin()).
+  ruin: { towers: 0, housing: 0, ring: [], banks: [] }
 };
 
 // Vanilla refined concrete for the finished floor (plain concrete for the raw site), so it matches tiles laid around the gate: one 512 px variant of the
@@ -67,6 +71,7 @@ const REFINED = "base/graphics/terrain/concrete/refined-concrete.png";
 export async function materials() {
   return {
     concrete: await factorioTexture(REFINED, { crop: [0, 0, 512], scale: 9, tint: 0xb4b4b4 }),
+    charred: await factorioTexture(REFINED, { crop: [0, 0, 512], scale: 9, tint: 0x6a645c }),
     raw: await factorioTexture(CONCRETE, { crop: [512, 0, 512], scale: 9, tint: 0x9a8f80 }),
     steel: textured({ color: 0x70777f, panels: 2, rivets: true, grime: 0.35, rust: 0.05, scratches: 0.35, scale: 1.5, metalness: 0.65, roughness: 0.45, seed: 75 }),
     plate: textured({ color: 0x5c636b, panels: 1, grime: 0.3, scratches: 0.3, scale: 1, metalness: 0.6, roughness: 0.5, seed: 77 }),
@@ -108,6 +113,58 @@ function floorHeight(x, z, { trench = true } = {}) {
   return y;
 }
 
+// The blast craters of a destroyed gate: [x, z, radius, depth], and the floor's height with them,
+// roughened by a little deterministic noise so the slab reads broken rather than smooth.
+const CRATERS = [[-0.6, -1.2, 3.6, 1.1], [3.8, -3.6, 1.9, 0.7], [-4.4, 3.4, 1.7, 0.6], [4.6, 4.2, 1.4, 0.5]];
+function ruinHeight(x, z) {
+  let y = floorHeight(x, z);
+  for (const [cx, cz, r, depth] of CRATERS) {
+    const d = Math.hypot(x - cx, z - cz) / r;
+    // A bowl with a raised, broken lip.
+    if (d < 1) y = Math.min(y, y - depth * (1 - d * d));
+    else if (d < 1.35) y += 0.18 * Math.sin((d - 1) / 0.35 * Math.PI);
+  }
+  const n = Math.sin(x * 3.1 + z * 1.7) * Math.cos(z * 2.9 - x * 0.8) + 0.5 * Math.sin(x * 7.3 - z * 6.1);
+  // Flat at the border, so the slab still meets the ground in a straight line.
+  return y + 0.06 * n * Math.min(1, Math.max(0, (HALF - Math.max(Math.abs(x), Math.abs(z)) - 0.3) / 1));
+}
+
+// How far in from the border a ruin's slab is broken off at (x, z): up to about a tile, unevenly,
+// so it no longer ends in a sharp square.
+function edgeBite(x, z) {
+  // Along the border's perimeter, straight lines between random depths at uneven knots: angular, like
+  // broken concrete, rather than a smooth wave.
+  const t = Math.abs(x) > Math.abs(z) ? z * Math.sign(x) + 20 * Math.sign(x) : x * Math.sign(z) + 40 * Math.sign(z);
+  const hash = (k) => { const v = Math.sin(k * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
+  const knots = (span, amount) => {
+    const k = Math.floor(t / span), f = t / span - k;
+    return amount * (hash(k * span) * (1 - f) + hash((k + 1) * span) * f);
+  };
+  return Math.max(0, knots(0.9, 1.0) + knots(0.37, 0.35) - 0.25);
+}
+
+/**
+ * Breaks a ruin's slab off along edgeBite(): border vertices are pulled in onto the broken line, which
+ * keeps the outline smooth (dropping whole triangles left a staircase), and dip a little at the break.
+ */
+function brokenEdge(geometry) {
+  const position = geometry.attributes.position;
+  for (let i = 0; i < position.count; i++) {
+    const x = position.getX(i), z = position.getZ(i);
+    const bite = edgeBite(x, z);
+    const edge = HALF - Math.max(Math.abs(x), Math.abs(z));
+    if (edge >= bite + 0.3) continue;
+    // Spread the band from the border to bite + 0.3 over bite to bite + 0.3, so no vertex lies beyond.
+    const target = bite + (edge / (bite + 0.3)) * 0.3;
+    const pull = edge - target;
+    if (Math.abs(x) > Math.abs(z)) position.setX(i, x + Math.sign(x) * pull);
+    else position.setZ(i, z + Math.sign(z) * pull);
+    position.setY(i, position.getY(i) - 0.12 * (1 - edge / (bite + 0.3)));
+  }
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 /** The floor as one height-field mesh, sampled finely enough that the trench walls stay crisp. */
 function floor(root, material, options) {
   const step = 0.125;
@@ -115,10 +172,12 @@ function floor(root, material, options) {
   const geometry = new THREE.PlaneGeometry(HALF * 2, HALF * 2, n, n);
   geometry.rotateX(-Math.PI / 2);
   const position = geometry.attributes.position;
-  for (let i = 0; i < position.count; i++) position.setY(i, floorHeight(position.getX(i), position.getZ(i), options));
+  const height = options?.ruin ? ruinHeight : (x, z) => floorHeight(x, z, options);
+  for (let i = 0; i < position.count; i++) position.setY(i, height(position.getX(i), position.getZ(i)));
   geometry.computeVertexNormals();
-  part(root, geometry, material).userData.floor = true;
-  // A kerb along the border, so the slab has an edge rather than a paper-thin rim.
+  part(root, options?.ruin ? brokenEdge(geometry) : geometry, material).userData.floor = true;
+  // A kerb along the border, so the slab has an edge rather than a paper-thin rim. A ruin's is broken.
+  if (options?.ruin) return;
   for (const [w, d, x, z] of [[HALF * 2, 0.2, 0, -HALF + 0.1], [HALF * 2, 0.2, 0, HALF - 0.1], [0.2, HALF * 2, -HALF + 0.1, 0], [0.2, HALF * 2, HALF - 0.1, 0]]) {
     part(root, new THREE.BoxGeometry(w, 0.3, d), material, [x, GROUND - 0.14, z]).userData.floor = true;
   }
@@ -727,6 +786,173 @@ export function drawSplash(root, t) {
   texture.needsUpdate = true;
 }
 
+/** A small deterministic random sequence, so the wreckage is the same on every render. */
+function random(seed) {
+  return () => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  };
+}
+
+/**
+ * The destroyed gate's wreckage, kept low as remnants are, after an explosion: a cratered floor
+ * (ruinHeight()), heavy soot spreading from the blast, ring segments thrown out and tipped steeply
+ * with their ends buried, burnt-out tower stumps with twisted posts, concrete chunks and rebar, a
+ * blackened capacitor can, and plates scattered to the edges. Every piece is charred.
+ */
+function ruin(root, m) {
+  const rnd = random(4242);
+  const burnt = (material, color) => Object.assign(material.clone(), { color: new THREE.Color(color) });
+  const steel = burnt(m.steel, 0x5a5652), tungsten = burnt(m.tungsten, 0x3a3734), plate = burnt(m.plate, 0x5a544e);
+  const grating = burnt(m.grating, 0x2c2a28), ceramic = burnt(m.ceramic, 0x4a4540);
+  const at = (x, z, lift = 0) => [x, ruinHeight(x, z) + lift, z];
+  // Soot: soft-edged blotches draped on the floor, darkest at the blast.
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 128;
+  const ctx = canvas.getContext("2d");
+  const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gradient.addColorStop(0, "rgba(0,0,0,0.7)");
+  gradient.addColorStop(0.5, "rgba(0,0,0,0.35)");
+  gradient.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 128, 128);
+  const scorch = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true, depthWrite: false });
+  const blotches = [[-0.6, -1.2, 4.8], ...CRATERS.slice(1).map(([x, z, r]) => [x, z, r * 2.2])];
+  for (let i = 0; i < 8; i++) {
+    // Streaks thrown out from the blast.
+    const a = i / 8 * TAU + rnd() * 0.5, d = 3.5 + rnd() * 2;
+    blotches.push([-0.6 + Math.cos(a) * d, -1.2 + Math.sin(a) * d, 1.4 + rnd()]);
+  }
+  for (const [x, z, r] of blotches) {
+    const geometry = new THREE.PlaneGeometry(r * 2, r * 2, 32, 32);
+    geometry.rotateX(-Math.PI / 2);
+    const position = geometry.attributes.position;
+    for (let i = 0; i < position.count; i++) position.setY(i, ruinHeight(x + position.getX(i), z + position.getZ(i)) + 0.03);
+    const mesh = new THREE.Mesh(geometry, scorch);
+    mesh.position.set(x, 0, z);
+    root.add(mesh);
+  }
+  // Ring segments, thrown out and tipped steeply, one end dug into the floor.
+  const step = TAU / 36;
+  const fallen = [[-4.2, -3.8, 0.3, 3, 0.35], [-0.8, -5.2, 1.4, 2, 0.25], [3.0, -1.0, -0.6, 2, 0.5], [5.2, -0.6, 2.2, 1, 0.3],
+    [-5.2, 0.6, -1.1, 2, 0.3], [1.6, 3.4, 0.9, 2, 0.55], [-2.6, 5.4, 2.6, 1, 0.2], [3.2, 5.6, -2.0, 1, 0.4], [-2.8, 1.6, 1.9, 1, 0.6]];
+  for (const [x, z, yaw, length, tip] of fallen) {
+    const group = new THREE.Group();
+    for (let i = 0; i < length; i++) {
+      // Segments torn apart rather than neatly joined.
+      const a0 = -length * step / 2 + i * step + 0.02 + rnd() * 0.03;
+      part(group, sector(RING.mid, RING.outer, a0, a0 + step * (0.7 + rnd() * 0.25), RING_DEPTH * 0.55), steel, [-RING.mid, 0, 0]);
+      part(group, sector(RING.inner, RING.mid, a0 + 0.03, a0 + step * (0.6 + rnd() * 0.3), RING_DEPTH * 0.45), tungsten, [-RING.mid, 0, 0]);
+    }
+    group.rotation.set(-Math.PI / 2 + tip * (rnd() < 0.5 ? -1 : 1), yaw, (rnd() - 0.5) * 0.9);
+    group.position.set(...at(x, z, 0.3));
+    root.add(group);
+  }
+  // Tower stumps, torn off low and burnt out, with twisted posts.
+  const { x: cx, width, depth } = TOWER;
+  for (const side of [-1, 1]) {
+    const x = side * cx;
+    const h = 0.5 + rnd() * 0.5;
+    part(root, new THREE.BoxGeometry(width, h, depth * 0.8), steel, [x, DECK + h / 2, RING_Z], [0.15 * side, 0, 0.12 * side]);
+    for (let k = 0; k < 4; k++) {
+      let p = new THREE.Vector3(x + (rnd() - 0.5) * width, DECK + h, RING_Z + (rnd() - 0.5) * depth);
+      for (let bend = 0; bend < 3; bend++) {
+        const q = p.clone().add(new THREE.Vector3((rnd() - 0.5 - side * 0.4) * 0.9, 0.2 + rnd() * 0.4, (rnd() - 0.5) * 0.9));
+        beam(root, p, q, 0.06, steel);
+        p = q;
+      }
+    }
+  }
+  // Concrete chunks thrown from the craters.
+  for (let i = 0; i < 34; i++) {
+    const a = rnd() * TAU, d = 1.5 + rnd() * 5;
+    const x = Math.max(-6.5, Math.min(6.5, -0.6 + Math.cos(a) * d)), z = Math.max(-6.5, Math.min(6.5, -1.2 + Math.sin(a) * d));
+    const r = 0.08 + rnd() * 0.2;
+    const chunk = part(root, new THREE.DodecahedronGeometry(r, 0), m.charred, at(x, z, r * 0.4), [rnd() * TAU, rnd() * TAU, rnd() * TAU]);
+    chunk.scale.set(1 + rnd(), 0.5 + rnd() * 0.4, 1 + rnd() * 0.6);
+  }
+  // Ash and soot on the ground round the slab, fading out unevenly over FRINGE tiles. It fades in
+  // under the slab's level border, so the sunken basin, which lies below it, shows no seam.
+  const FRINGE = 1.8, size = HALF + FRINGE, res = 256;
+  const ash = document.createElement("canvas");
+  ash.width = ash.height = res;
+  const actx = ash.getContext("2d");
+  const image = actx.createImageData(res, res);
+  const noise = (x, z) => 0.5 + 0.25 * Math.sin(x * 2.3 + Math.sin(z * 1.7) * 2) + 0.25 * Math.sin(z * 2.9 - Math.cos(x * 1.3) * 2);
+  for (let py = 0; py < res; py++) for (let px = 0; px < res; px++) {
+    const x = ((px + 0.5) / res * 2 - 1) * size, z = ((py + 0.5) / res * 2 - 1) * size;
+    const d = Math.max(Math.abs(x), Math.abs(z)) - HALF;
+    const rise = Math.max(0, Math.min(1, (d + 1.0) / 0.6));
+    const fall = Math.max(0, Math.min(1, 1 - d / FRINGE + (noise(x, z) - 0.5) * 0.8));
+    const i = (py * res + px) * 4;
+    image.data[i] = 24; image.data[i + 1] = 21; image.data[i + 2] = 18;
+    image.data[i + 3] = 255 * 0.85 * rise * fall * fall;
+  }
+  actx.putImageData(image, 0, 0);
+  const ashTexture = new THREE.CanvasTexture(ash);
+  // Without this the dark colour is read as linear and renders as a pale haze.
+  ashTexture.colorSpace = THREE.SRGBColorSpace;
+  const fringe = new THREE.Mesh(new THREE.PlaneGeometry(size * 2, size * 2),
+    new THREE.MeshBasicMaterial({ map: ashTexture, transparent: true, depthWrite: false }));
+  fringe.rotation.x = -Math.PI / 2;
+  fringe.position.y = GROUND - 0.06;
+  root.add(fringe);
+  // Rubble thrown beyond the slab over FRINGE tiles, dense at the break and thinning and shrinking
+  // outwards, in charred and dusty tones, so the wreck blends into the ground rather than ending in
+  // a hard edge.
+  const dust = [burnt(m.charred, 0x8a8075), burnt(m.charred, 0x6e665c), m.charred, steel, plate];
+  for (let i = 0; i < 420; i++) {
+    const a = rnd() * TAU;
+    const out = FRINGE * rnd() ** 2.2;
+    const sq = Math.max(Math.abs(Math.cos(a)), Math.abs(Math.sin(a)));
+    const x0 = Math.cos(a) / sq * HALF, z0 = Math.sin(a) / sq * HALF;
+    const back = edgeBite(x0, z0) + 0.2;
+    const x = Math.cos(a) / sq * (HALF - back + out + back * rnd() * 0.5), z = Math.sin(a) / sq * (HALF - back + out + back * rnd() * 0.5);
+    const r = (0.03 + rnd() * 0.11) * (1 - 0.7 * out / FRINGE);
+    const material = dust[i % 11 === 0 ? 3 + (i % 2) : Math.floor(rnd() * 3)];
+    const chunk = part(root, new THREE.DodecahedronGeometry(r, 0), material, [x, GROUND - r * 0.2, z], [rnd() * TAU, rnd() * TAU, rnd() * TAU]);
+    chunk.scale.set(1 + rnd(), 0.4 + rnd() * 0.3, 1 + rnd() * 0.6);
+  }
+  // Loose chunks along the slab's broken edge.
+  for (let i = 0; i < 40; i++) {
+    const side = i % 4, t = (rnd() - 0.5) * 13;
+    let x = [t, t, -HALF, HALF][side], z = [-HALF, HALF, t, -t][side];
+    const inward = edgeBite(x, z) * rnd();
+    if (side < 2) z -= Math.sign(z) * inward; else x -= Math.sign(x) * inward;
+    const r = 0.06 + rnd() * 0.16;
+    const chunk = part(root, new THREE.DodecahedronGeometry(r, 0), m.charred, [x, GROUND + r * 0.2, z], [rnd() * TAU, rnd() * TAU, rnd() * TAU]);
+    chunk.scale.set(1 + rnd(), 0.5 + rnd() * 0.3, 1 + rnd() * 0.6);
+  }
+  // Rebar sticking out of the craters' broken lips.
+  for (const [cx2, cz2, r] of CRATERS) {
+    for (let k = 0; k < 6; k++) {
+      const a = rnd() * TAU, d = r * (0.95 + rnd() * 0.2);
+      const base = new THREE.Vector3(cx2 + Math.cos(a) * d, 0, cz2 + Math.sin(a) * d);
+      base.y = ruinHeight(base.x, base.z);
+      const tip = base.clone().add(new THREE.Vector3(Math.cos(a) * 0.4 * rnd(), 0.3 + rnd() * 0.5, Math.sin(a) * 0.4 * rnd()));
+      beam(root, base, tip, 0.025, steel, 6);
+    }
+  }
+  // The ring's bottom stub in its trench, broken off short.
+  for (let i = 25; i < 29; i++) {
+    const a0 = i * step + 0.01, a1 = a0 + step * (i === 25 || i === 28 ? 0.5 : 0.97);
+    part(root, sector(RING.mid, RING.outer - (i % 2) * 0.15, a0, a1, RING_DEPTH), steel, [0, RING.cy, RING_Z]);
+    part(root, sector(RING.inner, RING.mid, a0, a1, RING_DEPTH * 0.8), tungsten, [0, RING.cy, RING_Z]);
+  }
+  // Capacitor cans, blackened and rolled away.
+  for (const [x, z, yaw] of [[5.0, -5.2, -0.7], [-5.6, -5.4, 0.6]]) {
+    part(root, new THREE.CylinderGeometry(0.3, 0.32, 0.9, 14), ceramic, at(x, z, 0.3), [Math.PI / 2, yaw, 0.2]).rotation.order = "YXZ";
+  }
+  // Plates and grating scattered to the edges, many on edge or bent up.
+  for (let i = 0; i < 30; i++) {
+    const a = rnd() * TAU, d = 2 + rnd() * 5;
+    const x = Math.max(-6.6, Math.min(6.6, -0.6 + Math.cos(a) * d)), z = Math.max(-6.6, Math.min(6.6, -1.2 + Math.sin(a) * d));
+    const material = [plate, grating, steel, tungsten][i % 4];
+    const w = 0.3 + rnd() * 0.8, dd = 0.2 + rnd() * 0.5;
+    part(root, new THREE.BoxGeometry(w, 0.05, dd), material, at(x, z, 0.08), [(rnd() - 0.5) * 1.6, rnd() * TAU, (rnd() - 0.5) * 1.6]);
+  }
+}
+
 // How far parts lean in towards the centre line per tile of height, as a fraction of their distance from it.
 const LEAN = 0.0055;
 
@@ -767,21 +993,25 @@ export async function build({ state = "complete", tracks: lanes = null } = {}) {
   if (!spec) throw new Error(`unknown Stargate state ${state}`);
   const root = new THREE.Group();
   const finished = state === "complete";
+  const ruined = state === "ruin";
   const lit = await materials();
   // Unfinished, the lamps are dark and export no glow layer.
   const m = finished ? lit : { ...lit, glow: lit.rubber };
-  floor(root, m.concrete);
+  floor(root, ruined ? m.charred : m.concrete, { ruin: ruined });
   ring(root, m, spec.ring, finished);
   for (const side of [-1, 1]) if (spec.housing) housing(root, m, side, spec.housing);
   towers(root, m, spec.towers);
-  markings(root, m, finished);
-  services(root, m);
-  capacitors(root, m, spec.banks, spec.towers > 0);
+  if (ruined) ruin(root, m);
+  else {
+    markings(root, m, finished);
+    services(root, m);
+    capacitors(root, m, spec.banks, spec.towers > 0);
+  }
   if (finished) {
     veil(root);
     root.userData.lights = m.glow;
   }
-  else tape(root, m);
+  else if (!ruined) tape(root, m);
   if (lanes) tracks(root, m, lanes);
   lean(root);
   // The models are lit from the north-west like the rest of the game, which leaves the south face

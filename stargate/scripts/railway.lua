@@ -583,6 +583,14 @@ function Railway.check()
     if record.railway and record.rail_layout ~= LAYOUT and record.entity.valid then
       build(record)
     end
+    -- A map label the gate drew for a while, while the game's own station label went unnoticed:
+    -- removed here, as a reinstall raises no configuration change.
+    if record.map_label then
+      if record.map_label.valid then
+        record.map_label.destroy()
+      end
+      record.map_label = nil
+    end
     local spec = layout(record)
     local target = spec and record.entity.valid and Gate.partner(record)
     -- The partner can take a train: a station with no other train arriving there.

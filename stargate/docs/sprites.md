@@ -7,7 +7,7 @@ Maintainer reference for the gate's generated graphics. Every sprite is generate
 Change `tools/sprites/lib/stargate-parts.js` or the thin models around it (`models/stargate*.js`), then re-export from `tools/sprites/`:
 
 ```sh
-node render.mjs stargate stargate-site stargate-stage1 stargate-stage2 stargate-stage3 stargate-stage4 stargate-stage5 stargate-icon stargate-kit-icon stargate-technology --export
+node render.mjs stargate stargate-site stargate-stage1 stargate-stage2 stargate-stage3 stargate-stage4 stargate-stage5 stargate-ruin stargate-icon stargate-kit-icon stargate-technology --export
 ```
 
 `stargate-parts.js` is one parameterised build of the modern, human-built gate:
@@ -17,7 +17,7 @@ node render.mjs stargate stargate-site stargate-stage1 stargate-stage2 stargate-
 - the power bank's capacitor cans (`capacitors()`, in groups: the front east rack, the west and the east banks) along the west and east walls behind the towers and in the front east corner, kept off the lanes and the apron;
 - cyan status lights, and an empty portal, which the finished gate's animated `glow-veil` layer (the `active` variant, `drawVeil()`) fills while open.
 
-Its `STATES` table is the `site`, `stage1` to `stage5`, and `complete`: six construction pictures, each adding to the last on the finished floor inside hazard tape (`tape()`), with dark lamps; the finished gate drops the tape and lights up. Its `tracks` option draws station mode's track and chevrons ([railway.md](railway.md)). The kit icon renders the `stage2` state.
+Its `STATES` table is the `site`, `stage1` to `stage5`, and `complete`: six construction pictures, each adding to the last on the finished floor inside hazard tape (`tape()`), with dark lamps; the finished gate drops the tape and lights up. A `ruin` state (`ruin()`, model `stargate-ruin.js`) is the remnants every stage leaves when destroyed (`bte-stargate-remnants`): after an explosion: a cratered, cracked floor (`ruinHeight()`, `CRATERS`) broken off unevenly round its border (`edgeBite()`, `brokenEdge()`, which pulls the border vertices in rather than dropping triangles, which left a staircase), with loose chunks along the break, ash and rubble on the ground round it, fading out over about two tiles so it blends into the terrain (the ash texture must be `SRGBColorSpace`: read as linear, its dark colour rendered as a pale haze), heavy soot spreading from the blast, ring segments thrown out and tipped with their ends dug in, the ring's broken bottom stub, burnt-out tower stumps with twisted posts, concrete chunks and rebar, blackened capacitor cans, and scattered plates, all charred, and kept low as remnants lie on their own layer. Its `tracks` option draws station mode's track and chevrons ([railway.md](railway.md)). The kit icon renders the `stage2` state.
 
 ## Geometry
 

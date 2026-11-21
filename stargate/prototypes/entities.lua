@@ -81,7 +81,7 @@ local function building(properties)
   end
   -- The 2x2 grid rails use.
   properties.build_grid_size = 2
-  properties.corpse = "big-remnants"
+  properties.corpse = "bte-stargate-remnants"
   properties.dying_explosion = "big-explosion"
   properties.impact_category = "stone"
   properties.resistances = {
@@ -93,6 +93,30 @@ local function building(properties)
 end
 
 data:extend({
+  -- What a destroyed gate leaves, at any stage: its floor and wreckage (models/stargate-ruin.js).
+  {
+    type = "corpse",
+    name = "bte-stargate-remnants",
+    localised_name = {"remnant-name", {"entity-name.bte-stargate"}},
+    icon = "__bte-stargate__/graphics/icons/stargate.png",
+    icon_size = 64,
+    flags = {"placeable-neutral", "not-on-map"},
+    hidden_in_factoriopedia = true,
+    subgroup = "remnants",
+    order = "z[bte]-a[stargate]",
+    selection_box = footprint.selection_box,
+    tile_width = 14,
+    tile_height = 14,
+    selectable_in_game = false,
+    time_before_removed = 60 * 60 * 15,
+    expires = false,
+    final_render_layer = "remnants",
+    remove_on_tile_placement = false,
+    animation = {layers = {
+      sprite("__bte-stargate__/graphics/entity/remnants/remnants-main", {}),
+      sprite("__bte-stargate__/graphics/entity/remnants/remnants-shadow", {draw_as_shadow = true})
+    }}
+  },
   building({
     type = "container",
     name = "bte-stargate-construction-site",

@@ -1,8 +1,7 @@
 -- How a Stargate is built. data-final-fixes.lua turns this into the construction site's filtered
 -- slots and a mod-data prototype the runtime reads. Quantities are provisional first-experiment balance.
 --
--- The scarce high-end parts go into the construction kit (prototypes/recipes.lua). The site takes only
--- bulk materials, and every amount is a whole number of stacks, so each material's slots hold exactly
+-- The high-end parts go into the construction kit (prototypes/recipes.lua). The site takes the bulk, and every amount is a whole number of stacks, so each material's slots hold exactly
 -- the amount needed and a delivery can never overshoot the bill. Keep it that way when editing: the
 -- prototype tests check the alignment against the game's stack sizes.
 return {
@@ -13,12 +12,10 @@ return {
   -- graphics/entity/assembling/assembling-<n>-* (see prototypes/entities.lua).
   stages = 6,
   requirements = {
-    {name = "tungsten-plate", amount = 1000},
+    {name = "tungsten-plate", amount = 250},
+    -- 250 asked for, rounded up to whole stacks of 100.
+    {name = "holmium-plate", amount = 300},
     {name = "superconductor", amount = 200},
-    {name = "low-density-structure", amount = 200},
-    {name = "refined-concrete", amount = 200},
-    {name = "steel-plate", amount = 200},
-    {name = "tungsten-carbide", amount = 100},
-    {name = "advanced-circuit", amount = 200}
+    {name = "supercapacitor", amount = 200}
   }
 }

@@ -1,7 +1,7 @@
 <!doctype html>
 <!--
   Stargate showcase: every look of the gate on one page, from the last renders in out/.
-  Render first (from tools/sprites/): node render.mjs stargate-site stargate-stage1 stargate-stage2 stargate-stage3 stargate-stage4 stargate-stage5 stargate
+  Render first (from tools/sprites/): node render.mjs stargate-site stargate-stage1 stargate-stage2 stargate-stage3 stargate-stage4 stargate-stage5 stargate stargate-ruin
   then open this file in a browser. Construction phases, the progress bar, the veil, the status lights
   (cyan, or red when short of power), the opening and closing animations, and the sounds are the
   game's; the transfer plays the game's passage and arrival animations and timings, with the same
@@ -37,6 +37,7 @@
     <button data-phase="stage4">5</button>
     <button data-phase="stage5">6</button>
     <button data-phase="finished">Finished</button>
+    <button data-phase="ruin">Destroyed</button>
     <button id="build">▶ Build (timeline)</button>
   </fieldset>
   <fieldset><legend>Gate</legend>
@@ -77,7 +78,7 @@ const VEIL_CENTER = 2.8;                       // ring axis height
 const VEIL_RADIUS = 4.6;
 const BUILD_SECONDS = 9;                       // the timeline compresses the game's minute
 const STAGES = ["stargate-site", "stargate-stage1", "stargate-stage2", "stargate-stage3", "stargate-stage4", "stargate-stage5"];
-const MODELS = [...STAGES, "stargate"];
+const MODELS = [...STAGES, "stargate", "stargate-ruin"];
 // The mod's sounds (stargate/resources/audio), and the trip's length: 128 ticks in game.
 const AUDIO = "../../stargate/resources/audio/stargate-";
 const TRIP_SECONDS = 128 / 60;
@@ -88,7 +89,7 @@ const TRIP_SECONDS = 128 / 60;
 const ARRIVAL_SECONDS = 64 / 60;
 const ARRIVE_AT = 1.9, EXIT_DISTANCE = 5, RUN_SPEED = 9;
 const sound = (name) => { if ($("sound").checked) new Audio(`${AUDIO}${name}.ogg`).play().catch(() => {}); };
-const PHASE_MODEL = { site: "stargate-site", stage1: "stargate-stage1", stage2: "stargate-stage2", stage3: "stargate-stage3", stage4: "stargate-stage4", stage5: "stargate-stage5", finished: "stargate" };
+const PHASE_MODEL = { site: "stargate-site", stage1: "stargate-stage1", stage2: "stargate-stage2", stage3: "stargate-stage3", stage4: "stargate-stage4", stage5: "stargate-stage5", finished: "stargate", ruin: "stargate-ruin" };
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("view");
@@ -325,6 +326,7 @@ function frame(dt) {
 
   $("status").textContent = state.building
     ? `Building… ${Math.round(progress * 100)}% (phase ${STAGES.indexOf(model) + 1} of 6)`
+    : state.phase === "ruin" ? "Remnants of a destroyed gate"
     : !finished ? `Construction ${state.phase === "site" ? "site (phase 1 of 6)" : `phase ${STAGES.indexOf(PHASE_MODEL[state.phase]) + 1} of 6`}`
     : tr ? tr.label
     : train ? train.label
@@ -472,5 +474,5 @@ $("train").onclick = () => { state.train = { at: state.time, gone: [], flash: []
 $("pause").onclick = () => { state.paused = !state.paused; $("pause").textContent = state.paused ? "▶" : "⏸"; };
 
 load().then(() => { refreshButtons(); requestAnimationFrame(tick); window.previewReady = true; })
-  .catch((e) => { $("error").textContent = `${e.message}\n\nRender first, from tools/sprites/:\n  node render.mjs stargate-site stargate-stage1 stargate-stage2 stargate-stage3 stargate-stage4 stargate-stage5 stargate`; });
+  .catch((e) => { $("error").textContent = `${e.message}\n\nRender first, from tools/sprites/:\n  node render.mjs stargate-site stargate-stage1 stargate-stage2 stargate-stage3 stargate-stage4 stargate-stage5 stargate stargate-ruin`; });
 </script>
