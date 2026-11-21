@@ -26,13 +26,13 @@ The arrival sound waits a few ticks after the cutscene camera has moved to the a
 ### Cutscene pitfalls
 
 - `on_cutscene_cancelled` and `on_cutscene_finished` complete the trip early.
-- A cutscene started straight after `exit_cutscene()` had no character to return to and left the player a bodiless camera, so every cutscene exit hands the character back with `set_controller` explicitly, first moving it to the player's surface, which `set_controller` requires (a character still in limbo raised an error).
+- A cutscene started straight after `exit_cutscene()` had no character to return to and left the player a bodiless camera, so every cutscene exit hands the character back with `set_controller` explicitly, first moving the bodiless player to the character's surface (`LuaControl.teleport`), which `set_controller` requires (skipping the departure cutscene on a cross-surface trip otherwise left the player on the departure surface while `finish()` moved the character to the arrival surface, raising a cross-surface controller error).
 - `exit_cutscene()` raises `on_cutscene_cancelled` synchronously, so the script's own exits set `storage.leaving_cutscene` for the handler to ignore; without it the handler finished the trip inside the arrival step and stranded the character in limbo.
 
 ## Random destinations
 
-`scripts/destinations.lua` picks destinations for unpaired gates and stores nothing:
+`scripts/destinations.lua` picks destinations for unpaired gates:
 
 - A planet counts as visited when the force has charted the chunk at its spawn position.
-- On one picked at random, the destination is the uncharted chunk nearest the force's spawn position, found by square rings out to 256 chunks and generated on the spot.
-- Whether any destination exists is cached for 60 ticks (`storage.destinations_any`).
+- Across visited planets in random order, the destination is the uncharted chunk nearest the force's spawn position, found by walking the four edges of each square ring out to 256 chunks (bounded by `floor(sqrt(best_distance))`) and generated on the spot.
+- Whether any destination exists is cached for 60 ticks (`storage.destinations_any`), and a planet fully charted out to 256 chunks is cached for 600 ticks (`storage.destinations_exhausted`).

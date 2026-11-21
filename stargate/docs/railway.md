@@ -67,7 +67,7 @@ Once started, the whole train is sent, whatever the signals, the gate's power, o
 
 After the last carriage is sent, the transfer runs on until that carriage is out, or crushes it if the train stops first. `wreck()` destroys a carriage with its cargo, places its explosion and remnants at the partner, and puts its driver on the floor beside the arrival lane towards the gate's centre: between the tracks of a two-track gate, east of a single one, clear of the track and in front of the portal.
 
-If either gate is removed during a transfer, it stops: carriages still at the sender stay there with their schedule, and those already through keep the copy.
+If either gate is removed during a transfer (`Railway.gate_removed`), carriages caught on the removed gate's own rails are wrecked with their drivers thrown clear (since rails cannot be removed from under rolling stock), while connected carriages outside the sender stay there with their schedule and mode restored and those already past the partner keep their copy. Expired `storage.rail_guard` entries are pruned as transfers finish.
 
 ## Known limits
 

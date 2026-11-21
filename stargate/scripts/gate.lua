@@ -168,7 +168,7 @@ function Gate.remove_railway(record)
   if record.entry_control and record.entry_control.valid then
     record.entry_control.destroy()
   end
-  record.rails, record.station, record.signals, record.entry_control, record.entry_open = nil, nil, nil, nil, nil
+  record.rails, record.edge_rail, record.station, record.signals, record.entry_control, record.entry_open = nil, nil, nil, nil, nil, nil
 end
 
 local function remove_companions(record)
@@ -242,21 +242,29 @@ end
 -- returning them to the adaptive request. The statistics are per network and prototype, so the
 -- gates of one network are judged together: in a shortage the engine gives each the same share.
 -- A network seen for the first time, or after it changed, is only measured, not judged.
-local POLE_REACH = 20
-local function network_pole(record, id)
+local POLE_REACH = 40
+local function network_statistics(record, id)
+  local surface = record.entity.surface
+  if surface.has_global_electric_network then
+    return surface.global_electric_network_statistics
+  end
   local pole = record.pole
   if pole and pole.valid and pole.electric_network_id == id then
-    return pole
+    return pole.electric_network_statistics
+  end
+  record.pole = nil
+  if record.pole_missed == id then
+    return nil
   end
   local c = center(record)
-  record.pole = nil
-  for _, candidate in pairs(record.entity.surface.find_entities_filtered({type = "electric-pole",
+  for _, candidate in pairs(surface.find_entities_filtered({type = "electric-pole",
       area = {{c.x - POLE_REACH, c.y - POLE_REACH}, {c.x + POLE_REACH, c.y + POLE_REACH}}})) do
     if candidate.electric_network_id == id then
-      record.pole = candidate
-      return candidate
+      record.pole, record.pole_missed = candidate, nil
+      return candidate.electric_network_statistics
     end
   end
+  record.pole_missed = id
 end
 
 function Gate.check_power()
@@ -284,11 +292,11 @@ function Gate.check_power()
   end
   local counts = {}
   for id, network in pairs(networks) do
-    local pole
+    local stats
     for _, entry in pairs(network.records) do
-      pole = pole or network_pole(entry.record, id)
+      stats = stats or network_statistics(entry.record, id)
     end
-    local count = pole and pole.electric_network_statistics.get_input_count(CAPACITOR)
+    local count = stats and stats.get_input_count(CAPACITOR)
     counts[id] = count
     local last = storage.power_counts and storage.power_counts[id]
     if network.any_direct and count and last then
@@ -452,10 +460,8 @@ end
 local function show_veil(record, was_open)
   if record.open and not was_open then
     play_transition(record, "opening")
-    record.veil_from = game.tick + 120
   elseif was_open and not record.open then
     play_transition(record, "closing")
-    record.veil_from = nil
   end
   for key, name in pairs(VEIL) do
     local entity = record[key]
@@ -512,11 +518,16 @@ local function apply(record, quick)
   if was_open ~= record.open or not quick then
     record.entity.disabled_by_script = not record.open
   end
+  if record.open and not was_open then
+    record.veil_from = game.tick + 120
+  elseif not record.open then
+    record.veil_from = nil
+  end
   -- Red while a switched-on gate charges, or while an open one is short of power.
   local red = record.enabled and (record.open and Gate.short_of_power(record) or (not record.open and Gate.charge(record) < FULL))
   -- Everything the companions show; the veil appears once the opening animation has played.
   local shown = (record.railway or "") .. (red and "|red" or "|") .. (record.open and "|open" or "|")
-    .. (game.tick >= (record.veil_from or 0) and "|veil" or "|")
+    .. (record.open and game.tick >= (record.veil_from or 0) and "|veil" or "|")
   if quick and shown == record.shown and was_open == record.open then
     return
   end
@@ -599,10 +610,13 @@ function Gate.candidates(record)
 end
 
 -- Drops records of gates that are gone, unpairing their partners.
-local function prune()
+local function prune(on_removed)
   for id, record in pairs(storage.gates) do
     if not record.entity.valid then
       remove_barriers(record)
+      if on_removed then
+        on_removed(id, record)
+      end
       remove_companions(record)
       storage.gates[id] = nil
       for _, other in pairs(storage.gates) do
@@ -617,9 +631,9 @@ local function prune()
   end
 end
 
-function Gate.rebuild()
+function Gate.rebuild(on_removed)
   Gate.init_storage()
-  prune()
+  prune(on_removed)
   for _, surface in pairs(game.surfaces) do
     for _, entity in pairs(surface.find_entities_filtered({name = GATE})) do
       Gate.register(entity)
@@ -632,13 +646,17 @@ function Gate.rebuild()
   end
 end
 
-function Gate.removed(entity)
-  local record = storage.gates[entity.unit_number]
+function Gate.removed(entity, on_removed)
+  local id = entity.unit_number
+  local record = storage.gates[id]
   if record then
     unpair(record)
     remove_barriers(record)
+    if on_removed then
+      on_removed(id, record)
+    end
     remove_companions(record)
-    storage.gates[entity.unit_number] = nil
+    storage.gates[id] = nil
   end
 end
 

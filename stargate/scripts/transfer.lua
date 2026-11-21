@@ -165,11 +165,11 @@ local function leave_cutscene(player, character)
     storage.leaving_cutscene = nil
   end
   if character and character.valid and player.character ~= character then
-    -- set_controller needs the character on the player's surface; a character still in limbo is
-    -- brought to the player first (callers move it on within the same tick). One in a vehicle comes
-    -- with its vehicle, since teleporting it alone would take it out of its seat.
+    -- set_controller needs the player on the character's surface; a bodiless player whose character
+    -- has already moved to the destination (as when skipping the departure cutscene, or riding with
+    -- someone who did) is brought to the character first rather than pulling the character back.
     if character.surface ~= player.surface then
-      (character.vehicle or character).teleport(player.position, player.surface)
+      player.teleport(character.position, character.surface)
     end
     player.set_controller({type = defines.controllers.character, character = character})
   end
@@ -334,13 +334,13 @@ local function arrive(id, transfer)
   local watchers = in_cutscene(transfer.watchers)
   if transfer.entity.valid and #watchers > 0 then
     -- A cutscene shows the surface its player is on, so in one tick (no frame is drawn in between) the
-    -- players take their characters back, the traveller moves to the arrival surface with them, the
-    -- cutscenes start there, and the traveller returns to limbo. Only characters and vehicles have
-    -- watchers, so the traveller is never replaced by a clone here.
+    -- traveller moves to the arrival surface, the players leave their departure cutscenes and join
+    -- their characters there, the arrival cutscenes start, and the traveller returns to limbo. Only
+    -- characters and vehicles have watchers, so the traveller is never replaced by a clone here.
+    transfer.entity.teleport(position, surface)
     for _, watcher in pairs(watchers) do
       leave_cutscene(watcher.player, watcher.character)
     end
-    transfer.entity.teleport(position, surface)
     local view = gate and {gate.position.x + 1, gate.position.y + 1 + VIEW_Y} or position
     for _, watcher in pairs(watchers) do
       cutscene(watcher.player, {position = view, transition_time = 1, time_to_wait = ARRIVAL_TICKS + SLACK}, view)
@@ -501,9 +501,7 @@ function Transfer.on_cutscene_cancelled(event)
         end
       end
       finish(id, transfer)
-      if player and watcher.character.valid and player.controller_type ~= defines.controllers.character then
-        player.set_controller({type = defines.controllers.character, character = watcher.character})
-      end
+      leave_cutscene(player, watcher.character)
       return
     end
   end

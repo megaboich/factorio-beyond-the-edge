@@ -153,8 +153,10 @@ local function complete(site)
   local position, surface = site.position, site.surface
   local assembling, restored = replace(site, ASSEMBLING)
   if not assembling then
-    for _, item in pairs(contents) do
-      restored.insert(item)
+    if restored then
+      for _, item in pairs(contents) do
+        restored.insert(item)
+      end
     end
     return
   end
@@ -168,7 +170,7 @@ local function finish(id, build)
   local entity = build.entity
   discard_build(id, build)
   local gate, restored = replace(entity, GATE)
-  if not gate then
+  if not gate and restored then
     start_build(restored, game.tick + RETRY_TICKS)
   end
 end

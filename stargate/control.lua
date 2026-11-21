@@ -14,7 +14,7 @@ local BUILT = {
 
 local function rebuild()
   Construction.rebuild()
-  Gate.rebuild()
+  Gate.rebuild(Railway.gate_removed)
   Gui.init_storage()
   Transfer.init_storage()
   Railway.rebuild()
@@ -49,13 +49,13 @@ end, BUILT)
 
 for _, event in pairs({defines.events.on_entity_died, defines.events.script_raised_destroy}) do
   script.on_event(event, function(event_data)
-    Gate.removed(event_data.entity)
+    Gate.removed(event_data.entity, Railway.gate_removed)
   end, {{filter = "name", name = GATE}})
 end
 
 script.on_nth_tick(UPDATE_TICKS, function()
   Construction.update()
-  Gate.prune()
+  Gate.prune(Railway.gate_removed)
   Gui.update()
 end)
 -- Gates fed in full run their steady draw without the script (scripts/power_bank.lua, direct mode);
@@ -112,6 +112,9 @@ if script.active_mods["bte-stargate-runtime-test"] then
     end,
     rail_transfers = function()
       return #storage.rail_transfers
+    end,
+    rail_guards = function()
+      return table_size(storage.rail_guard or {})
     end,
     set_station = function(id, mode)
       return Railway.set_mode(Gate.get(id), mode)

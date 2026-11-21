@@ -755,7 +755,16 @@ local steps = {
     local a = s.create_entity({name = GATE, position = {-8, 0}, force = "player", raise_built = true})
     local b = s.create_entity({name = GATE, position = {8, 0}, force = "player", raise_built = true})
     remote.call("bte-stargate-test", "pair", a.unit_number, b.unit_number)
-    storage.direct = {gates = {a, b}, source = source, load = load, fed = 0, n = 0}
+    -- A surface with a global electric network (like a space platform) has no poles at all.
+    local sg = game.create_surface("bte-test-direct-global")
+    sg.generate_with_lab_tiles = true
+    sg.request_to_generate_chunks({0, 0}, 2)
+    sg.force_generate_chunk_requests()
+    sg.create_global_electric_network()
+    local gsource = sg.create_entity({name = "bte-stargate-test-power", position = {0, -10}, force = "player"})
+    gsource.power_production, gsource.electric_buffer_size = 1e9 / 60, 1e9 / 60
+    local ga = sg.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
+    storage.direct = {gates = {a, b, ga}, source = source, gsource = gsource, load = load, fed = 0, n = 0}
   end},
   {600, function()
     local direct = storage.direct
@@ -770,6 +779,7 @@ local steps = {
     end
     -- The factory and the gates' upkeep (about 66 MW with the test's figures) on 330 MW.
     direct.source.power_production, direct.source.electric_buffer_size = 330e6 / 60, 330e6 / 60
+    direct.gsource.power_production, direct.gsource.electric_buffer_size = 10e6 / 60, 10e6 / 60
     direct.cut = true
   end},
   {90, function()
@@ -1288,13 +1298,16 @@ local steps = {
     end
     schedule.go_to_station(1)
     loco.train.manual_mode = false
-    storage.loop = {lb = lb, transfers = 0, stood = 0, last = 0}
+    storage.loop = {la = la, lb = lb, loco = loco, back = back, transfers = 0, stood = 0, last = 0}
   end},
   {1800, function()
     local loop = storage.loop
     storage.loop = nil
     expect("the train came back through B (" .. loop.transfers .. " transfers)", loop.transfers >= 2, true)
     expect("it did not stand at B's ring before going back in (" .. loop.stood .. " ticks)", loop.stood <= 10, true)
+    -- Only the locomotive facing into the gate pulls (0.0034 on nuclear fuel, not 0.0068 for both).
+    expect("a double-headed train pulls with its forward locomotive only (" .. tostring(loop.gain) .. ")",
+      (loop.gain or 1) > 0.001 and (loop.gain or 1) < 0.004, true)
   end},
 
   {5, function() start_chain(CHAIN_CASES[1]) end},
@@ -1304,6 +1317,70 @@ local steps = {
   {3100, function() check_chain() start_chain(CHAIN_CASES[5]) end},
   {3100, function() check_chain() start_chain(CHAIN_CASES[6]) end},
   {3100, check_chain},
+
+  -- Destroying a station gate mid-transfer: carriages caught on its own rails are wrecked with their
+  -- driver thrown clear, while carriages still outside the sender and those already past the partner
+  -- keep their schedules and automatic mode; expired rail_guard entries are pruned.
+  {5, function()
+    local function lab(name)
+      local s = game.create_surface(name)
+      s.generate_with_lab_tiles = true
+      s.request_to_generate_chunks({0, 40}, 4)
+      s.force_generate_chunk_requests()
+      return s
+    end
+    local da, db = lab("bte-test-abort-a"), lab("bte-test-abort-b")
+    local a = da.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
+    local b = db.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
+    da.create_entity({name = "substation", position = {-10, -6}, force = "player"})
+    local source = da.create_entity({name = "bte-stargate-test-power", position = {-12, -6}, force = "player"})
+    source.power_production, source.electric_buffer_size, source.energy = 1e9, 1e10, 1e10
+    remote.call("bte-stargate-test", "set_station", a.unit_number, "right")
+    remote.call("bte-stargate-test", "set_station", b.unit_number, "left")
+    remote.call("bte-stargate-test", "pair", a.unit_number, b.unit_number)
+    for _, s in pairs({da, db}) do
+      for y = 9, 121, 2 do
+        s.create_entity({name = "straight-rail", position = {3, y}, direction = defines.direction.north, force = "player"})
+      end
+    end
+    db.create_entity({name = "train-stop", position = {1, 101}, direction = defines.direction.south, force = "player"}).backer_name = "bte-test-abort-far"
+    da.create_entity({name = "train-stop", position = {1, 101}, direction = defines.direction.south, force = "player"}).backer_name = "bte-test-abort-back"
+    local front = da.create_entity({name = "locomotive", position = {3, 30}, direction = defines.direction.north, force = "player"})
+    da.create_entity({name = "cargo-wagon", position = {3, 37}, direction = defines.direction.north, force = "player"})
+    local mid = da.create_entity({name = "cargo-wagon", position = {3, 44}, direction = defines.direction.north, force = "player"})
+    da.create_entity({name = "cargo-wagon", position = {3, 51}, direction = defines.direction.north, force = "player"})
+    local rear = da.create_entity({name = "locomotive", position = {3, 58}, direction = defines.direction.south, force = "player"})
+    front.insert({name = "coal", count = 20})
+    rear.insert({name = "coal", count = 20})
+    local driver = da.create_entity({name = "character", position = {6, 44}, force = "player"})
+    mid.set_driver(driver)
+    local schedule = front.train.get_schedule()
+    schedule.add_record({station = remote.call("bte-stargate-test", "station", a.unit_number).backer_name, wait_conditions = {}})
+    schedule.add_record({station = "bte-test-abort-far", wait_conditions = {{type = "time", ticks = 6000}}})
+    schedule.add_record({station = "bte-test-abort-back", wait_conditions = {{type = "time", ticks = 6000}}})
+    schedule.go_to_station(1)
+    front.train.manual_mode = false
+    storage.abort = {da = da, db = db, a = a, rear = rear, driver = driver}
+  end},
+  {400, function()
+    local abort = storage.abort
+    storage.abort = nil
+    expect("the gate died mid-transfer", abort.killed, true)
+    expect("no transfer is left running after gate death", remote.call("bte-stargate-test", "rail_transfers"), 0)
+    expect("the dead gate leaves no rails or station",
+      abort.da.count_entities_filtered({name = {"bte-stargate-rail", "bte-stargate-rail-hidden", "bte-stargate-station",
+        "bte-stargate-entry-signal", "bte-stargate-exit-signal"}}), 0)
+    expect("a driver on the dead gate's rails survives", abort.driver.valid and abort.driver.surface == abort.da, true)
+    expect("carriages outside the dead gate survive in automatic mode",
+      abort.rear.valid and abort.rear.train.manual_mode == false, true)
+    local arrived = abort.db.find_entities_filtered({type = "locomotive"})[1]
+    expect("carriages already past the partner keep their schedule in automatic mode",
+      arrived ~= nil and arrived.train.manual_mode == false, true)
+    local guards = remote.call("bte-stargate-test", "rail_guards")
+    expect("expired rail_guard entries from earlier trains are pruned (" .. guards .. ")", guards <= 5, true)
+    game.delete_surface(abort.da)
+    game.delete_surface(abort.db)
+  end},
 
   -- Mining a half-filled site returns the kit and everything delivered, and builds nothing.
   {5, function()
@@ -1397,6 +1474,14 @@ script.on_event(defines.events.on_tick, function()
       loop.transfers = loop.transfers + 1
     end
     loop.last = running
+    if running > 0 and loop.transfers == 1 and not (loop.loco.valid and loop.loco.surface == loop.la) then
+      local back = loop.back.valid and loop.back.surface == loop.la and loop.back
+      local speed = back and back.train and math.abs(back.train.speed)
+      if speed and loop.rest_speed then
+        loop.gain = math.max(loop.gain or 0, speed - loop.rest_speed)
+      end
+      loop.rest_speed = speed
+    end
     -- A train standing on B's lane at the ring, with nothing going through.
     if running == 0 and loop.transfers == 1 then
       for _, car in pairs(loop.lb.find_entities_filtered({type = "locomotive", area = {{0, -6}, {2, 12}}})) do
@@ -1405,6 +1490,14 @@ script.on_event(defines.events.on_tick, function()
           break
         end
       end
+    end
+  end
+  local abort = storage.abort
+  if abort and not abort.killed and abort.a.valid then
+    local arrived = abort.db.find_entities_filtered({type = "locomotive"})[1]
+    if arrived and arrived.position.y > 12 and abort.rear.valid and abort.rear.position.y > 12 then
+      abort.a.die()
+      abort.killed = true
     end
   end
   local watch = storage.rail_watch

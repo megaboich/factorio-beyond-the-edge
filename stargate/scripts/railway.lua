@@ -341,18 +341,17 @@ local function in_sign(train, record)
 end
 
 -- How fast `train`, about to be driven north into a gate, gains speed each tick, and its top speed
--- that way (prototypes and fuel, see ACCELERATION).
+-- that way (prototypes and fuel, see ACCELERATION). Only locomotives facing the way the train goes
+-- in pull; any facing the other way are dead weight.
 local function pulling(train, record)
+  local forward = in_sign(train, record) > 0
+  local movers = forward and train.locomotives.front_movers or train.locomotives.back_movers
   local force = 0
-  for _, loco in pairs(train.locomotives.front_movers) do
+  for _, loco in pairs(movers) do
     local burning = loco.burner and loco.burner.currently_burning
     force = force + (burning and burning.name.fuel_acceleration_multiplier or (loco.burner and 0 or 1))
   end
-  for _, loco in pairs(train.locomotives.back_movers) do
-    local burning = loco.burner and loco.burner.currently_burning
-    force = force + (burning and burning.name.fuel_acceleration_multiplier or (loco.burner and 0 or 1))
-  end
-  local top = in_sign(train, record) > 0 and train.max_forward_speed or train.max_backward_speed
+  local top = forward and train.max_forward_speed or train.max_backward_speed
   return ACCELERATION * force / math.max(train.weight, 1), top
 end
 
@@ -819,16 +818,17 @@ local function crash(transfer, target, car)
   wreck(target, car, position)
 end
 
--- The saved schedule with the gate's own stop passed: rail records name places on the old surface
--- and are dropped; a temporary stop at the gate is removed, a permanent one skipped.
-function restore_schedule(train, saved)
+-- The saved schedule with the gate's own stop passed (unless `keep_gate_stop` is set, for carriages
+-- that stayed behind at the sender): rail records name places on the old surface and are dropped on
+-- arrival; a temporary stop at the gate is removed, a permanent one skipped.
+function restore_schedule(train, saved, keep_gate_stop)
   if not saved.records or #saved.records == 0 then
     return
   end
   local records, current = {}, saved.current or 1
   for index, record in ipairs(saved.records) do
-    if record.rail then
-      if index < saved.current then
+    if record.rail and not keep_gate_stop then
+      if index < (saved.current or 1) then
         current = current - 1
       end
     else
@@ -839,7 +839,7 @@ function restore_schedule(train, saved)
     return
   end
   current = math.max(1, math.min(current, #records))
-  if not saved.manual and records[current] and records[current].station == saved.station then
+  if not keep_gate_stop and not saved.manual and records[current] and records[current].station == saved.station then
     if records[current].temporary then
       table.remove(records, current)
       if current > #records then
@@ -952,8 +952,20 @@ local function move_out(transfer, target, speed)
   end
 end
 
-local function finish(index, transfer)
-  table.remove(storage.rail_transfers, index)
+local function prune_guards()
+  local guards = storage.rail_guard
+  if not guards then
+    return
+  end
+  local tick = game.tick
+  for unit_number, guard in pairs(guards) do
+    if type(guard) ~= "table" or guard.tick <= tick then
+      guards[unit_number] = nil
+    end
+  end
+end
+
+local function finish_arrived(transfer)
   local last = transfer.last
   if not (last and last.valid and last.train) then
     return
@@ -974,17 +986,96 @@ local function finish(index, transfer)
   restore_schedule(train, transfer.saved)
   train.manual_mode = transfer.saved.manual
   -- Leaves at the speed it came through; an automatic train then follows its path.
-  train.speed = (transfer.speed or SPEED) * out_sign(train, last)
+  keep_speed(train, (transfer.speed or SPEED) * out_sign(train, last))
 end
 
--- A transfer whose gate or partner is gone stops: the carriages still at the sender stay there with
--- their schedule, and those already through keep the copy.
-local function abort(index, transfer)
-  local car = transfer.car
+local function finish(index, transfer)
+  table.remove(storage.rail_transfers, index)
+  prune_guards()
+  finish_arrived(transfer)
+end
+
+local function restore_sender(car, saved)
   if car and car.valid and car.train then
-    car.train.manual_mode = transfer.saved.manual
+    car.train.speed = 0
+    restore_schedule(car.train, saved, true)
+    car.train.manual_mode = saved.manual
   end
+end
+
+-- A transfer whose gate or partner is gone stops: the carriages outside the dead gate's rails stay
+-- there with their schedule, and those already through keep the copy.
+local function abort(index, transfer)
+  restore_sender(transfer.car, transfer.saved)
   finish(index, transfer)
+end
+
+-- Before a removed gate's rails are cleared: wrecks any carriages caught on those rails (throwing
+-- their drivers clear, since a rail cannot be removed from under rolling stock), and restores the
+-- schedules and modes of any connected carriages that survive outside the gate.
+function Railway.gate_removed(id, record)
+  Railway.init_storage()
+  local doomed, rail_cars = {}, {}
+  for _, rail in pairs(record and record.rails or {}) do
+    if rail.valid then
+      for _, car in pairs(rail.surface.find_entities_filtered({type = ROLLING_STOCK, area = rail.bounding_box})) do
+        if car.valid and not doomed[car.unit_number] then
+          doomed[car.unit_number] = true
+          rail_cars[#rail_cars + 1] = car
+        end
+      end
+    end
+  end
+  local function survivor(car)
+    if car and car.valid and car.train then
+      for _, member in pairs(car.train.carriages) do
+        if member.valid and not doomed[member.unit_number] then
+          return member
+        end
+      end
+    end
+  end
+  local aborted = {}
+  for index = #storage.rail_transfers, 1, -1 do
+    local transfer = storage.rail_transfers[index]
+    if transfer.from == id or transfer.to == id then
+      aborted[#aborted + 1] = {
+        transfer = transfer,
+        sender = survivor(transfer.car),
+        arrived = survivor(transfer.last)
+      }
+      table.remove(storage.rail_transfers, index)
+    end
+  end
+  for _, car in pairs(rail_cars) do
+    if car.valid then
+      local surface, position = car.surface, car.position
+      local driver = crew(car)
+      if driver and driver.valid then
+        local beside = {position.x + 2, position.y}
+        local spot = surface.find_non_colliding_position("character", beside, 8, 0.25) or beside
+        driver.teleport(spot, surface)
+      end
+      local explosion = car.name .. "-explosion"
+      surface.create_entity({name = prototypes.entity[explosion] and explosion or "big-explosion", position = position})
+      local remnants = car.name .. "-remnants"
+      if prototypes.entity[remnants] then
+        surface.create_entity({name = remnants, position = position, direction = defines.direction.south})
+      end
+      car.destroy({raise_destroy = true})
+    end
+  end
+  if #aborted > 0 then
+    prune_guards()
+  end
+  for _, entry in pairs(aborted) do
+    restore_sender(entry.sender, entry.transfer.saved)
+    entry.transfer.last = entry.arrived
+    finish_arrived(entry.transfer)
+  end
+  if next(held_trains()) then
+    release_held()
+  end
 end
 
 -- Runs every tick while a train is passing through.
@@ -1094,6 +1185,9 @@ function Railway.update()
             transfer.car = rest
             train = rest and rest.valid and rest.train
             rear = train and rest.bounding_box.right_bottom.y
+          else
+            -- Reconnecting after a failed clone replaces the LuaTrain instance.
+            train = front.valid and front.train
           end
         end
         if train and train.valid then
