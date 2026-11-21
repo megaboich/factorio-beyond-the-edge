@@ -35,6 +35,9 @@ local EDGE = 7
 -- The ring's plane. A carriage is taken once its rear has passed it, so it has driven in under the
 -- veil (sorted behind the ring's body companion once its centre is past) before it disappears.
 local RING_PLANE = 2
+-- Tiles a carriage waiting for room at the partner may roll on behind the ring before the train is
+-- stopped.
+local SLACK = 1
 -- A train is taken once its front reaches the gate's edge.
 local REACH = 0.1
 -- The station, beside the departure lane on a northbound train's right, at the far end of the hidden
@@ -56,8 +59,13 @@ local SPEED = 0.3
 -- vanilla trains gain about ACCELERATION * (locomotives * fuel acceleration multiplier) / weight tiles
 -- a tick each tick from a standstill (measured: 0.0011 for one locomotive and four wagons on coal,
 -- the same for two and eight, three times that on nuclear fuel). Air resistance, which slows the gain
--- near top speed, is left out; the train's own top speed caps it.
+-- near top speed, is left out; the train's own top speed caps it. The gain eases in (EASE_LENGTH):
+-- a train that was braking for the station and then gained speed at once looked jerky (seen in game).
 local ACCELERATION = 6.8
+-- Tiles (a vanilla carriage's coupling length) over which the gain eases from half to full, once the
+-- first carriage is through; until then the train keeps the speed it came in with, unless that is
+-- below SPEED.
+local EASE_LENGTH = 7
 -- How long an arrived carriage is not sent back (a single-track gate's arrivals start on its
 -- departure lane).
 local GUARD_TICKS = 300
@@ -308,23 +316,6 @@ local function drive_out(train, tail, speed)
   train.speed = speed * out_sign(train, tail)
 end
 
--- How fast `train`, about to be driven north into a gate, gains speed each tick, and its top speed
--- that way (prototypes and fuel, see ACCELERATION).
-local function pulling(train)
-  local force = 0
-  for _, loco in pairs(train.locomotives.front_movers) do
-    local burning = loco.burner and loco.burner.currently_burning
-    force = force + (burning and burning.name.fuel_acceleration_multiplier or (loco.burner and 0 or 1))
-  end
-  for _, loco in pairs(train.locomotives.back_movers) do
-    local burning = loco.burner and loco.burner.currently_burning
-    force = force + (burning and burning.name.fuel_acceleration_multiplier or (loco.burner and 0 or 1))
-  end
-  local north = south_sign(train) < 0
-  local top = north and train.max_forward_speed or train.max_backward_speed
-  return ACCELERATION * force / math.max(train.weight, 1), top
-end
-
 -- The end of `train` going into `record`'s gate: the one on its departure lane. A train that runs
 -- out of one gate and round into another may have its other end further north.
 local function head(train, record)
@@ -335,6 +326,34 @@ local function head(train, record)
       return car
     end
   end
+end
+
+-- Which way a positive speed moves `train` into `record`'s gate: 1 in, -1 out. Judged by its end on
+-- the departure lane (head()), as a train coming round a curve or loop can have its other end
+-- further north: comparing the two ends' `y` (south_sign()) then reads a train driving in as one
+-- driving out, which was left to brake almost to a stop at the station (a save).
+local function in_sign(train, record)
+  local into = record and head(train, record)
+  if into and train.front_stock ~= train.back_stock then
+    return into == train.front_stock and 1 or -1
+  end
+  return -south_sign(train)
+end
+
+-- How fast `train`, about to be driven north into a gate, gains speed each tick, and its top speed
+-- that way (prototypes and fuel, see ACCELERATION).
+local function pulling(train, record)
+  local force = 0
+  for _, loco in pairs(train.locomotives.front_movers) do
+    local burning = loco.burner and loco.burner.currently_burning
+    force = force + (burning and burning.name.fuel_acceleration_multiplier or (loco.burner and 0 or 1))
+  end
+  for _, loco in pairs(train.locomotives.back_movers) do
+    local burning = loco.burner and loco.burner.currently_burning
+    force = force + (burning and burning.name.fuel_acceleration_multiplier or (loco.burner and 0 or 1))
+  end
+  local top = in_sign(train, record) > 0 and train.max_forward_speed or train.max_backward_speed
+  return ACCELERATION * force / math.max(train.weight, 1), top
 end
 
 -- Drives `train` into a gate at `speed`, its end `front` first.
@@ -489,7 +508,7 @@ local function start(record, target, train, car, chain)
     saved.current = chain and chain.stop or schedule.current
   end
   saved.station = record.station and record.station.valid and record.station.backer_name or record.name
-  local acceleration, top = pulling(train)
+  local acceleration, top = pulling(train, record)
   local speed = math.abs(train.speed)
   storage.rail_transfers[#storage.rail_transfers + 1] = {
     from = record.entity.unit_number, to = target.entity.unit_number, car = car, saved = saved,
@@ -628,7 +647,7 @@ function Railway.check()
         -- GUARD_TICKS one driven by hand that came out here. An automatic train heading back in goes
         -- at once; a time guard on every arrival kept one standing there with no path (seen in game).
         elseif train and car.bounding_box.left_top.y <= c.y + EDGE + REACH and not in_transfer(train)
-          and not arrival(train) and train.speed * south_sign(train) <= 0.01
+          and not arrival(train) and train.speed * in_sign(train, record) >= -0.01
           and (automatic and (held_trains()[train.id] or bound_for(train, record))
             or not automatic and not guarded(car, record)) then
           -- An automatic train is here only because the signal let it in, or it had reserved its way
@@ -706,6 +725,7 @@ local function send(transfer, record, target, car)
   car.destroy()
   storage.rail_guard[clone.unit_number] = {tick = game.tick + GUARD_TICKS, gate = transfer.to}
   transfer.last = clone
+  transfer.ease = transfer.ease or 0.5
   return true
 end
 
@@ -978,23 +998,36 @@ function Railway.update()
       -- Both parts gather speed together, as one train would; one with no locomotive working
       -- (wagons pushed in, or out of fuel) is driven at SPEED at least.
       local acceleration = transfer.acceleration or 0
-      local speed = math.min(transfer.top or SPEED, (transfer.speed or SPEED) + acceleration)
+      -- A train that came in slow, or held standing, gains speed from the start, or it would never
+      -- get its first carriage through.
+      local ease = transfer.ease or ((transfer.speed or SPEED) < SPEED and 0.5 or 0)
+      local speed = math.min(transfer.top or SPEED, (transfer.speed or SPEED) + acceleration * ease)
+      if ease > 0 and ease < 1 then
+        transfer.ease = math.min(1, ease + 0.5 * speed / EASE_LENGTH)
+      end
       if acceleration <= 0 then
         speed = math.max(speed, SPEED)
       end
-      -- Once out, the train drives itself and may pull away faster than the script feeds it: the
-      -- part still going in keeps up, as the rest of one train would, or the next carriage appears
-      -- falling behind and does not couple (seen in game).
-      local out = transfer.last
-      if out and out.valid and out.train then
-        speed = math.max(speed, math.abs(out.train.speed))
-      end
-      transfer.speed = speed
       -- Its part already out has been taken into the next gate (hand_over()): that transfer drives
       -- it, and this one only adds carriages to its tail.
+      local out = transfer.last
       local handed = out and out.valid and out.train and in_transfer(out.train)
       local car = transfer.car
       local train = car and car.valid and car.train
+      -- Once out, the train drives itself and may pull away faster than the script feeds it, or the
+      -- next carriage appears falling behind and does not couple (seen in game). While carriages
+      -- are still going in, it is held to the whole train's speed: its front locomotive alone,
+      -- light, gained speed several times faster, and the rest keeping up with it jerked the train
+      -- forward (seen in game). Once all are through, or handed on, the rest keeps up with it.
+      if out and out.valid and out.train then
+        local current = math.abs(out.train.speed)
+        if train and not handed and current > speed then
+          keep_speed(out.train, speed * (out.train.speed > 0 and 1 or -1))
+        else
+          speed = math.max(speed, current)
+        end
+      end
+      transfer.speed = speed
       if not train then
         -- Everything is sent: the arrived part is driven out until its last carriage has emerged;
         -- if it stops first, what is still in the ring is crushed.
@@ -1064,7 +1097,10 @@ function Railway.update()
           end
         end
         if train and train.valid then
-          if rear <= c.y + RING_PLANE then
+          -- A carriage past the ring waiting for room at the partner rolls on behind the veil for
+          -- up to SLACK, as the part already out moves at the same speed and makes room within a
+          -- tick or so; stopping it at once stood the train still for a tick (a visible jerk).
+          if rear <= c.y + RING_PLANE - SLACK then
             train.manual_mode = true
             train.speed = 0
           else

@@ -5,6 +5,10 @@
 #   tests/factorio.sh run TICKS MOD...     load the base save with MODs for TICKS ticks; log to stdout,
 #                                          failing if the run ended early
 #   tests/factorio.sh dump OUT MOD...      dump prototypes, then their locale, with MODs into directory OUT
+#   tests/factorio.sh graphics TICKS MOD... load the base save with MODs for TICKS ticks in a game window, so
+#                                          probes can take in-game screenshots (game.take_screenshot), which
+#                                          headless runs cannot; script output lands in
+#                                          $BTE_FACTORIO_HOME/write-data/script-output
 #
 # A MOD is a packaged ZIP or a mod directory. Everything lives in one fixed directory
 # ($BTE_FACTORIO_HOME, by default ~/Library/Caches/bte-factorio): its own config.ini and write-data,
@@ -73,6 +77,19 @@ EOF
       --benchmark-ticks 100000000 --benchmark-runs 1 2>&1 | tee "$HOME_DIR/run.log" || true
     grep -q BTE_RUN_STOP "$HOME_DIR/run.log"
     ;;
+  graphics)
+    ticks="$1"
+    shift
+    fill_mods "$@"
+    rm -rf "$WRITE/script-output"
+    # Started outside Steam, the Steam build's window asks Steam to restart it, and Steam then runs
+    # a second copy on its own while this one exits at once. A steam_appid.txt (Factorio's Steam app
+    # ID) in the working directory tells the Steam API that the game may run as it is.
+    mkdir -p "$HOME_DIR/cwd"
+    echo 427520 > "$HOME_DIR/cwd/steam_appid.txt"
+    (cd "$HOME_DIR/cwd" && "$FACTORIO_BIN" --config "$CONFIG" --mod-directory "$MODS" --benchmark-graphics "$BASE" \
+      --benchmark-ticks "$ticks" --benchmark-runs 1 --disable-audio) 2>&1 | tee "$HOME_DIR/run.log"
+    ;;
   dump)
     out="$1"
     shift
@@ -89,7 +106,7 @@ EOF
     cp "$WRITE"/script-output/* "$out/"
     ;;
   *)
-    sed -n '2,7p' "$0" >&2
+    sed -n "2,11p" "$0" >&2
     exit 2
     ;;
 esac

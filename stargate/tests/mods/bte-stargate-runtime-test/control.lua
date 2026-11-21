@@ -107,7 +107,7 @@ local function check_mid()
   local whole = 1 + (fast.mid.wagons or 4)
   expect(case .. ": it arrives whole", #cars, whole)
   expect(case .. ": and coupled", cars[1] and #cars[1].train.carriages, whole)
-  expect(case .. ": every carriage appears behind the veil (" .. tostring(fast.outside) .. ")", (fast.outside or 0) <= 3, true)
+  expect(case .. ": every carriage appears behind the veil (" .. tostring(fast.outside) .. ")", (fast.outside or 0) <= 3 + 0.5, true)
   for _, car in pairs(cars) do
     car.destroy()
   end
@@ -119,13 +119,16 @@ end
 -- one before. Cases: a locomotive leading; one pushing from the rear (`pushed`), so no locomotive
 -- faces out ahead when the head reaches the next gate; a train driven by hand (`manual`); one whose
 -- next stop is not the gate its track leads into (`skip`); and one meeting a closed gate (`closed`).
--- The last two jam (`jam`): what was still coming out of the gate before is wrecked.
+-- The last two jam (`jam`): what was still coming out of the gate before is wrecked. With `approach`
+-- no gate comes before: the train runs south and round the U-turn into the first gate, its tail still
+-- further north than its head (a save: it was taken only once almost stopped at the station).
 local CHAIN_CASES = {
   {id = 1, pairs = 4, wagons = 30},
   {id = 2, pairs = 2, wagons = 14, pushed = true},
   {id = 3, pairs = 2, wagons = 14, manual = true},
   {id = 4, pairs = 2, wagons = 14, skip = true, jam = true},
   {id = 5, pairs = 2, wagons = 14, manual = true, closed = true, jam = true},
+  {id = 6, pairs = 1, wagons = 20, approach = true},
 }
 
 local function start_chain(case)
@@ -191,10 +194,18 @@ local function start_chain(case)
     -- The next gate's departure lane, on its right, is the new northbound track.
     return lane - 3
   end
-  local surfaces = {lab("bte-test-chain-" .. case.id .. "-1", 200, 8)}
-  straight(surfaces[1], 3, 9, 401)
-  local first = gate(surfaces[1], 0, "right")
-  power(surfaces[1], 0)
+  local surfaces = {lab("bte-test-chain-" .. case.id .. "-1", case.approach and 0 or 200, 8)}
+  local first
+  if case.approach then
+    straight(surfaces[1], 3, -201, 7)
+    local x = loop(surfaces[1])
+    first = gate(surfaces[1], x, "right")
+    power(surfaces[1], x + 22)
+  else
+    straight(surfaces[1], 3, 9, 401)
+    first = gate(surfaces[1], 0, "right")
+    power(surfaces[1], 0)
+  end
   local departures, previous = {first}, first
   for k = 2, case.pairs + 1 do
     local s = lab("bte-test-chain-" .. case.id .. "-" .. k, 100, 6)
@@ -229,10 +240,13 @@ local function chain_train(chain)
   local loco
   for k = 0, case.wagons do
     local car = surfaces[1].create_entity({name = k == loco_at and "locomotive" or "cargo-wagon",
-      position = {3, 90 + 7 * k}, direction = defines.direction.north, force = "player"})
+      position = case.approach and {3, -50 - 7 * k} or {3, 90 + 7 * k},
+      direction = case.approach and defines.direction.south or defines.direction.north, force = "player"})
     if k == loco_at then
       loco = car
     end
+    -- The last wagon, which goes in last.
+    chain.rest = car
   end
   loco.insert({name = "nuclear-fuel", count = 2})
   local schedule = loco.train.get_schedule()
@@ -277,8 +291,16 @@ local function check_chain()
     local whole = case.wagons + 1
     expect(name .. "it arrives whole through " .. case.pairs .. " gate pairs in a row", #cars, whole)
     expect(name .. "and coupled", cars[1] and #cars[1].train.carriages, whole)
-    expect(name .. "its head went on through the next gate while its tail still came out of the one before",
-      chain.both >= math.min(case.pairs, 3), true)
+    if case.approach then
+      expect(name .. "it goes in at speed (" .. chain.entry .. "), not after braking almost to a stop", chain.entry > 0.15, true)
+      -- A train of one locomotive and 20 wagons on nuclear fuel gains about 0.0008 a tick; the
+      -- locomotive alone, once out, several times that.
+      expect(name .. "it gains speed going in as the whole train would (" .. tostring(chain.gain) .. "), not as its locomotive alone",
+        (chain.gain or 1) < 0.0015, true)
+    else
+      expect(name .. "its head went on through the next gate while its tail still came out of the one before",
+        chain.both >= math.min(case.pairs, 3), true)
+    end
     if not case.manual then
       local stop = cars[1] and (cars[1].train.station or cars[1].train.path_end_stop)
       expect(name .. "and it drives on to its stop", stop and stop.backer_name, "bte-test-chain-far")
@@ -1280,6 +1302,7 @@ local steps = {
   {3100, function() check_chain() start_chain(CHAIN_CASES[3]) end},
   {3100, function() check_chain() start_chain(CHAIN_CASES[4]) end},
   {3100, function() check_chain() start_chain(CHAIN_CASES[5]) end},
+  {3100, function() check_chain() start_chain(CHAIN_CASES[6]) end},
   {3100, check_chain},
 
   -- Mining a half-filled site returns the kit and everything delivered, and builds nothing.
@@ -1313,7 +1336,8 @@ script.on_event(defines.events.on_tick, function()
     end
     if fast.mid then
       -- Each carriage's first position on the partner: its rear must still be behind the veil (the
-      -- ring's plane, y 3), or the rest of the train fell behind the part already out.
+      -- ring's plane, y 3, give or take a tick's travel, 0.5), or the rest of the train fell behind
+      -- the part already out.
       fast.seen = fast.seen or {}
       for _, car in pairs(fast.fb.find_entities_filtered({type = {"locomotive", "cargo-wagon"}})) do
         if not fast.seen[car.unit_number] then
@@ -1349,6 +1373,18 @@ script.on_event(defines.events.on_tick, function()
   if chain and chain.loco then
     local running = remote.call("bte-stargate-test", "rail_transfers")
     chain.both = math.max(chain.both or 0, running)
+    if running == 0 and chain.loco.valid and chain.loco.surface == chain.surfaces[1] then
+      chain.entry = math.abs(chain.loco.train.speed)
+    end
+    -- The most the part still going in gains in a tick, once its locomotive is out.
+    if chain.case.approach and running > 0 and not (chain.loco.valid and chain.loco.surface == chain.surfaces[1]) then
+      local rest = chain.rest.valid and chain.rest.surface == chain.surfaces[1] and chain.rest
+      local speed = rest and rest.train and math.abs(rest.train.speed)
+      if speed and chain.rest_speed then
+        chain.gain = math.max(chain.gain or 0, speed - chain.rest_speed)
+      end
+      chain.rest_speed = speed
+    end
     -- A train driven by hand: held at speed towards the first gate, as by a player, until it is taken.
     if chain.case.manual and running == 0 and chain.loco.valid and chain.loco.surface == chain.surfaces[1] then
       chain.loco.train.speed = 0.5

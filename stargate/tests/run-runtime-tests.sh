@@ -36,7 +36,7 @@ fi
 "$RUN" run 120 "$PACKAGE" > "$TEST_ROOT/smoke.log"
 printf 'STARGATE_TEST_PASS: fresh-save smoke test\n'
 
-"$RUN" run 41500 "$PACKAGE" "$ROOT_DIR/tests/mods/bte-stargate-runtime-test" | tee "$TEST_ROOT/run.log"
+"$RUN" run 44700 "$PACKAGE" "$ROOT_DIR/tests/mods/bte-stargate-runtime-test" | tee "$TEST_ROOT/run.log"
 
 if ! grep -q 'STARGATE_TEST_PASS: filters, exact slots, completion, staged build, replacement, grid snapping, gate pairing, power, circuit, transfer, vehicle and enemy transfer, train transfer, and mining paths completed' "$TEST_ROOT/run.log"; then
   printf 'Stargate runtime test did not emit its pass marker\n' >&2
