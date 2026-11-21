@@ -125,7 +125,7 @@ def check_buildings(t):
         if barrier:
             t.check(f"{name} is on the barrier layer only", barrier.get("collision_mask", {}).get("layers"), {"bte-stargate-barrier": True})
     for kind, name, expected in (("character", "character", True), ("spider-leg", "spidertron-leg-1", True),
-                                 ("car", "car", True), ("car", "tank", True)):
+                                 ("car", "car", True), ("car", "tank", True), ("unit", "small-biter", True)):
         entity = t.prototype(kind, name)
         if entity:
             t.check(f"{name} collides with the gate's barriers: {expected}",

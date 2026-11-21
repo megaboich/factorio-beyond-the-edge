@@ -22,7 +22,7 @@ data:extend({
     order = "z[bte]-a[stargate]-a[construction-kit]"
   },
   -- The open portal: what the finished gate (an assembling machine, prototypes/entities.lua) "crafts"
-  -- while it is enabled, so it draws its 1 GW and shows its veil. No ingredients, no results.
+  -- while it is open, so the engine applies its circuit condition and loops its hum. No ingredients, no results.
   {
     type = "recipe-category",
     name = "bte-stargate-portal"

@@ -84,6 +84,9 @@ local function held_trains()
 end
 
 local function center(record)
+  if record.center then
+    return record.center
+  end
   local position = record.entity.position
   return {x = position.x + CENTER, y = position.y + CENTER}
 end
@@ -143,24 +146,29 @@ local function build(record)
   local gate = record.entity
   local surface = gate.surface
   local c = center(record)
-  local rails = {}
-  for _, rail in pairs(record.rails or {}) do
-    if rail.valid then
+  local rails, seen_rails = {}, {}
+  local function remember_rail(rail)
+    if rail and rail.valid and not seen_rails[rail.unit_number] then
+      seen_rails[rail.unit_number] = true
       rails[#rails + 1] = rail
     end
+  end
+  for _, rail in pairs(record.rails or {}) do
+    remember_rail(rail)
   end
   for _, dx in pairs(lanes(record.railway)) do
     for name, ys in pairs({[RAIL] = RAIL_Y, [HIDDEN] = HIDDEN_Y}) do
       for _, dy in pairs(ys) do
         local position = {c.x + dx, c.y + dy}
-        if not surface.find_entity(name, position) then
-          local rail = surface.create_entity({name = name, position = position, direction = NORTH,
+        local rail = surface.find_entity(name, position)
+        if not rail then
+          rail = surface.create_entity({name = name, position = position, direction = NORTH,
             force = gate.force, create_build_effect_smoke = false})
           if rail then
             rail.destructible = false
-            rails[#rails + 1] = rail
           end
         end
+        remember_rail(rail)
       end
     end
   end
@@ -168,6 +176,8 @@ local function build(record)
   -- A departure-lane piece inside the entry signal (the edge piece is cut by it): its block, the
   -- gate's lane, tells whether a train is in.
   record.edge_rail = surface.find_entity(RAIL, {c.x + spec.depart, c.y + RAIL_Y[2]})
+  record.depart_edge_y = c.y + EDGE + REACH
+  record.depart_filter = {type = ROLLING_STOCK, area = lane_area(record, spec.depart, RAIL_END - 0.5, EDGE + REACH)}
   local at = {x = c.x + spec.depart + STATION_DX, y = c.y + STATION_Y}
   local station = record.station
   if station and station.valid and (station.position.x ~= at.x or station.position.y ~= at.y) then
@@ -182,27 +192,30 @@ local function build(record)
       record.station = station
     end
   end
-  local signals = {}
-  for _, old in pairs(record.signals or {}) do
-    if old.valid then
-      signals[#signals + 1] = old
+  local signals, seen_signals = {}, {}
+  local function remember_signal(sig)
+    if sig and sig.valid and not seen_signals[sig.unit_number] then
+      seen_signals[sig.unit_number] = true
+      signals[#signals + 1] = sig
     end
+  end
+  for _, old in pairs(record.signals or {}) do
+    remember_signal(old)
   end
   local function signal(name, dx, direction)
     local position = {c.x + dx, c.y + EDGE - 0.5}
     local found = surface.find_entity(name, position)
-    if found then
-      return found
+    if not found then
+      found = surface.create_entity({name = name, position = position, direction = direction,
+        force = gate.force, create_build_effect_smoke = false})
+      if found then
+        found.destructible = false
+      end
     end
-    local created = surface.create_entity({name = name, position = position, direction = direction,
-      force = gate.force, create_build_effect_smoke = false})
-    if created then
-      created.destructible = false
-      signals[#signals + 1] = created
-    end
-    return created
+    remember_signal(found)
+    return found
   end
-  signal(EXIT_SIGNAL, spec.arrive - SIGNAL_DX, NORTH)
+  record.exit_signal = signal(EXIT_SIGNAL, spec.arrive - SIGNAL_DX, NORTH)
   local entry = signal(ENTRY_SIGNAL, spec.depart + SIGNAL_DX, defines.direction.south)
   record.signals = signals
   -- The entry signal's switch, closed until Railway.check finds the gate ready.
@@ -228,12 +241,17 @@ end
 -- Whether the block out of `target`'s arrival lane is free and not reserved, as its exit signal
 -- shows. A gate without the signal (it could not be placed) is not held back.
 local function exit_clear(target)
-  for _, signal in pairs(target.signals or {}) do
-    if signal.valid and signal.name == EXIT_SIGNAL then
-      return signal.signal_state == defines.signal_state.open
+  local signal = target.exit_signal
+  if signal == nil and target.signals then
+    for _, candidate in pairs(target.signals) do
+      if candidate.valid and candidate.name == EXIT_SIGNAL then
+        signal = candidate
+        target.exit_signal = signal
+        break
+      end
     end
   end
-  return true
+  return not (signal and signal.valid) or signal.signal_state == defines.signal_state.open
 end
 
 -- Switches station mode: nil (off) or one of Railway.MODES. Refused, returning false and a reason,
@@ -267,14 +285,23 @@ function Railway.gate_of(station)
   end
 end
 
--- Keeps the station's name the gate's.
-function Railway.sync_name(record)
-  if record.station and record.station.valid and record.station.backer_name ~= record.name then
-    record.station.backer_name = record.name
+-- Periodic upkeep (every 30 ticks): upgrades layouts from older saves (reinstalling the same
+-- version raises no configuration change) and drops obsolete map labels.
+function Railway.maintain()
+  for _, record in pairs(storage.gates) do
+    if record.railway and record.rail_layout ~= LAYOUT and record.entity.valid then
+      build(record)
+    end
+    if record.map_label then
+      if record.map_label.valid then
+        record.map_label.destroy()
+      end
+      record.map_label = nil
+    end
   end
 end
 
--- After a configuration change: rebuilds what is missing, and drops transfers that lost a gate.
+-- After a configuration change: rebuilds what is missing, and cleans up migrated fields.
 function Railway.rebuild()
   Railway.init_storage()
   for _, record in pairs(storage.gates) do
@@ -282,6 +309,7 @@ function Railway.rebuild()
       build(record)
     end
   end
+  Railway.maintain()
 end
 
 -- Which way a positive speed moves `train` along a north-south track: 1 south, -1 north. Positive
@@ -382,9 +410,15 @@ local function leading(train, record)
 end
 
 -- The distance between the centres of two coupled carriages, from their prototypes (7 for vanilla).
+local half_lengths = {}
 local function half_length(name)
-  local prototype = prototypes.entity[name]
-  return ((prototype.joint_distance or 4) + (prototype.connection_distance or 3)) / 2
+  local cached = half_lengths[name]
+  if not cached then
+    local prototype = prototypes.entity[name]
+    cached = ((prototype.joint_distance or 4) + (prototype.connection_distance or 3)) / 2
+    half_lengths[name] = cached
+  end
+  return cached
 end
 
 -- Where the next carriage of kind `name` appears: on the partner's arrival lane, its front at the
@@ -592,74 +626,79 @@ local function hand_over(train, record, linked, open)
   return ok and linked and "take" or "jam", transfer
 end
 
--- Sends any train that has reached the ring of an open station gate whose partner is a station too.
+-- Sends any train that has reached the edge of an open station gate whose partner is a station too.
 function Railway.check()
   if next(held_trains()) then
     release_held()
   end
   for _, record in pairs(storage.gates) do
-    if record.railway and record.rail_layout ~= LAYOUT and record.entity.valid then
-      build(record)
-    end
-    -- A map label the gate drew for a while, while the game's own station label went unnoticed:
-    -- removed here, as a reinstall raises no configuration change.
-    if record.map_label then
-      if record.map_label.valid then
-        record.map_label.destroy()
-      end
-      record.map_label = nil
-    end
     local spec = layout(record)
-    local target = spec and record.entity.valid and Gate.partner(record)
-    -- The partner can take a train: a station with no other train arriving there.
-    local linked = (target and layout(target) and not receiving(target)) == true
-    -- The entry signal is green only while a train could go through now, so automatic trains wait in
-    -- front of it, still heading for the gate's station, and none looks for a path beyond the gate.
-    -- Room behind the partner's veil is not checked: an entity search per gate every check was three
-    -- quarters of this sync's cost (measured), and a free exit with no transfer running nearly always
-    -- means room.
-    local ready = linked and Gate.is_open(record) and exit_clear(target)
-    local control = spec and record.entry_control
-    if control and control.valid and record.entry_open ~= ready then
-      control.get_control_behavior().enabled = not ready
-      record.entry_open = ready
-    end
-    local rail = record.edge_rail
-    if spec and rail and rail.valid and rail.trains_in_block > 0 then
-      local c, open = center(record), Gate.is_open(record)
-      for _, car in pairs(record.entity.surface.find_entities_filtered({type = ROLLING_STOCK,
-          area = lane_area(record, spec.depart, RAIL_END - 0.5, EDGE + REACH)})) do
-        local train = car.train
-        local over, chain
-        if train and car.bounding_box.left_top.y <= c.y + EDGE + REACH and not in_transfer(train) then
-          over, chain = hand_over(train, record, linked, open)
+    if spec and record.entity.valid then
+      -- The entry signal is green only while a train could go through now, so automatic trains wait in
+      -- front of it, still heading for the gate's station, and none looks for a path beyond the gate.
+      -- Room behind the partner's veil is not checked: an entity search per gate every check was three
+      -- quarters of this sync's cost (measured), and a free exit with no transfer running nearly always
+      -- means room. Closed gates skip the partner lookup entirely unless a train is in the block.
+      local ready = false
+      if record.open then
+        local target = Gate.partner(record)
+        if target and layout(target) and not receiving(target) then
+          ready = exit_clear(target)
         end
-        local automatic = train and (not train.manual_mode or held_trains()[train.id])
-        if over == "take" then
-          start(record, target, train, car, chain)
-          break
-        elseif over == "jam" then
-          -- The transfer behind counts as blocked (blocked()) and wrecks what is still coming out.
-          chain.jammed = true
-        -- On a single track, arrivals come out on this lane: the part still coming out is never
-        -- taken, nor an automatic train that stopped there on its way elsewhere, nor for
-        -- GUARD_TICKS one driven by hand that came out here. An automatic train heading back in goes
-        -- at once; a time guard on every arrival kept one standing there with no path (seen in game).
-        elseif train and car.bounding_box.left_top.y <= c.y + EDGE + REACH and not in_transfer(train)
-          and not arrival(train) and train.speed * in_sign(train, record) >= -0.01
-          and (automatic and (held_trains()[train.id] or bound_for(train, record))
-            or not automatic and not guarded(car, record)) then
-          -- An automatic train is here only because the signal let it in, or it had reserved its way
-          -- through before the signal closed and, as at any vanilla signal, kept going: it goes,
-          -- whatever has changed since. A train driven by hand goes while the gate is open, as if
-          -- it ran a red signal; carriages that cannot come out are wrecked.
-          if linked and (automatic or open) then
-            start(record, target, train, car)
+      end
+      if record.entry_open ~= ready then
+        local control = record.entry_control
+        if control and control.valid then
+          control.get_control_behavior().enabled = not ready
+          record.entry_open = ready
+        end
+      end
+      local rail = record.edge_rail
+      if rail and rail.valid and rail.trains_in_block > 0 then
+        local target = Gate.partner(record)
+        local linked = (target and layout(target) and not receiving(target)) == true
+        local edge_y = record.depart_edge_y
+        local filter = record.depart_filter
+        if not filter then
+          edge_y = center(record).y + EDGE + REACH
+          filter = {type = ROLLING_STOCK, area = lane_area(record, spec.depart, RAIL_END - 0.5, EDGE + REACH)}
+          record.depart_filter, record.depart_edge_y = filter, edge_y
+        end
+        local open = linked and record.open == true or Gate.is_open(record)
+        local surface = record.surface or record.entity.surface
+        for _, car in pairs(surface.find_entities_filtered(filter)) do
+          local train = car.train
+          local over, chain
+          if train and car.bounding_box.left_top.y <= edge_y and not in_transfer(train) then
+            over, chain = hand_over(train, record, linked, open)
+          end
+          local automatic = train and (not train.manual_mode or held_trains()[train.id])
+          if over == "take" then
+            start(record, target, train, car, chain)
             break
-          elseif automatic then
-            -- The partner cannot take a train: stopped here, or it would drive on into the ring
-            -- towards the station behind it.
-            hold(train, record)
+          elseif over == "jam" then
+            -- The transfer behind counts as blocked (blocked()) and wrecks what is still coming out.
+            chain.jammed = true
+          -- On a single track, arrivals come out on this lane: the part still coming out is never
+          -- taken, nor an automatic train that stopped there on its way elsewhere, nor for
+          -- GUARD_TICKS one driven by hand that came out here. An automatic train heading back in goes
+          -- at once; a time guard on every arrival kept one standing there with no path (seen in game).
+          elseif train and car.bounding_box.left_top.y <= edge_y and not in_transfer(train)
+            and not arrival(train) and train.speed * in_sign(train, record) >= -0.01
+            and (automatic and (held_trains()[train.id] or bound_for(train, record))
+              or not automatic and not guarded(car, record)) then
+            -- An automatic train is here only because the signal let it in, or it had reserved its way
+            -- through before the signal closed and, as at any vanilla signal, kept going: it goes,
+            -- whatever has changed since. A train driven by hand goes while the gate is open, as if
+            -- it ran a red signal; carriages that cannot come out are wrecked.
+            if linked and (automatic or open) then
+              start(record, target, train, car)
+              break
+            elseif automatic then
+              -- The partner cannot take a train: stopped here, or it would drive on into the ring
+              -- towards the station behind it.
+              hold(train, record)
+            end
           end
         end
       end

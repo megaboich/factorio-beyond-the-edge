@@ -34,7 +34,8 @@ local function status(record)
     end
     local partner = Gate.partner(record)
     if record.railway and not (partner and partner.railway) then
-      return {"bte-stargate-gui.status-open-no-trains"}, "utility/status_yellow"
+      return {partner and "bte-stargate-gui.status-open-no-trains" or "bte-stargate-gui.status-open-unpaired-station"},
+        "utility/status_yellow"
     end
     return {partner and "bte-stargate-gui.status-open" or "bte-stargate-gui.status-open-random"}, "utility/status_working"
   end
@@ -201,10 +202,13 @@ local function open(player, record, beside)
     }})
   modes.style.width = 220
 
-  local behavior = entity.get_or_create_control_behavior()
-  local condition = behavior.circuit_condition or {}
+  -- get_control_behavior avoids creating an empty control behaviour on every gate whose window is
+  -- opened, so unwired gates return nil immediately in Gate.circuit_allows.
+  local behavior = entity.get_control_behavior()
+  local condition = behavior and behavior.circuit_condition or {}
+  local circuit_enabled = behavior ~= nil and behavior.circuit_enable_disable
   inner.add({type = "line"}).style.top_margin = 8
-  inner.add({type = "checkbox", name = "bte_stargate_circuit", state = behavior.circuit_enable_disable,
+  inner.add({type = "checkbox", name = "bte_stargate_circuit", state = circuit_enabled,
     caption = {"bte-stargate-gui.circuit"}, tooltip = {"bte-stargate-gui.circuit-tooltip"}})
   local row = inner.add({type = "flow", name = "bte_stargate_condition", direction = "horizontal"})
   row.style.vertical_align = "center"
@@ -222,7 +226,7 @@ local function open(player, record, beside)
   local constant = row.add({type = "textfield", name = "bte_stargate_constant", text = tostring(condition.constant or 0),
     numeric = true, allow_negative = true})
   constant.style.width = 80
-  row.visible = behavior.circuit_enable_disable
+  row.visible = circuit_enabled
 
   fill_partners(partner, record)
   storage.open_gui[player.index] = entity.unit_number

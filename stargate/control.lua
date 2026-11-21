@@ -43,10 +43,6 @@ for _, event in pairs({
   end, BUILT)
 end
 
-script.on_event(defines.events.on_entity_cloned, function(event_data)
-  built(event_data.destination)
-end, BUILT)
-
 for _, event in pairs({defines.events.on_entity_died, defines.events.script_raised_destroy}) do
   script.on_event(event, function(event_data)
     Gate.removed(event_data.entity, Railway.gate_removed)
@@ -56,6 +52,7 @@ end
 script.on_nth_tick(UPDATE_TICKS, function()
   Construction.update()
   Gate.prune(Railway.gate_removed)
+  Railway.maintain()
   Gui.update()
 end)
 -- Gates fed in full run their steady draw without the script (scripts/power_bank.lua, direct mode);
@@ -116,6 +113,9 @@ if script.active_mods["bte-stargate-runtime-test"] then
     rail_guards = function()
       return table_size(storage.rail_guard or {})
     end,
+    active_gates = function()
+      return table_size(storage.active_gates or {})
+    end,
     set_station = function(id, mode)
       return Railway.set_mode(Gate.get(id), mode)
     end,
@@ -145,18 +145,13 @@ if script.active_mods["bte-stargate-runtime-test"] then
     end,
     -- Empties the store and returns what arrived from the network in the last update.
     take_charge = function(id)
-      local bank = Gate.get(id).bank
-      bank.charge = 0
-      return bank.received or 0
+      return Gate.take_charge(Gate.get(id))
     end,
     bank = function(id)
       return Gate.get(id).bank
     end,
     power_flow = function(id)
       return Gate.power_flow(Gate.get(id))
-    end,
-    request = function(id)
-      return Gate.request(Gate.get(id))
     end,
     random_location = function(force, surface)
       local position = Destinations.location(game.forces[force], game.get_surface(surface))

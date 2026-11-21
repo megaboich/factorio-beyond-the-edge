@@ -462,6 +462,8 @@ local steps = {
     expect("a car can stand behind the ring", surface().can_place_entity({name = "car", position = {1, -3}, force = "player"}), true)
     expect("a tank can stand in the lane through the ring", surface().can_place_entity({name = "tank", position = {1, 3}, force = "player"}), true)
     expect("a tank cannot stand in a tower", surface().can_place_entity({name = "tank", position = {6.5, 3}, force = "player"}), false)
+    expect("a biter can stand in the lane through the ring", surface().can_place_entity({name = "small-biter", position = {1, 3}, force = "enemy"}), true)
+    expect("a biter cannot stand in a tower", surface().can_place_entity({name = "small-biter", position = {6.5, 3}, force = "enemy"}), false)
     surface().create_entity({name = "substation", position = {-8, -6}, force = "player"})
     local source = surface().create_entity({name = "bte-stargate-test-power", position = {-10, -6}, force = "player"})
     source.power_production = 1e9
@@ -764,7 +766,9 @@ local steps = {
     local gsource = sg.create_entity({name = "bte-stargate-test-power", position = {0, -10}, force = "player"})
     gsource.power_production, gsource.electric_buffer_size = 1e9 / 60, 1e9 / 60
     local ga = sg.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
-    storage.direct = {gates = {a, b, ga}, source = source, gsource = gsource, load = load, fed = 0, n = 0}
+    local idle = s.create_entity({name = GATE, position = {24, 0}, force = "player", raise_built = true})
+    remote.call("bte-stargate-test", "set_enabled", idle.unit_number, false)
+    storage.direct = {gates = {a, b, ga}, idle = idle, source = source, gsource = gsource, load = load, fed = 0, n = 0}
   end},
   {600, function()
     local direct = storage.direct
@@ -777,6 +781,8 @@ local steps = {
       expect("the window shows the leak (" .. flow.leak .. ")", math.abs(flow.leak - 1.5e6) < 1e3, true)
       expect("the window shows no charging (" .. flow.charging .. ")", flow.charging < 1e3, true)
     end
+    expect("direct and empty switched-off gates leave the per-tick active set",
+      remote.call("bte-stargate-test", "active_gates"), 0)
     -- The factory and the gates' upkeep (about 66 MW with the test's figures) on 330 MW.
     direct.source.power_production, direct.source.electric_buffer_size = 330e6 / 60, 330e6 / 60
     direct.gsource.power_production, direct.gsource.electric_buffer_size = 10e6 / 60, 10e6 / 60
@@ -789,11 +795,13 @@ local steps = {
       expect("a direct gate short of power returns to the adaptive request", bank.direct, nil)
       expect("its shortfall comes out of the store", bank.charge < 0.3e9 * 0.999, true)
     end
+    expect("gates short of power rejoin the per-tick active set", remote.call("bte-stargate-test", "active_gates"), #direct.gates)
     local fed = direct.fed / direct.n
     expect("the factory keeps its power once the gates back off (" .. fed .. ")", fed > 0.98, true)
     for _, gate in pairs(direct.gates) do
       gate.destroy()
     end
+    direct.idle.destroy()
     storage.direct = nil
   end},
 

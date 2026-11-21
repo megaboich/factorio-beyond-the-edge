@@ -198,9 +198,9 @@ data:extend({
 -- the capacitor rack at the front right. The rest, the lanes through the ring and the floor in front
 -- of and behind it, is open.
 --
--- They sit on their own collision layer, which data-final-fixes.lua adds to every character and
--- spider leg, rather than on `player`: cars and tanks collide on `player` too, and must be free to
--- drive through.
+-- They sit on their own collision layer, which data-final-fixes.lua adds to ground characters,
+-- spidertron and pentapod legs, cars and tanks, and ground units (prototypes that collide on
+-- `player`), keeping a dedicated layer off player ghosts, buildings, and modded flying vehicles.
 local function barrier(name, half_width, half_depth)
   return {
     type = "simple-entity-with-owner",
@@ -315,7 +315,7 @@ data:extend({
 
 -- The portal forming and collapsing (models/stargate.js), played once by scripts/gate.lua as it opens
 -- and closes, each split at the ring's centre like the veil. Each frame lasts four ticks; the opening
--- holds its last frame two more, to cover the wait for the veil companions (Gate.update, 5 ticks).
+-- holds its last frame two more, to cover the wait for the veil companions (Gate.update, 3 ticks).
 local transitions = {}
 for _, spec in pairs({{"opening", 30, 2}, {"closing", 18, 0}}) do
   local name, frames, hold = spec[1], spec[2], spec[3]

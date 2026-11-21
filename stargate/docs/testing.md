@@ -18,9 +18,9 @@ The runner packages the mod, checks the ZIP excludes `tests/`, smoke-tests a fre
 
 **Gates and power**
 - that gates pair both ways, and unpair when the partner dies;
-- that they open only when paired, on, powered, and allowed by their circuit condition;
-- that an unpaired gate still opens, and that its landing spot is the uncharted chunk nearest the spawn (headless runs never chart, so `force.chart` does nothing there and the visited-planet choice is untested);
-- power sharing (`SHARE`: three gates beside a 300 MW load with 100 MW spare) and the steady-draw mode (both on poles and on a poleless global electric network), including the window's power figures.
+- that they open when on, powered, and allowed by their circuit condition (paired or unpaired);
+- that an unpaired gate's landing spot is the uncharted chunk nearest the spawn (headless runs never chart, so `force.chart` does nothing there and the visited-planet choice is untested);
+- power sharing (`SHARE`: three gates beside a 300 MW load with 100 MW spare) and the steady-draw mode (both on poles and on a poleless global electric network), including the window's power figures and that direct and empty switched-off gates leave `storage.active_gates` and rejoin it when power falls short.
 
 **Travel** ([transfer.md](transfer.md))
 - that a character in the portal is sent to the front of the partner, through the limbo surface, and runs out of the ring (with a bare character entity, since headless runs have no player; the spectator view is untested);

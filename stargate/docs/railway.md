@@ -15,7 +15,7 @@ The gate never rotates, so lanes are always north-south: trains enter heading no
 
 `Gate.remove_railway` removes the rails, the station, and the signals, and clears carriages off the rails. The mode cannot change while a carriage is on the gate's rails or a transfer runs either way.
 
-`record.rail_layout` marks the layout version (`LAYOUT`), and `Railway.check` upgrades older gates there rather than in `on_configuration_changed`, because a reinstall with the same mod version raises none: a gate built before the hidden rails left trains grinding against the old rail end in the ring.
+`record.rail_layout` marks the layout version (`LAYOUT`), and `Railway.maintain` (every 30 ticks) upgrades older gates there rather than in `on_configuration_changed`, because a reinstall with the same mod version raises none: a gate built before the hidden rails left trains grinding against the old rail end in the ring.
 
 ## Signals
 
@@ -24,7 +24,7 @@ The gate never rotates, so lanes are always north-south: trains enter heading no
 - The entry signal is switched by `bte-stargate-entry-control`, a hidden constant combinator on the same spot, wired to it with a script wire (`defines.wire_origin.script`): the signal closes while the combinator sends `signal-red` (`close_signal` with `signal-red > 0`). A signal ignores its circuit condition without a network, so the script cannot close it alone (measured).
 - Both are unselectable and sit on the `rail` collision layer alone: signals must collide with signals, and the player cannot build another on the same spot.
 
-`Railway.check` (every 3 ticks) works out for each station gate whether a train could go through now: the partner is a station not receiving a transfer (`linked`), the gate is open, and the partner's exit signal is `open` (its first block free and not reserved). It switches the entry signal only when that changes (`record.entry_open`). Room behind the partner's veil is not checked: an entity search per gate every check was three quarters of the sync's cost, and a free exit with no transfer running nearly always means room. Measured on a save with three station gates: about 2.4 µs per gate check (profilers included); the game draws the signal's state itself, so showing it costs nothing more.
+`Railway.check` (every 3 ticks — kept at 3 so a max-speed train crossing `EDGE = 7` at 1.38 tiles/tick is always caught before `RING_PLANE = 2`) works out for each open station gate whether a train could go through now: the partner is a station not receiving a transfer (`linked`), the gate is open, and the partner's cached `exit_signal` is `open` (its first block free and not reserved). Closed gates skip the partner lookup unless a train is in their block. It switches the entry signal only when `record.entry_open` changes. Room behind the partner's veil is not checked: an entity search per gate every check was three quarters of the sync's cost, and a free exit with no transfer running nearly always means room. Measured across 60 station gates (30 open direct-mode pairs + 30 switched-off): 1.2 µs per gate check (profilers included); the game draws the signal's state itself, so showing it costs nothing more.
 
 ## Taking a train
 

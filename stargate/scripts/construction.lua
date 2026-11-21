@@ -22,8 +22,10 @@ local BAR_OFFSET = 5.2
 -- Ticks before a gate that could not be finished tries again (see finish).
 local RETRY_TICKS = 600
 
+local plan_data
 local function plan()
-  return prototypes.mod_data[PLAN].data
+  plan_data = plan_data or prototypes.mod_data[PLAN].data
+  return plan_data
 end
 
 function Construction.init_storage()
