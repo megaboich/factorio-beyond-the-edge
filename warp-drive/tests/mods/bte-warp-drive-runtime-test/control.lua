@@ -1201,6 +1201,9 @@ script.on_nth_tick(10, function()
     if input - (storage.runtime_test.inactive_power_input or input) > 1 then
       fail("the drive consumed electrical energy during its re-entry lockout")
     end
+    if sound_state(platform).active then
+      fail("an inactive drive in lockout remained in storage.active_drives")
+    end
     if remote.call("bte-warp-drive-runtime-test", "engage", platform.index) then
       fail("Engage was accepted during the re-entry lockout")
     end

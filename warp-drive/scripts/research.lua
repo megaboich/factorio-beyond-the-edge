@@ -23,11 +23,20 @@ local SCIENCE_BOOST_SIGNAL_DIVISOR = 10000
 local RESEARCH_UPDATE_TICKS = 60
 local TICKS_PER_SECOND = 60
 local SPACELAB_INTEGRATION_ENABLED = false -- Temporary standalone testing switch.
+local WORKING = defines.entity_status.working
+-- Transient per-VM caches of static laboratory prototype speeds by unit_number and surfaces known
+-- to have zero laboratories; cleared on reload and configuration changes.
+local lab_base_speeds = {}
+local empty_lab_surfaces = {}
+local LAB_COUNT_FILTER = {type = "lab", limit = 1}
+local LAB_FIND_FILTER = {type = "lab"}
 
 function Research.reset_caches()
   storage.research_branch = nil
   storage.research_branches = nil
   storage.travel_map = nil
+  lab_base_speeds = {}
+  empty_lab_surfaces = {}
 end
 
 local function platform_speed_km_per_second(platform)
@@ -135,16 +144,18 @@ local function travel_maps()
   return maps
 end
 
-local function travel_map(platform)
-  local name = platform.space_location and platform.space_location.name
+local EMPTY_MAP = {remaining = {}, farthest = 0, unit = 1, final_length = 0, edge_depth = 0}
+
+local function travel_map(platform, location)
+  location = location or platform.space_location
+  local name = location and location.name
     or (platform.space_connection and platform.space_connection.from.name)
-  return travel_maps().by_location[name]
-    or {remaining = {}, farthest = 0, unit = 1, final_length = 0, edge_depth = 0}
+  return travel_maps().by_location[name] or EMPTY_MAP
 end
 
-local function travel_depth(platform)
-  local map = travel_map(platform)
-  local location = platform.space_location
+local function travel_depth(platform, map, location)
+  location = location ~= nil and location or platform.space_location
+  map = map or travel_map(platform, location)
   if location then
     local remaining = map.remaining[location.name]
     return remaining and math.max(0, map.farthest - remaining) or nil
@@ -178,8 +189,9 @@ function Research.tachyon_density(platform)
   if not platform then
     return 0
   end
-  local map = travel_map(platform)
-  local depth = travel_depth(platform)
+  local location = platform.space_location or false
+  local map = travel_map(platform, location or nil)
+  local depth = travel_depth(platform, map, location)
   if not depth or map.farthest <= 0 then
     return MINIMUM_DENSITY
   end
@@ -205,7 +217,7 @@ local function spacelab_multiplier(surface)
   end
   local working = 0
   for _, entity in pairs(surface.find_entities_filtered({name = "bte-growth-facility"})) do
-    if entity.status == defines.entity_status.working then
+    if entity.status == WORKING then
       working = working + 1
     end
   end
@@ -213,11 +225,37 @@ local function spacelab_multiplier(surface)
 end
 
 local function working_lab_metrics(surface, force)
+  local surface_index = surface.index
+  if empty_lab_surfaces[surface_index] then
+    LAB_COUNT_FILTER.force = force
+    local any = surface.count_entities_filtered(LAB_COUNT_FILTER) > 0
+    LAB_COUNT_FILTER.force = nil
+    if not any then
+      return 0, 0
+    end
+    empty_lab_surfaces[surface_index] = nil
+  end
+  LAB_FIND_FILTER.force = force
+  local labs = surface.find_entities_filtered(LAB_FIND_FILTER)
+  LAB_FIND_FILTER.force = nil
+  local n = #labs
+  if n == 0 then
+    empty_lab_surfaces[surface_index] = true
+    return 0, 0
+  end
   local count = 0
   local total_rate = 0
-  for _, lab in pairs(surface.find_entities_filtered({type = "lab", force = force})) do
-    if lab.status == defines.entity_status.working then
-      local base_speed = lab.prototype.get_researching_speed(lab.quality.name) or 0
+  for index = 1, n do
+    local lab = labs[index]
+    if lab.status == WORKING then
+      local id = lab.unit_number
+      local base_speed = id and lab_base_speeds[id]
+      if not base_speed then
+        base_speed = lab.prototype.get_researching_speed(lab.quality.name) or 0
+        if id then
+          lab_base_speeds[id] = base_speed
+        end
+      end
       count = count + 1
       total_rate = total_rate + base_speed * (1 + lab.speed_bonus) * (1 + lab.productivity_bonus)
     end
@@ -238,13 +276,16 @@ local function planetary_lab_metrics(force)
   return count, total_rate
 end
 
-local function force_lab_metrics(force)
+local function platform_lab_metrics(force)
   local count = 0
   local total_rate = 0
-  for _, surface in pairs(game.surfaces) do
-    local surface_count, surface_rate = working_lab_metrics(surface, force)
-    count = count + surface_count
-    total_rate = total_rate + surface_rate
+  for _, platform in pairs(force.platforms) do
+    local surface = platform.surface
+    if surface and surface.valid then
+      local surface_count, surface_rate = working_lab_metrics(surface, force)
+      count = count + surface_count
+      total_rate = total_rate + surface_rate
+    end
   end
   return count, total_rate
 end
@@ -257,11 +298,10 @@ function Research.branch(surface, force)
   if not surface or not surface.valid or not surface.platform then
     return nil
   end
-  local filter = {type = "lab", limit = 1}
-  if force then
-    filter.force = force
-  end
-  if surface.count_entities_filtered(filter) > 0 then
+  LAB_COUNT_FILTER.force = force
+  local has_lab = surface.count_entities_filtered(LAB_COUNT_FILTER) > 0
+  LAB_COUNT_FILTER.force = nil
+  if has_lab then
     return "local"
   end
   return "relay"
@@ -318,7 +358,7 @@ end
 -- mode, each drive checks whether laboratories exist on its platform: if so ("local"), 100% of its
 -- signal applies exclusively to working laboratories on that platform; if not ("relay"), 10% (10x
 -- remote-transfer loss) applies to working planetary laboratories.
-local function aggregate_bonus_rates(target_force, target_research)
+local function aggregate_bonus_rates(target_force, target_research, cached_planetary_rate)
   local buckets = {}
   for _, record in pairs(storage.drives or {}) do
     local entity = record.entity
@@ -362,7 +402,10 @@ local function aggregate_bonus_rates(target_force, target_research)
       work = work + platform_rate * signal
     end
     if bucket.relay_signal > 0 then
-      local _, planetary_rate = planetary_lab_metrics(bucket.force)
+      local planetary_rate = cached_planetary_rate
+      if planetary_rate == nil then
+        _, planetary_rate = planetary_lab_metrics(bucket.force)
+      end
       work = work + planetary_rate * bucket.relay_signal
     end
     bucket.rate = work / research_seconds(bucket.research)
@@ -383,8 +426,10 @@ function Research.snapshot(record)
   local power_ratio = record.detector_power_ratio or 0
   local effective_signal, bonus_multiplier = detector_signal(record, power_ratio, branch)
   local lab_count, lab_rate
+  local planetary_rate
   if branch == "relay" then
     lab_count, lab_rate = planetary_lab_metrics(force)
+    planetary_rate = lab_rate
   else
     lab_count, lab_rate = working_lab_metrics(entity.surface, force)
   end
@@ -397,8 +442,12 @@ function Research.snapshot(record)
   local force_bonus_rate = 0
   local total_rate = 0
   if research ~= nil and (complete or researching_practical) then
-    _, ordinary_lab_rate = force_lab_metrics(force)
-    local bucket = aggregate_bonus_rates(force, research)[force.index]
+    if planetary_rate == nil then
+      _, planetary_rate = planetary_lab_metrics(force)
+    end
+    local _, plat_rate = platform_lab_metrics(force)
+    ordinary_lab_rate = planetary_rate + plat_rate
+    local bucket = aggregate_bonus_rates(force, research, planetary_rate)[force.index]
     force_bonus_rate = bucket and bucket.rate or 0
     total_rate = seconds > 0 and (ordinary_lab_rate / seconds + force_bonus_rate) or 0
   end
@@ -419,8 +468,9 @@ function Research.snapshot(record)
       end
     end
   end
-  local map = travel_map(platform)
-  local progress_km = travel_depth(platform) or 0
+  local location = platform.space_location or false
+  local map = travel_map(platform, location or nil)
+  local progress_km = travel_depth(platform, map, location) or 0
   local deepest_name = map.deepest_name
   local final_length = map.final_length or 0
   local edge_depth = map.edge_depth or 0

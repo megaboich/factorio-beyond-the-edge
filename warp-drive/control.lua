@@ -22,12 +22,7 @@ if script.active_mods["bte-warp-drive-runtime-test"] then
       if not record then
         return nil
       end
-      record.bank = record.bank or {charge = record.reserve_energy or 0}
-      record.reserve_energy = nil
-      if value ~= nil then
-        record.bank.charge = value
-      end
-      return record.bank.charge or 0
+      return Warp.set_test_reserve(record, value)
     end,
     engage = function(platform_index)
       local record = Drive.get(platform_index)
@@ -61,7 +56,9 @@ if script.active_mods["bte-warp-drive-runtime-test"] then
         background_index = record.warp_background_sound_index,
         shockwaves_sent = record.shockwaves_sent,
         shockwaves = record.shockwaves and #record.shockwaves or 0,
-        anomalies = record.anomalies and #record.anomalies or 0
+        anomalies = record.anomalies and #record.anomalies or 0,
+        active = Drive.active_records()[platform_index] ~= nil,
+        direct = record.bank and record.bank.direct or nil
       }
     end,
     inject_legacy_travel_map = function()
@@ -129,25 +126,30 @@ end
 
 script.on_nth_tick(UPDATE_TICKS, function()
   for platform_index, record in pairs(Drive.records()) do
-    if not Warp.update(record) then
+    local ok, platform = Warp.update(record)
+    if not ok then
       Drive.remove(platform_index, record)
-    else
-      local platform = record.entity.surface.platform
-      if platform then
-        Drive.update_output_signals(record, platform, Research.tachyon_density(platform))
-      end
+    elseif platform then
+      Drive.update_output_signals(record, platform, Research.tachyon_density)
     end
   end
   Gui.refresh_open_windows(true)
 end)
 
 script.on_event(defines.events.on_tick, function()
-  for _, record in pairs(Drive.records()) do
-    Warp.tick(record)
+  local active = Drive.active_records()
+  if not next(active) then
+    return
+  end
+  for platform_index, record in pairs(active) do
+    if not Warp.tick(record) then
+      active[platform_index] = nil
+    end
   end
 end)
 
 script.on_nth_tick(RESEARCH_UPDATE_TICKS, function()
+  Warp.check_power()
   Research.update()
   Gui.refresh_open_windows()
 end)

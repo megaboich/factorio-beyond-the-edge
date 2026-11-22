@@ -147,6 +147,11 @@ if script.active_mods["bte-stargate-runtime-test"] then
     take_charge = function(id)
       return Gate.take_charge(Gate.get(id))
     end,
+    set_charge = function(id, joules)
+      local store = Gate.get(id).bank
+      store.charge = joules
+      store.decay_from = nil
+    end,
     bank = function(id)
       return Gate.get(id).bank
     end,

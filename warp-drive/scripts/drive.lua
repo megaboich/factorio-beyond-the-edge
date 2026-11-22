@@ -59,6 +59,7 @@ local COMPANION_FIELDS = {
   [ANIMATION_NAME] = "animation",
   [FIELD_HUM_NAME] = "field_hum"
 }
+local SECONDARY_INPUT = defines.electric_interface_mode.secondary_input
 
 function Drive.init_storage()
   storage.drives = storage.drives or {}
@@ -67,6 +68,32 @@ end
 function Drive.records()
   Drive.init_storage()
   return storage.drives
+end
+
+-- Drives needing per-tick work (charging/probing bank, shockwaves, anomalies, or active warp).
+-- Built lazily so saves reloaded without a version bump migrate on their first tick.
+function Drive.active_records()
+  local active = storage.active_drives
+  if not active then
+    active = {}
+    for index, record in pairs(Drive.records()) do
+      active[index] = record
+    end
+    storage.active_drives = active
+  end
+  return active
+end
+
+function Drive.wake(record)
+  if record and record.platform_index then
+    Drive.active_records()[record.platform_index] = record
+  end
+end
+
+function Drive.sleep(record)
+  if record and record.platform_index and storage.active_drives then
+    storage.active_drives[record.platform_index] = nil
+  end
 end
 
 function Drive.get(platform_index)
@@ -128,7 +155,13 @@ end
 
 function Drive.normalize_record(record, entity, platform)
   record.entity = entity
+  record.surface = entity.surface
+  record.platform = platform
   record.platform_index = platform.index
+  record.wired_output = nil
+  record.output_section = nil
+  record.last_signals = nil
+  record.name_tagged = nil
   if record.activate == nil then
     migrate_legacy_engagement(record)
   end
@@ -157,10 +190,13 @@ function Drive.normalize_record(record, entity, platform)
 end
 
 function Drive.destroy_support(record)
-  if record and record.support and record.support.valid then
-    record.support.destroy()
+  if not record then
+    return
   end
-  if record then
+  if record.support then
+    if record.support.valid then
+      record.support.destroy()
+    end
     record.support = nil
     record.support_sample_watts = nil
     record.support_sample_demand_watts = nil
@@ -205,6 +241,9 @@ local function destroy_circuit_output(record)
   end
   if record then
     record.circuit_output = nil
+    record.wired_output = nil
+    record.output_section = nil
+    record.last_signals = nil
   end
 end
 
@@ -299,13 +338,17 @@ local function recover_orphan_companions(record)
 end
 
 local function create_companion(record, field, name, direction)
+  local existing = record[field]
+  if existing and existing.valid then
+    return existing, false
+  end
   local companion = find_companion(record, field, name)
   if companion then
-    return companion
+    return companion, true
   end
   local entity = record.entity
   if not entity or not entity.valid then
-    return nil
+    return nil, false
   end
   -- Keep companions exactly on the controller rather than letting the engine snap them to the grid.
   record[field] = entity.surface.create_entity({
@@ -316,36 +359,53 @@ local function create_companion(record, field, name, direction)
     snap_to_grid = false,
     create_build_effect_smoke = false
   })
-  return record[field]
+  return record[field], true
 end
 
 function Drive.ensure_support(record)
-  return create_companion(record, "support", SUPPORT_NAME)
+  local companion = create_companion(record, "support", SUPPORT_NAME)
+  return companion
 end
 
 function Drive.ensure_detector(record)
-  return create_companion(record, "detector", DETECTOR_NAME)
+  local companion = create_companion(record, "detector", DETECTOR_NAME)
+  return companion
 end
 
 function Drive.ensure_power(record)
-  local power = create_companion(record, "power", POWER_NAME)
-  if power and power.electric_interface_mode ~= defines.electric_interface_mode.secondary_input then
-    -- Tertiary EEIs are counted as accumulator storage. Secondary input gives this draw-only
-    -- interface ordinary machine semantics without exposing its one-tick buffer as storage.
-    power.electric_interface_mode = defines.electric_interface_mode.secondary_input
+  local power, created = create_companion(record, "power", POWER_NAME)
+  if created and power then
+    record.power_idled = nil
+    record.power_disabled = nil
+    record.power_network_id = nil
+    record.power_input_count = nil
+    if record.bank then
+      record.bank.applied = nil
+    end
+    if power.electric_interface_mode ~= SECONDARY_INPUT then
+      -- Tertiary EEIs are counted as accumulator storage. Secondary input gives this draw-only
+      -- interface ordinary machine semantics without exposing its one-tick buffer as storage.
+      power.electric_interface_mode = SECONDARY_INPUT
+    end
   end
   return power
 end
 
 --- The positional warp-field hum: a companion that exists only while warp holds.
 function Drive.ensure_field_hum(record)
-  return create_companion(record, "field_hum", FIELD_HUM_NAME)
+  local companion = create_companion(record, "field_hum", FIELD_HUM_NAME)
+  return companion
 end
 
 function Drive.ensure_animation(record)
+  local existing = record.animation
+  if existing and existing.valid then
+    return existing
+  end
   local entity = record and record.entity
-  return create_companion(record, "animation", ANIMATION_NAME,
+  local companion = create_companion(record, "animation", ANIMATION_NAME,
     entity and entity.valid and entity.direction or nil)
+  return companion
 end
 
 local function connect_circuit_wire(source, target, wire_id)
@@ -359,11 +419,16 @@ local function connect_circuit_wire(source, target, wire_id)
 end
 
 function Drive.ensure_circuit_output(record)
-  local output = create_companion(record, "circuit_output", CIRCUIT_OUTPUT_NAME)
-  local entity = record and record.entity
-  if output and entity and entity.valid then
-    connect_circuit_wire(entity, output, defines.wire_connector_id.circuit_red)
-    connect_circuit_wire(entity, output, defines.wire_connector_id.circuit_green)
+  local output, created = create_companion(record, "circuit_output", CIRCUIT_OUTPUT_NAME)
+  if output and (created or record.wired_output ~= output) then
+    local entity = record and record.entity
+    if entity and entity.valid then
+      connect_circuit_wire(entity, output, defines.wire_connector_id.circuit_red)
+      connect_circuit_wire(entity, output, defines.wire_connector_id.circuit_green)
+      record.wired_output = output
+      record.output_section = nil
+      record.last_signals = nil
+    end
   end
   return output
 end
@@ -467,6 +532,7 @@ function Drive.register(entity, tags)
   Drive.ensure_animation(record)
   Drive.ensure_circuit_output(record)
   Drive.apply_settings(record, tags)
+  Drive.wake(record)
   return record
 end
 
@@ -481,11 +547,18 @@ end
 local NAME_TAG_PATTERN = " %[color=cyan%]WARP%-[%d%.]+%[/color%]$"
 
 --- Tags `platform`'s name with warp `level`, or removes the tag when `level` is nil.
-function Drive.set_name_tag(platform, level)
-  local base = (string.gsub(platform.name, NAME_TAG_PATTERN, ""))
+function Drive.set_name_tag(platform, level, record)
+  if record and not level and not record.name_tagged then
+    return
+  end
+  local current = platform.name
+  local base = (string.gsub(current, NAME_TAG_PATTERN, ""))
   local name = level and base .. string.format(" [color=cyan]WARP-%.1f[/color]", level) or base
-  if platform.name ~= name then
+  if current ~= name then
     platform.name = name
+  end
+  if record then
+    record.name_tagged = level ~= nil or nil
   end
 end
 
@@ -511,6 +584,9 @@ function Drive.remove(platform_index, record)
     Anomalies.destroy(current)
     Shockwaves.destroy(current)
     drives[platform_index] = nil
+    if storage.active_drives then
+      storage.active_drives[platform_index] = nil
+    end
   end
 end
 
@@ -530,7 +606,9 @@ function Drive.rebuild()
   Drive.init_storage()
   local old_drives = storage.drives
   local rebuilt = {}
+  local active = {}
   storage.drives = rebuilt
+  storage.active_drives = active
   for _, force in pairs(game.forces) do
     for _, platform in pairs(force.platforms) do
       local entities = platform.surface.find_entities_filtered({name = DRIVE_NAME})
@@ -540,6 +618,7 @@ function Drive.rebuild()
       else
         local record = Drive.normalize_record(old_drives[platform.index] or {}, entities[1], platform)
         rebuilt[platform.index] = record
+        active[platform.index] = record
         -- Overlay animations may have changed with the mod version; redraw them on the next update.
         Visuals.reset(record)
         recover_orphan_companions(record)
@@ -560,74 +639,109 @@ function Drive.rebuild()
   end
 end
 
+-- Scratch arrays for output-signal diffing so unchanged updates allocate nothing and skip C++ writes.
+local SLOT_SIGNALS = {}
+local SLOT_VALUES = {}
+local SLOT_FILTER = {value = {type = "virtual", name = "signal-W", quality = "normal"}, min = 0}
+
 -- The controller owns visible circuit connectors while a hidden constant combinator owns
 -- their values, allowing lifecycle repair without replacing player-created wires.
-function Drive.update_output_signals(record, platform, tachyon_density)
+function Drive.update_output_signals(record, platform, get_tachyon_density)
   local output = Drive.ensure_circuit_output(record)
   if not output then
     return
   end
-  local behavior = output.get_or_create_control_behavior()
-  local section = behavior and (behavior.get_section(1) or behavior.add_section())
-  if not section then
-    return
+  local section = record.output_section
+  if not (section and section.valid) then
+    local behavior = output.get_or_create_control_behavior()
+    section = behavior and (behavior.get_section(1) or behavior.add_section())
+    if not section then
+      return
+    end
+    record.output_section = section
+    record.last_signals = nil
   end
-  local charge = record.bank and record.bank.charge or record.reserve_energy or 0
-  local required = platform.weight * CHARGE_JOULES_PER_KG
-  local charge_percent = required > 0 and math.min(100, math.floor(charge / required * 100)) or 0
-  local remaining_distance = 0
-  local connection = platform.space_connection
-  if connection and platform.distance then
-    remaining_distance = (record.direction < 0 and platform.distance
-      or 1 - platform.distance) * connection.length
+  local count = 0
+  local practical = record.practical_cached
+  if practical == nil then
+    local tech = platform.force.technologies[PRACTICAL_TECH]
+    practical = tech ~= nil and tech.researched
   end
-  local slots = {}
-  local practical = platform.force.technologies[PRACTICAL_TECH]
-  practical = practical and practical.researched
   if practical and record.output_warp_enabled ~= false then
-    slots[#slots + 1] = {
-      signal = record.output_warp_signal or WARP_LEVEL_SIGNAL,
-      value = record.state == "warp" and math.floor(record.warp_level or 1) or 0
-    }
+    count = count + 1
+    SLOT_SIGNALS[count] = record.output_warp_signal or WARP_LEVEL_SIGNAL
+    SLOT_VALUES[count] = record.state == "warp" and math.floor(record.warp_level or 1) or 0
   end
   if practical and record.output_distance_enabled then
-    slots[#slots + 1] = {
-      signal = record.output_distance_signal or DISTANCE_SIGNAL,
-      value = math.max(0, math.min(2147483647, math.ceil(remaining_distance)))
-    }
+    local remaining_distance = 0
+    local connection = platform.space_connection
+    if connection then
+      local distance = platform.distance
+      if distance then
+        remaining_distance = (record.direction < 0 and distance or 1 - distance) * connection.length
+      end
+    end
+    count = count + 1
+    SLOT_SIGNALS[count] = record.output_distance_signal or DISTANCE_SIGNAL
+    SLOT_VALUES[count] = math.max(0, math.min(2147483647, math.ceil(remaining_distance)))
   end
   if record.output_charge_enabled ~= false then
-    slots[#slots + 1] = {
-      signal = record.output_charge_signal or CHARGE_SIGNAL,
-      value = charge_percent
-    }
+    local charge = record.bank and record.bank.charge or record.reserve_energy or 0
+    local required = platform.weight * CHARGE_JOULES_PER_KG
+    count = count + 1
+    SLOT_SIGNALS[count] = record.output_charge_signal or CHARGE_SIGNAL
+    SLOT_VALUES[count] = required > 0 and math.min(100, math.floor(charge / required * 100)) or 0
   end
   if practical and record.output_speed_enabled ~= false then
     local speed = (platform.speed or 0) * TICKS_PER_SECOND
     if record.state == "warp" then
       speed = speed * WARP_BOOST_PER_LEVEL * (record.warp_level or 1)
     end
-    slots[#slots + 1] = {
-      signal = record.output_speed_signal or SPEED_SIGNAL,
-      value = math.floor(speed)
-    }
+    count = count + 1
+    SLOT_SIGNALS[count] = record.output_speed_signal or SPEED_SIGNAL
+    SLOT_VALUES[count] = math.floor(speed)
   end
   if record.output_tachyon_density_enabled then
-    slots[#slots + 1] = {
-      signal = record.output_tachyon_density_signal or TACHYON_DENSITY_SIGNAL,
-      value = math.max(0, math.min(2147483647, math.floor(tachyon_density or 0)))
-    }
+    local density = type(get_tachyon_density) == "function" and get_tachyon_density(platform) or get_tachyon_density
+    count = count + 1
+    SLOT_SIGNALS[count] = record.output_tachyon_density_signal or TACHYON_DENSITY_SIGNAL
+    SLOT_VALUES[count] = math.max(0, math.min(2147483647, math.floor(density or 0)))
   end
-  for index = 1, 5 do
+
+  local prev = record.last_signals
+  if prev and prev[1] == count then
+    local same = true
+    for index = 1, count do
+      local base = 1 + (index - 1) * 3
+      local sig = SLOT_SIGNALS[index]
+      if prev[base + 1] ~= sig.type or prev[base + 2] ~= sig.name or prev[base + 3] ~= SLOT_VALUES[index] then
+        same = false
+        break
+      end
+    end
+    if same then
+      return
+    end
+  end
+
+  local prev_count = prev and prev[1] or 5
+  prev = prev or {}
+  prev[1] = count
+  local filter_val = SLOT_FILTER.value
+  for index = 1, count do
+    local sig = SLOT_SIGNALS[index]
+    local val = SLOT_VALUES[index]
+    local base = 1 + (index - 1) * 3
+    prev[base + 1], prev[base + 2], prev[base + 3] = sig.type, sig.name, val
+    filter_val.type = sig.type
+    filter_val.name = sig.name
+    SLOT_FILTER.min = val
+    section.set_slot(index, SLOT_FILTER)
+  end
+  for index = count + 1, prev_count do
     section.clear_slot(index)
   end
-  for index, slot in ipairs(slots) do
-    local signal = slot.signal
-    section.set_slot(index, {
-      value = {type = signal.type, name = signal.name, quality = "normal"},
-      min = slot.value
-    })
-  end
+  record.last_signals = prev
 end
 
 return Drive

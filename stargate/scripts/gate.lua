@@ -165,18 +165,18 @@ end
 -- Static geometry for an immovable gate, cached on the record so the frequent portal scan never
 -- crosses into C++ for position or surface or allocates search tables.
 local function geometry(record)
-  if not record.search_filter then
+  if not record.search_filter or not record.count_filter then
     local gate = record.entity
     local position = gate.position
     local cx, cy = position.x + CENTER, position.y + CENTER
     local ry = cy + RING_Z
+    local area = {{cx - PORTAL_HALF_WIDTH, ry + PORTAL_BACK}, {cx + PORTAL_HALF_WIDTH, ry + PORTAL_FRONT}}
+    record.unit_number = gate.unit_number
     record.surface = gate.surface
     record.cx, record.cy = cx, cy
     record.center = {x = cx, y = ry - RING_Z}
-    record.search_filter = {
-      type = TRAVELLERS,
-      area = {{cx - PORTAL_HALF_WIDTH, ry + PORTAL_BACK}, {cx + PORTAL_HALF_WIDTH, ry + PORTAL_FRONT}}
-    }
+    record.search_filter = {type = TRAVELLERS, area = area}
+    record.count_filter = {type = TRAVELLERS, area = area, limit = 1}
   end
   return record.center
 end
@@ -192,6 +192,9 @@ local function capacitor(record)
     record.capacitor = gate.surface.create_entity({name = CAPACITOR, position = center(record), force = gate.force})
     record.capacitor.destructible = false
     record.capacitor_idle = nil
+    if record.bank then
+      record.bank.applied = nil
+    end
   end
   return record.capacitor
 end
@@ -218,6 +221,12 @@ function Gate.remove_railway(record)
   end
   if record.entry_control and record.entry_control.valid then
     record.entry_control.destroy()
+  end
+  if storage.station_gates then
+    local id = record.unit_number or (record.entity and record.entity.valid and record.entity.unit_number)
+    if id then
+      storage.station_gates[id] = nil
+    end
   end
   record.rails, record.edge_rail, record.station = nil, nil, nil
   record.signals, record.exit_signal, record.entry_control, record.entry_open = nil, nil, nil, nil
@@ -249,20 +258,45 @@ end
 -- The gate's store is a power bank (scripts/power_bank.lua, a copy of Warp Drive's; see
 -- docs/power.md): charged through the capacitor, leaking 0.5 % of its size a second, with an
 -- adaptive request. Opening spends 80 % of a full store; the rest is the reserve the upkeep runs
--- from while the network refills it.
+-- from while the network refills it. While a closed gate is not charging, its capacitor is zeroed
+-- once and its exponential leak is evaluated analytically on demand (decay_from), so inactive gates
+-- leave storage.active_gates on the next tick instead of ticking for an hour until empty.
+local DECAY_PER_TICK = 1 - PowerBank.LEAK_PER_SECOND / 60
+
+local function sync_decay(store)
+  local from = store.decay_from
+  if from then
+    local now = game.tick
+    local dt = now - from
+    if dt > 0 then
+      local next_charge = (store.charge or 0) * (DECAY_PER_TICK ^ dt)
+      store.charge = next_charge < 1 and 0 or next_charge
+      store.received = 0
+      store.delivered_ticks = (store.delivered_ticks or 0) + dt
+    end
+    store.decay_from = (store.charge or 0) > 0 and now or nil
+    store.tick = now
+  end
+  return store
+end
+
 local function bank(record)
-  if not record.bank then
+  local store = record.bank
+  if not store then
     -- Gates from before the bank kept their charge on the record.
-    record.bank = {charge = record.charge or 0}
+    store = {charge = record.charge or 0}
+    record.bank = store
     record.charge, record.request, record.step, record.applied, record.received = nil, nil, nil, nil, nil
     record.hold_until, record.charge_tick = nil, nil
+  elseif store.decay_from then
+    sync_decay(store)
   end
-  return record.bank
+  return store
 end
 
 -- One tick of an active gate's power: a gate that is switched off, or closed by its circuit,
--- charges only if set to keep charged; otherwise its charge leaks away in Lua once its capacitor is
--- zeroed, and a direct or empty gate leaves storage.active_gates so steady-state ticks cost nothing.
+-- charges only if set to keep charged; otherwise its capacitor is zeroed once and its decay runs
+-- analytically via decay_from, so both direct and idle gates leave storage.active_gates immediately.
 local OPTIONS = {}
 local function collect(id, record, active)
   local spec = power()
@@ -285,35 +319,24 @@ local function collect(id, record, active)
     PowerBank.leave_direct(store, record.capacitor)
     record.capacitor_idle = nil
   end
-  if not charging and not record.open and record.capacitor_idle then
-    local current = store.charge or 0
-    if current <= 0 then
-      active[id] = nil
-      return
+  if not charging and not record.open then
+    if not record.capacitor_idle then
+      local unit = capacitor(record)
+      PowerBank.tick(store, unit, options)
+      record.capacitor_idle = true
     end
-    local ticks = game.tick - (store.tick or game.tick)
-    store.tick = game.tick
-    store.received = 0
-    store.delivered_ticks = (store.delivered_ticks or 0) + ticks
-    local next_charge = current - PowerBank.leak(current) * ticks / 60
-    if next_charge < 1 then
-      store.charge = 0
-      active[id] = nil
+    if (store.charge or 0) >= 1 then
+      store.decay_from = game.tick
     else
-      store.charge = next_charge
+      store.charge, store.decay_from = 0, nil
     end
+    active[id] = nil
     return
   end
+  store.decay_from = nil
+  record.capacitor_idle = nil
   local unit = capacitor(record)
   PowerBank.tick(store, unit, options)
-  if not charging and not record.open then
-    record.capacitor_idle = true
-    if (store.charge or 0) <= 0 then
-      active[id] = nil
-    end
-    return
-  end
-  record.capacitor_idle = nil
   if PowerBank.ready_for_direct(store, options) then
     PowerBank.enter_direct(store, unit, PowerBank.direct_need(options), cap)
     active[id] = nil
@@ -325,29 +348,9 @@ end
 -- returning them to the adaptive request. The statistics are per network and prototype, so the
 -- gates of one network are judged together: in a shortage the engine gives each the same share.
 -- A network seen for the first time, or after it changed, is only measured, not judged.
-local POLE_REACH = 40
-local function network_statistics(record, id)
-  local surface = record.entity.surface
-  if surface.has_global_electric_network then
-    return surface.global_electric_network_statistics
-  end
-  local pole = record.pole
-  if pole and pole.valid and pole.electric_network_id == id then
-    return pole.electric_network_statistics
-  end
-  record.pole = nil
-  if record.pole_missed == id then
-    return nil
-  end
-  local c = center(record)
-  for _, candidate in pairs(surface.find_entities_filtered({type = "electric-pole",
-      area = {{c.x - POLE_REACH, c.y - POLE_REACH}, {c.x + POLE_REACH, c.y + POLE_REACH}}})) do
-    if candidate.electric_network_id == id then
-      record.pole, record.pole_missed = candidate, nil
-      return candidate.electric_network_statistics
-    end
-  end
-  record.pole_missed = id
+local function network_statistics(record)
+  local sub = record.capacitor and record.capacitor.electric_network
+  return sub and sub.parent_network.statistics
 end
 
 function Gate.check_power()
@@ -379,10 +382,7 @@ function Gate.check_power()
   end
   local counts = {}
   for id, network in pairs(networks) do
-    local stats
-    for _, entry in pairs(network.records) do
-      stats = stats or network_statistics(entry.record, id)
-    end
+    local stats = network_statistics(network.records[1].record)
     local count = stats and stats.get_input_count(CAPACITOR)
     counts[id] = count
     local last = storage.power_counts and storage.power_counts[id]
@@ -432,6 +432,7 @@ end
 function Gate.take_charge(record)
   local store = bank(record)
   store.charge = 0
+  store.decay_from = nil
   if store.direct then
     PowerBank.leave_direct(store, record.capacitor)
   end
@@ -608,10 +609,11 @@ end
 -- indestructible, and every other call, including configuration changes, checks them all.
 local SHOWN_RAILWAY = {single = 8, right = 16, left = 24}
 
-local function apply(record, quick)
+local function apply(record, quick, now)
   if not quick then
     capacitor(record)
   end
+  now = now or game.tick
   -- A gate without a partner opens too: it sends travellers to random destinations.
   local was_ready = record.ready
   local ready = record.enabled and Gate.circuit_allows(record)
@@ -633,7 +635,7 @@ local function apply(record, quick)
     record.entity.disabled_by_script = not record.open
   end
   if record.open and not was_open then
-    record.veil_from = game.tick + 120
+    record.veil_from = now + 120
   elseif not record.open then
     record.veil_from = nil
   end
@@ -642,7 +644,7 @@ local function apply(record, quick)
     or (not record.open and (store.charge or 0) < cap * FULL))
   -- Everything the companions show, packed as an integer so the 3-tick poll allocates no strings.
   local shown = (SHOWN_RAILWAY[record.railway] or 0) + (red and 4 or 0) + (record.open and 2 or 0)
-    + (record.open and game.tick >= (record.veil_from or 0) and 1 or 0)
+    + (record.open and now >= (record.veil_from or 0) and 1 or 0)
   if quick and shown == record.shown and was_open == record.open then
     return
   end
@@ -762,7 +764,7 @@ function Gate.rebuild(on_removed)
   end
   for _, record in pairs(storage.gates) do
     -- Placed afresh, so a configuration change also repairs any that went missing.
-    record.search_filter = nil
+    record.search_filter, record.count_filter = nil, nil
     geometry(record)
     remove_barriers(record)
     apply(record)
@@ -837,14 +839,19 @@ end
 -- Updates every gate's barriers and calls `enter(entity, record)` for each traveller whose centre is
 -- in an open portal. A character in a vehicle travels with the vehicle.
 function Gate.update(enter)
-  for _, record in pairs(storage.gates) do
-    if record.entity.valid then
-      apply(record, true)
-      if Gate.is_open(record) then
+  local now = game.tick
+  local gates = storage.gates
+  for _, record in pairs(gates) do
+    if (record.enabled or record.open or not record.shown) and record.entity.valid then
+      apply(record, true, now)
+      if record.open and ((record.partner and gates[record.partner] ~= nil) or Destinations.any(record.entity.force)) then
         geometry(record)
-        for _, entity in pairs(record.surface.find_entities_filtered(record.search_filter)) do
-          if entity.valid and not (entity.type == "character" and entity.vehicle) and in_portal(record, entity.position) then
-            enter(entity, record)
+        local surface = record.surface
+        if surface.count_entities_filtered(record.count_filter) > 0 then
+          for _, entity in pairs(surface.find_entities_filtered(record.search_filter)) do
+            if entity.valid and not (entity.type == "character" and entity.vehicle) and in_portal(record, entity.position) then
+              enter(entity, record)
+            end
           end
         end
       end

@@ -15,8 +15,9 @@ The core architecture is sound and addresses genuine Factorio engine constraints
 The review organized findings into four phases:
 - **Phase 1 — Critical Bugs, Leaks & Freezes:** Committed & pushed (`cebb51a`).
 - **Phase 2 — Documentation Contradictions, Collision/GUI Polish & Dead Code:** Committed & pushed (`95e3c70`).
-- **Phase 3 — Gameplay Rule Decisions:** Approved & committed.
+- **Phase 3 — Gameplay Rule Decisions:** Approved, committed & pushed (`eada8aa`).
 - **Phase 4 — Steady-State UPS Optimizations:** Profiled, committed & pushed (`95e3c70`, **3× steady-state speedup** across 60 station gates, cutting `on_tick` cost by **98.7 %**).
+- **Phase 5 — Cross-Mod UPS Optimizations (`power_bank.lua`, `warp-drive`, `stargate`):** Profiled & prepared in working tree (**4.5× Warp Drive fleet speedup**, **40 % faster active `PowerBank.tick`**, and **another 2.0× Stargate speedup — 4.6× cumulative**).
 
 ---
 
@@ -47,7 +48,7 @@ The review organized findings into four phases:
 
 ---
 
-## Phase 3 — Gameplay Rule Decisions (Approved & Committed)
+## Phase 3 — Gameplay Rule Decisions (Committed: `eada8aa`)
 
 1. **Planetary gravity requirement (`prototypes/entities.lua`):**
    - Added `surface_conditions = {{property = "gravity", min = 0.1}}` to `bte-stargate-construction-site`, `bte-stargate-assembling`, and `bte-stargate` so player-built gates require planetary/moon gravity and cannot be built on Space Platforms (leaving deep-space orbital gates to Homecoming Journey while keeping scripted zero-gravity gate creation functional).
@@ -84,3 +85,57 @@ Implemented optimizations:
    - Changed `Gui.open` (`scripts/gui.lua`) to call `entity.get_control_behavior()` rather than `get_or_create_control_behavior()`, keeping unwired gates on the `nil` fast path in `Gate.circuit_allows`.
 3. **Cached prototype lookups in module locals:**
    - Cached `extent(name)` (`scripts/gate.lua`), `half_length(name)` (`scripts/railway.lua`), and `plan()` (`scripts/construction.lua`).
+
+---
+
+## Phase 5 — Cross-Mod UPS Optimizations: `power_bank.lua`, `warp-drive` & `stargate` (Prepared in Working Tree)
+
+Measured in headless Factorio 2.1.24 with `helpers.create_profiler()` over 3,000 ticks across four workloads:
+
+### 1. Warp Drive Fleet — Non-Jumping Steady State (20 Space Platforms: 10 at 1 GW Tachyon Boost + 10 Idle, 60 Nauvis Labs)
+
+| Handler | Baseline (3,000 ticks) | Optimized (3,000 ticks) | Change |
+| --- | --- | --- | --- |
+| `on_tick` (`Warp.tick`) | `86.29 ms` | `1.47 ms` | **−98.3 % (58.5× faster)** |
+| `on_nth_tick(10)` (`Warp.update` + outputs) | `224.64 ms` | `42.27 ms` | **−81.2 % (5.3× faster)** |
+| `on_nth_tick(60)` (`Research.update` + `Warp.check_power`) | `33.81 ms` | `32.37 ms` | **−4.3 %** |
+| **Total (3,000 ticks / avg per tick)** | **`344.74 ms` (`0.115 ms/tick`)** | **`76.11 ms` (`0.025 ms/tick`)** | **−77.9 % (4.5× faster)** |
+
+### 2. Warp Drive Fleet — Active Jumps (10 at 1 GW Boost + 8 Idle + 2 Actively Warping at Warp-5)
+
+| Handler | Baseline (3,000 ticks) | Optimized (3,000 ticks) | Change |
+| --- | --- | --- | --- |
+| `on_tick` (`Warp.tick`) | `832.12 ms` | `187.75 ms` | **−77.4 % (4.4× faster)** |
+| `on_nth_tick(10)` (`Warp.update` + outputs) | `445.14 ms` | `85.80 ms` | **−80.7 % (5.2× faster)** |
+| `on_nth_tick(60)` (`Research.update` + `Warp.check_power`) | `35.48 ms` | `32.42 ms` | **−8.6 %** |
+| **Total (3,000 ticks / avg per tick)** | **`1,312.74 ms` (`0.438 ms/tick`)** | **`305.97 ms` (`0.102 ms/tick`)** | **−76.7 % (4.3× faster)** |
+
+### 3. Shared `PowerBank.tick` — Active Adaptive Probing (20 Constrained Banks Ticking Every Tick)
+
+| Workload | Baseline (60,000 `PowerBank.tick` calls) | Optimized (60,000 `PowerBank.tick` calls) | Change |
+| --- | --- | --- | --- |
+| 20 gates sharing 3 GW (`on_tick`) | `195.40 ms` | `117.21 ms` | **−40.0 % (1.67× faster)** |
+
+### 4. Stargate — 60 Station Gates (15 Open Direct Pairs + 15 Partially Charged Switched-Off Pairs)
+
+| Handler | Post-Phase-4 Baseline (3,000 ticks) | Phase 5 Optimized (3,000 ticks) | Change |
+| --- | --- | --- | --- |
+| `on_tick` (`Gate.collect`) | `76.86 ms` | `3.11 ms` | **−96.0 % (24.8× faster)** |
+| `on_nth_tick(3)` (`Gate.update`) | `103.97 ms` | `77.02 ms` | **−25.9 %** |
+| `on_nth_tick(3)` (`Railway.check`) | `70.08 ms` | `44.11 ms` | **−37.1 %** |
+| `on_nth_tick(30)` + `on_nth_tick(60)` | `5.38 ms` | `5.87 ms` | unchanged |
+| **Total (3,000 ticks / avg per tick)** | **`256.29 ms` (`0.085 ms/tick`)** | **`130.10 ms` (`0.043 ms/tick`)** | **−49.2 % (2.0× faster; 4.6× vs initial `600.45 ms`)** |
+
+Implemented optimizations:
+1. **Shared `power_bank.lua` (`warp-drive/scripts/power_bank.lua` & `stargate/scripts/power_bank.lua`):**
+   - Verified `electric_interface_mode`, `power_usage`, and buffer state once per VM load/reset via transient `verified[bank] = unit`, skipping `unit.electric_interface_mode` and `unit.electric_buffer_size` reads on consecutive 1-tick updates, reading `game.tick` once per call, and writing `input_flow_limit` / `electric_buffer_size` only when `applied` changes (cutting C++ crossings from ~12 to 2–3 per tick during charging and shortfall holds).
+   - Extended direct steady-draw mode (`direct_need`, `ready_for_direct`, `delivered`) to unstored `sink` banks once settled at `max_draw`, and added `PowerBank.idle` for clean 1 J idling.
+2. **Warp Drive (`warp-drive/`):**
+   - Added `storage.active_drives` and wired `PowerBank` direct mode (`Warp.check_power` via `power.electric_network.parent_network.statistics` every 60 ticks for steady `1 GW` detectors, and every 10 ticks during active warp), dropping idle drives and settled `1 GW` Tachyon Science Boost drives out of `on_tick` completely.
+   - Short-circuited valid companion lookups, connected internal red/green circuit wires once per companion instead of twice every 10 ticks, skipped `platform.name` regexes on untagged platforms, evaluated `Research.tachyon_density` only when its output is enabled, and diffed the 5 output-combinator slots so unchanged 10-tick updates perform zero combinator mutations.
+   - Flattened anomaly records, eliminated per-tick `{x, y}` and `{r, g, b, a}` table allocations and duplicate `target` writes, throttled sub-degree spin/scale updates to 30 ticks, and skipped per-tick `LuaRendering` position writes when no connected player views the platform surface (wrapping cleanly to the current tick as soon as viewed).
+   - Cached static laboratory base speeds by `unit_number`, tracked lab-free surfaces to avoid empty table allocations, and deduplicated planetary lab scans in `Research.snapshot`.
+3. **Stargate (`stargate/`):**
+   - Replaced tick-by-tick idle leak (which kept partially charged switched-off gates in `storage.active_gates` for up to 76.7 minutes until `< 1 J`) with exact closed-form analytical decay (`decay_from`, `(1 - LEAK_PER_SECOND / 60) ^ dt`), dropping switched-off gates from `storage.active_gates` on the very next tick.
+   - Replaced the `POLE_REACH` electric-pole search in `Gate.check_power` with direct `capacitor.electric_network.parent_network.statistics` (O(1) on both pole networks of any reach and poleless global networks).
+   - Skipped switched-off closed gates in 3-tick `Gate.update`, pre-checked empty portals with zero-allocation `count_entities_filtered(..., limit = 1)` before `find_entities_filtered`, maintained `storage.station_gates` for `Railway.check` / `Railway.maintain`, short-circuited empty `receiving(target)` in pure Lua, and indexed open GUI windows in one pass per refresh.

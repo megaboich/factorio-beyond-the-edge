@@ -7,9 +7,11 @@ local Visuals = require("scripts.visuals")
 local Warp = {}
 
 local PRACTICAL_TECH = "bte-practical-warp-drive"
+local POWER_NAME = "bte-warp-drive-power-interface"
 local CHARGE_JOULES_PER_KG = 100
 local SUPPORT_WATTS_PER_KG = 10
 local SUPPORT_POWER_TOLERANCE = 0.999
+local DIRECT_FULL = 0.999
 local SPEED_EXIT_GRACE_TICKS = 5 * 60
 -- Streaks on screen: one per this many tiles of effect field, at least 48, at most 900.
 local WARP_STREAK_TILES = 512
@@ -271,11 +273,15 @@ local function update_warp_background_sound(record)
 end
 
 local function disable_power(record, power, disabled)
-  power.power_usage = 0
-  power.input_flow_limit = 0
-  power.electric_buffer_size = 1
-  power.disabled_by_script = disabled
-  record.power_options = nil
+  disabled = disabled == true
+  if record.power_options ~= nil or not record.power_idled or record.power_disabled ~= disabled then
+    PowerBank.idle(bank(record), power, disabled)
+    record.power_options = nil
+    record.power_idled = true
+    record.power_disabled = disabled
+    record.power_network_id = nil
+    record.power_input_count = nil
+  end
 end
 
 local function start_cooldown(record, ticks, reason)
@@ -363,10 +369,91 @@ local function refill_watts(platform)
   return support_watts_per_level(platform)
 end
 
--- What the interface asks for from the next tick on (PowerBank.tick options).
-local function request_power(record, power, options)
-  power.disabled_by_script = false
+-- Hands a settled drive or detector bank to the engine (PowerBank.enter_direct) and snapshots the
+-- network's cumulative input counter so any later shortfall is caught accurately. Each platform has
+-- at most one drive, so POWER_NAME's input count on that network belongs to this drive alone.
+local function begin_direct(record, store, power, need, capacity)
+  PowerBank.expected(store)
+  PowerBank.enter_direct(store, power, need, capacity)
+  local id = power.electric_network_id
+  local sub = id and power.electric_network
+  local stats = sub and sub.parent_network.statistics
+  record.power_network_id = id
+  record.power_input_count = stats and stats.get_input_count(POWER_NAME)
+end
+
+-- Verifies a direct bank received what it assumed from its network's flow statistics, charging any
+-- shortfall to the store and waking the adaptive tick path.
+local function check_direct(record, power)
+  local store = record.bank
+  if not (store and store.direct) then
+    return
+  end
+  local expected = PowerBank.expected(store)
+  local id = power and power.valid and power.electric_network_id
+  if not id then
+    record.power_network_id, record.power_input_count = nil, nil
+    PowerBank.leave_direct(store, power)
+    Drive.wake(record)
+    return
+  end
+  local sub = power.electric_network
+  local stats = sub and sub.parent_network.statistics
+  local count = stats and stats.get_input_count(POWER_NAME)
+  local prev_id, prev_count = record.power_network_id, record.power_input_count
+  record.power_network_id, record.power_input_count = id, count
+  if not count then
+    PowerBank.leave_direct(store, power)
+    Drive.wake(record)
+  elseif prev_id == id and prev_count then
+    local missing = expected - (count - prev_count)
+    if missing > store.direct / TICKS_PER_SECOND + 1e3 then
+      PowerBank.shortfall(store, power, missing)
+      record.power_network_id, record.power_input_count = nil, nil
+      Drive.wake(record)
+    end
+  end
+end
+
+-- Once a second for non-warping direct banks (steady detectors); active warp checks every 10 ticks.
+function Warp.check_power()
+  for _, record in pairs(Drive.records()) do
+    local store = record.bank
+    if store and store.direct and record.state ~= "warp" then
+      check_direct(record, record.power)
+    end
+  end
+end
+
+-- What the interface asks for from the next tick on (PowerBank.tick options), reusing one table per
+-- record so 10-tick updates allocate nothing.
+local function request_power(record, power, sink, capacity, load, max_draw)
+  if record.power_disabled ~= false or record.power_idled then
+    power.disabled_by_script = false
+    record.power_disabled = false
+    record.power_idled = nil
+  end
+  local options = record.power_options_buf
+  if not options then
+    options = {}
+    record.power_options_buf = options
+  end
+  options.sink = sink or nil
+  options.capacity = capacity
+  options.load = load
+  options.max_draw = max_draw
   record.power_options = options
+  local store = bank(record)
+  if store.direct then
+    if store.direct ~= PowerBank.direct_need(options)
+        or (not sink and (store.charge or 0) < capacity * DIRECT_FULL) then
+      PowerBank.leave_direct(store, power)
+      record.power_network_id, record.power_input_count = nil, nil
+      Drive.wake(record)
+    end
+  else
+    Drive.wake(record)
+  end
 end
 
 -- The average power delivered since the last update, in watts.
@@ -382,6 +469,8 @@ local function initialize_detector_mode(record, power)
     power.energy = 0
     record.power_mode = "experimental"
     record.migrated_reserve_energy = nil
+    record.power_idled, record.power_disabled = nil, nil
+    record.power_network_id, record.power_input_count = nil, nil
     PowerBank.reset(bank(record))
   end
 end
@@ -398,7 +487,7 @@ local function update_detector(record, power)
   local delivered = PowerBank.delivered(bank(record))
   record.detector_power = math.min(DETECTOR_MAX_POWER_WATTS, delivered)
   record.detector_power_ratio = record.detector_power / DETECTOR_REFERENCE_POWER_WATTS
-  request_power(record, power, {sink = true, max_draw = DETECTOR_MAX_POWER_WATTS})
+  request_power(record, power, true, 0, 0, DETECTOR_MAX_POWER_WATTS)
 end
 
 local function stop_detector(record, power)
@@ -423,10 +512,18 @@ end
 -- cleared every tick (Warp.tick): the platform keeps spawning them at the edge of its asteroid
 -- field, and anything left until the 10-tick update was drawn for up to ten frames, its outline
 -- blinking against the bright anomalies behind it.
-local function clear_warp_asteroids(platform)
-  platform.destroy_asteroid_chunks({})
-  for _, asteroid in pairs(platform.surface.find_entities_filtered({type = "asteroid"})) do
-    asteroid.destroy()
+local EMPTY_FILTER = {}
+local ASTEROID_COUNT_FILTER = {type = "asteroid", limit = 1}
+local ASTEROID_FIND_FILTER = {type = "asteroid"}
+
+local function clear_warp_asteroids(platform, surface)
+  platform.destroy_asteroid_chunks(EMPTY_FILTER)
+  surface = surface or platform.surface
+  if surface.count_entities_filtered(ASTEROID_COUNT_FILTER) > 0 then
+    local asteroids = surface.find_entities_filtered(ASTEROID_FIND_FILTER)
+    for index = 1, #asteroids do
+      asteroids[index].destroy()
+    end
   end
 end
 
@@ -495,6 +592,17 @@ end
 -- scales with the current warp level (1x at Warp-1, 4x at Warp-4). Spawn points reach one
 -- particle's travel north of the field, so streaks are as dense at its north edge as anywhere,
 -- and new streaks fade in (prototypes/entities.lua) rather than pop up.
+local STREAK_POS = {x = 0, y = 0}
+local STREAK_MOVE = {0, 0}
+local STREAK_SPEC = {
+  name = WARP_STREAK_NAME,
+  position = STREAK_POS,
+  movement = STREAK_MOVE,
+  height = 0,
+  vertical_speed = 0,
+  frame_speed = 1
+}
+
 local function render_warp_streaks(record, platform)
   local bounds = record.lightning_bounds
   if not bounds then
@@ -508,19 +616,15 @@ local function render_warp_streaks(record, platform)
   local speed = WARP_STREAK_SPEED * math.max(1, record.warp_level or 1)
   local travel = WARP_STREAK_LIFE * speed
   local spawns = random_count(count * UPDATE_TICKS / WARP_STREAK_LIFE * (height + travel) / height)
-  local surface = platform.surface
+  local surface = record.surface or platform.surface
+  local left = bounds.left
+  local top = bounds.top - travel
+  local span_y = height + travel
+  STREAK_MOVE[2] = speed
   for _ = 1, spawns do
-    surface.create_particle({
-      name = WARP_STREAK_NAME,
-      position = {
-        x = bounds.left + math.random() * width,
-        y = bounds.top - travel + math.random() * (height + travel)
-      },
-      movement = {0, speed},
-      height = 0,
-      vertical_speed = 0,
-      frame_speed = 1
-    })
+    STREAK_POS.x = left + math.random() * width
+    STREAK_POS.y = top + math.random() * span_y
+    surface.create_particle(STREAK_SPEC)
   end
 end
 
@@ -596,13 +700,13 @@ local function enter_warp(record, platform)
   record.last_exit_reason = nil
   local support_demand = support_watts(platform, 1)
   record.support_demand_watts = PowerBank.max_draw(charge, support_demand, refill_watts(platform))
-  request_power(record, buffer, {capacity = charge, load = support_demand,
-    max_draw = record.support_demand_watts})
+  request_power(record, buffer, false, charge, support_demand, record.support_demand_watts)
   record.support_check_after = game.tick + UPDATE_TICKS * 2
   start_warp_sound(record)
   update_warp_effect_bounds(record, platform)
   Shockwaves.start(record, shockwave_reach(record, platform))
   record.asteroid_sweep = true
+  Drive.wake(record)
   render_warp_effect(record, platform)
   return true
 end
@@ -626,6 +730,7 @@ local function update_experimental(record)
 end
 
 local function update_active_warp(record, platform, direction, charge_buffer)
+  check_direct(record, charge_buffer)
   local delivered_watts = sample_power(record)
   local immediate_reason = immediate_exit_reason(record, platform, direction)
   if immediate_reason then
@@ -700,8 +805,8 @@ local function update_active_warp(record, platform, direction, charge_buffer)
   -- and the refill, so the network's spare power shows before the level climbs.
   record.support_demand_watts = PowerBank.max_draw(charge, support_watts(platform, next_level),
     refill_watts(platform))
-  request_power(record, charge_buffer, {capacity = charge, load = support_watts(platform, level),
-    max_draw = record.support_demand_watts})
+  request_power(record, charge_buffer, false, charge, support_watts(platform, level),
+    record.support_demand_watts)
   -- Platform distance is a 0..1 fraction of connection.length. Add only the speed above
   -- natural travel, because Factorio advances the ordinary one-times speed itself.
   local connection = platform.space_connection
@@ -794,15 +899,13 @@ local function update_idle_or_charging(record, platform, direction, charge_buffe
   -- Charging draws up to Warp-1 support power plus the leak. Since reserve capacity is ten
   -- seconds of that mass-scaled demand, ample generation fills an empty reserve in about ten
   -- seconds once the bank's request has climbed.
-  charge_buffer.disabled_by_script = false
   set_reserve(record, math.min(reserve(record), charge))
   if reserve(record) + 1 >= charge then
     enter_warp(record, platform)
   else
     sample_power(record)
     record.support_demand_watts = PowerBank.max_draw(charge, 0, refill_watts(platform))
-    request_power(record, charge_buffer, {capacity = charge, load = 0,
-      max_draw = record.support_demand_watts})
+    request_power(record, charge_buffer, false, charge, 0, record.support_demand_watts)
     record.state = "charging"
   end
 end
@@ -819,7 +922,9 @@ end
 -- Advances the drive's electrical and warp state. Returns false when the power interface could
 -- not be created, which skips this update's sound scheduling.
 local function update_state(record, platform, direction)
-  if not practical_researched(platform.force) then
+  local practical = practical_researched(platform.force)
+  record.practical_cached = practical
+  if not practical then
     update_experimental(record)
     return true
   end
@@ -830,6 +935,8 @@ local function update_state(record, platform, direction)
   local charge = required_charge(platform)
   if record.power_mode ~= "practical" then
     PowerBank.reset(bank(record))
+    record.power_idled, record.power_disabled = nil, nil
+    record.power_network_id, record.power_input_count = nil, nil
     set_reserve(record, math.min(record.migrated_reserve_energy or 0, charge))
     record.migrated_reserve_energy = nil
     record.detector_power = 0
@@ -852,7 +959,14 @@ function Warp.update(record)
     Drive.destroy_companions(record)
     return false
   end
-  local platform = entity.surface.platform
+  local platform = record.platform
+  local surface = record.surface
+  if not (platform and platform.valid and surface and surface.valid) then
+    surface = entity.surface
+    platform = surface.platform
+    record.surface = surface
+    record.platform = platform
+  end
   if not platform or platform.index ~= record.platform_index then
     Drive.destroy_companions(record)
     return false
@@ -864,21 +978,35 @@ function Warp.update(record)
     update_charge_sound(record, platform)
     update_warp_background_sound(record)
   end
-  Drive.set_name_tag(platform, record.state == "warp" and (record.warp_level or 1) or nil)
+  Drive.set_name_tag(platform, record.state == "warp" and (record.warp_level or 1) or nil, record)
   Visuals.update(record, visual_level(record, platform))
-  Anomalies.update(record, platform.surface, record.lightning_bounds, record.state == "warp")
-  return true
+  Anomalies.update(record, surface, record.lightning_bounds, record.state == "warp")
+  return true, platform
 end
 
---- Per-tick work, limited to what cannot wait for the 10-tick update: growing activation
--- shockwaves, drifting background anomalies smoothly south, and clearing asteroids while warp
--- holds. Until the sweeping ring has passed, only what its front has reached is cleared;
--- afterwards, everything. Idle drives cost one state check.
+--- Per-tick work, limited to what cannot wait for the 10-tick update: charging or probing banks,
+-- growing activation shockwaves, drifting background anomalies smoothly south, and clearing
+-- asteroids while warp holds. Returns false once the drive is completely idle or on direct power,
+-- letting control.lua remove it from storage.active_drives.
 function Warp.tick(record)
-  -- The power bank runs every tick: its interface's buffer holds one tick of its request.
   local power = record.power
-  if record.power_options and power and power.valid then
-    PowerBank.tick(bank(record), power, record.power_options)
+  local options = record.power_options
+  if options and power and power.valid then
+    local store = bank(record)
+    if store.direct then
+      if store.direct ~= PowerBank.direct_need(options)
+          or (not options.sink and (store.charge or 0) < options.capacity * DIRECT_FULL) then
+        PowerBank.leave_direct(store, power)
+        record.power_network_id, record.power_input_count = nil, nil
+      end
+    end
+    if not store.direct then
+      PowerBank.tick(store, power, options)
+      if PowerBank.ready_for_direct(store, options) then
+        begin_direct(record, store, power, PowerBank.direct_need(options),
+          options.sink and 0 or options.capacity)
+      end
+    end
   end
   if record.shockwave_tick or record.shockwaves then
     Shockwaves.update(record)
@@ -886,25 +1014,47 @@ function Warp.tick(record)
   if record.anomalies then
     Anomalies.tick(record)
   end
-  if record.state ~= "warp" then
-    return
-  end
-  local entity = record.entity
-  local platform = entity and entity.valid and entity.surface.platform
-  if not platform then
-    return
-  end
-  if record.asteroid_sweep then
-    local center, radius, pending = Shockwaves.front(record)
-    if center then
-      sweep_warp_asteroids(platform, center, radius)
-      return
-    elseif pending then
-      return
+  if record.state == "warp" then
+    local platform = record.platform
+    local surface = record.surface
+    if not (platform and platform.valid and surface and surface.valid) then
+      local entity = record.entity
+      surface = entity and entity.valid and entity.surface
+      platform = surface and surface.platform
+      record.surface, record.platform = surface, platform
     end
-    record.asteroid_sweep = nil
+    if platform then
+      if record.asteroid_sweep then
+        local center, radius, pending = Shockwaves.front(record)
+        if center then
+          sweep_warp_asteroids(platform, center, radius)
+          return true
+        elseif pending then
+          return true
+        end
+        record.asteroid_sweep = nil
+      end
+      clear_warp_asteroids(platform, surface)
+      return true
+    end
   end
-  clear_warp_asteroids(platform)
+  return (options ~= nil and not (record.bank and record.bank.direct))
+    or record.shockwave_tick ~= nil
+    or record.shockwaves ~= nil
+    or record.anomalies ~= nil
+end
+
+function Warp.set_test_reserve(record, value)
+  local store = bank(record)
+  if value ~= nil then
+    if store.direct then
+      PowerBank.leave_direct(store, record.power)
+      record.power_network_id, record.power_input_count = nil, nil
+    end
+    store.charge = value
+    Drive.wake(record)
+  end
+  return store.charge or 0
 end
 
 function Warp.snapshot(record)
@@ -1034,6 +1184,7 @@ function Warp.start_detector(record)
     return false
   end
   record.detector_on = true
+  Drive.wake(record)
   return true
 end
 

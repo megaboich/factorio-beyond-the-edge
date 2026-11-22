@@ -70,11 +70,27 @@ local EASE_LENGTH = 7
 -- departure lane).
 local GUARD_TICKS = 300
 local NORTH = defines.direction.north
+local SIGNAL_OPEN = defines.signal_state.open
 
 function Railway.init_storage()
   storage.rail_transfers = storage.rail_transfers or {}
   storage.rail_guard = storage.rail_guard or {}
   storage.rail_held = storage.rail_held or {}
+end
+
+-- Station-mode gates by unit_number; built lazily for saves reloaded without a version bump.
+local function station_gates()
+  local stations = storage.station_gates
+  if not stations then
+    stations = {}
+    for id, record in pairs(storage.gates or {}) do
+      if record.railway and record.entity.valid then
+        stations[id] = record
+      end
+    end
+    storage.station_gates = stations
+  end
+  return stations
 end
 
 -- Held trains by id; created on first use too, for saves from before holding.
@@ -236,6 +252,9 @@ local function build(record)
     end
   end
   record.rail_layout = LAYOUT
+  local id = record.unit_number or gate.unit_number
+  record.unit_number = id
+  station_gates()[id] = record
 end
 
 -- Whether the block out of `target`'s arrival lane is free and not reserved, as its exit signal
@@ -251,7 +270,7 @@ local function exit_clear(target)
       end
     end
   end
-  return not (signal and signal.valid) or signal.signal_state == defines.signal_state.open
+  return not (signal and signal.valid) or signal.signal_state == SIGNAL_OPEN
 end
 
 -- Switches station mode: nil (off) or one of Railway.MODES. Refused, returning false and a reason,
@@ -288,22 +307,31 @@ end
 -- Periodic upkeep (every 30 ticks): upgrades layouts from older saves (reinstalling the same
 -- version raises no configuration change) and drops obsolete map labels.
 function Railway.maintain()
-  for _, record in pairs(storage.gates) do
-    if record.railway and record.rail_layout ~= LAYOUT and record.entity.valid then
+  for id, record in pairs(station_gates()) do
+    if not record.railway or not record.entity.valid then
+      storage.station_gates[id] = nil
+    elseif record.rail_layout ~= LAYOUT then
       build(record)
     end
-    if record.map_label then
-      if record.map_label.valid then
-        record.map_label.destroy()
+  end
+  if not storage.map_labels_pruned then
+    for _, record in pairs(storage.gates) do
+      if record.map_label then
+        if record.map_label.valid then
+          record.map_label.destroy()
+        end
+        record.map_label = nil
       end
-      record.map_label = nil
     end
+    storage.map_labels_pruned = true
   end
 end
 
 -- After a configuration change: rebuilds what is missing, and cleans up migrated fields.
 function Railway.rebuild()
   Railway.init_storage()
+  storage.station_gates = nil
+  storage.map_labels_pruned = nil
   for _, record in pairs(storage.gates) do
     if record.entity.valid and record.railway then
       build(record)
@@ -487,9 +515,13 @@ end
 
 -- Whether the partner's arrival lane is free of other transfers.
 local function receiving(target)
-  local id = target.entity.unit_number
-  for _, transfer in pairs(storage.rail_transfers) do
-    if transfer.to == id then
+  local transfers = storage.rail_transfers
+  if not transfers or transfers[1] == nil then
+    return false
+  end
+  local id = target.unit_number or target.entity.unit_number
+  for i = 1, #transfers do
+    if transfers[i].to == id then
       return true
     end
   end
@@ -631,9 +663,23 @@ function Railway.check()
   if next(held_trains()) then
     release_held()
   end
-  for _, record in pairs(storage.gates) do
+  local stations = station_gates()
+  if not next(stations) then
+    return
+  end
+  local gates = storage.gates
+  for id, record in pairs(stations) do
     local spec = layout(record)
-    if spec and record.entity.valid then
+    local rail = spec and record.edge_rail
+    if not spec then
+      stations[id] = nil
+    elseif not rail then
+      if record.entity.valid then
+        build(record)
+      else
+        stations[id] = nil
+      end
+    else
       -- The entry signal is green only while a train could go through now, so automatic trains wait in
       -- front of it, still heading for the gate's station, and none looks for a path beyond the gate.
       -- Room behind the partner's veil is not checked: an entity search per gate every check was three
@@ -641,7 +687,7 @@ function Railway.check()
       -- means room. Closed gates skip the partner lookup entirely unless a train is in the block.
       local ready = false
       if record.open then
-        local target = Gate.partner(record)
+        local target = record.partner and gates[record.partner]
         if target and layout(target) and not receiving(target) then
           ready = exit_clear(target)
         end
@@ -653,8 +699,7 @@ function Railway.check()
           record.entry_open = ready
         end
       end
-      local rail = record.edge_rail
-      if rail and rail.valid and rail.trains_in_block > 0 then
+      if rail.valid and rail.trains_in_block > 0 and record.entity.valid then
         local target = Gate.partner(record)
         local linked = (target and layout(target) and not receiving(target)) == true
         local edge_y = record.depart_edge_y

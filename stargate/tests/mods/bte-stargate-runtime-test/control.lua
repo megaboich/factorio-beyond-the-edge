@@ -772,6 +772,7 @@ local steps = {
     gsource.power_production, gsource.electric_buffer_size = 1e9 / 60, 1e9 / 60
     local ga = sg.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
     local idle = s.create_entity({name = GATE, position = {24, 0}, force = "player", raise_built = true})
+    remote.call("bte-stargate-test", "set_charge", idle.unit_number, 0.15e9)
     remote.call("bte-stargate-test", "set_enabled", idle.unit_number, false)
     storage.direct = {gates = {a, b, ga}, idle = idle, source = source, gsource = gsource, load = load, fed = 0, n = 0}
   end},
@@ -786,8 +787,12 @@ local steps = {
       expect("the window shows the leak (" .. flow.leak .. ")", math.abs(flow.leak - 1.5e6) < 1e3, true)
       expect("the window shows no charging (" .. flow.charging .. ")", flow.charging < 1e3, true)
     end
-    expect("direct and empty switched-off gates leave the per-tick active set",
+    expect("direct and decaying switched-off gates leave the per-tick active set",
       remote.call("bte-stargate-test", "active_gates"), 0)
+    local idle_charge = remote.call("bte-stargate-test", "charge", direct.idle.unit_number)
+    local expected_idle = 0.5 * math.exp(-0.005 * 10)
+    expect("a switched-off gate decays analytically while asleep (" .. idle_charge .. ")",
+      math.abs(idle_charge - expected_idle) < 0.002, true)
     -- The factory and the gates' upkeep (about 66 MW with the test's figures) on 330 MW.
     direct.source.power_production, direct.source.electric_buffer_size = 330e6 / 60, 330e6 / 60
     direct.gsource.power_production, direct.gsource.electric_buffer_size = 10e6 / 60, 10e6 / 60

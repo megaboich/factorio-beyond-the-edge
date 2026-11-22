@@ -88,26 +88,36 @@ local function watts(value)
   return {"bte-stargate-gui.watts", string.format("%." .. digits .. "f", value), PREFIXES[index]}
 end
 
+local function index_elements(element, view)
+  if element.name ~= "" then
+    view[element.name] = element
+  end
+  for _, child in pairs(element.children) do
+    index_elements(child, view)
+  end
+end
+
 local function refresh(player, record)
   local window = window_of(player)
   if not window then
     return
   end
+  local view = {}
+  index_elements(window, view)
   -- The name may change in the station's own window.
-  local name = find(window, "bte_stargate_name")
+  local name = view.bte_stargate_name
   if name.text ~= record.name then
     name.text = record.name
   end
   local caption, sprite = status(record)
-  find(window, "bte_stargate_status").caption = caption
-  find(window, "bte_stargate_status_light").sprite = sprite
+  view.bte_stargate_status.caption = caption
+  view.bte_stargate_status_light.sprite = sprite
   local charge = Gate.charge(record)
-  local bar = find(window, "bte_stargate_charge")
-  bar.value = charge
-  find(window, "bte_stargate_charge_label").caption = {"bte-stargate-gui.charge", math.floor(charge * 100 + 0.5)}
+  view.bte_stargate_charge.value = charge
+  view.bte_stargate_charge_label.caption = {"bte-stargate-gui.charge", math.floor(charge * 100 + 0.5)}
   local flow = Gate.power_flow(record)
   for _, key in pairs({"upkeep", "charging", "leak"}) do
-    find(window, "bte_stargate_power_" .. key).caption = watts(flow[key])
+    view["bte_stargate_power_" .. key].caption = watts(flow[key])
   end
 end
 

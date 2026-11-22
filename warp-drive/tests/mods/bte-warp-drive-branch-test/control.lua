@@ -345,6 +345,10 @@ script.on_nth_tick(10, function()
         "raising speed from 60 to 200 km/s and power from 200 MW to 1 GW changed the signal by %.4gx, expected %g to %g: %s",
         speed_power_gain, SPEED_POWER_GAIN_MINIMUM, SPEED_POWER_GAIN_MAXIMUM, detail))
     end
+    local power_iface = platform.surface.find_entities_filtered({name = "bte-warp-drive-power-interface"})[1]
+    if not power_iface or math.abs(power_iface.power_usage * 60 - 1e9) > 1e3 then
+      fail("a 1 GW detector fed in full for >300 ticks did not enter direct steady-draw mode")
+    end
     if EXPECT_LOCAL then
       storage.branch_marker = "WARP_TEST_PASS: local research branch accelerated platform laboratories only"
     else

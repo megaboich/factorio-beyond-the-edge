@@ -46,6 +46,10 @@ local function between(low, high)
   return low + math.random() * (high - low)
 end
 
+-- Reused scratch tables so per-tick movement and 10-tick posing allocate nothing.
+local TARGET = {0, 0}
+local COLOR = {0, 0, 0, 0}
+
 -- A pastel colour of `hue` (0 to 1, wrapping), premultiplied by `alpha` for additive drawing.
 local function pastel(hue, alpha)
   local h = (hue % 1) * 6
@@ -59,14 +63,32 @@ local function pastel(hue, alpha)
   elseif i == 3 then r, g, b = p, q, 1
   elseif i == 4 then r, g, b = t, p, 1
   else r, g, b = 1, p, q end
-  return {r = r * alpha, g = g * alpha, b = b * alpha, a = alpha}
+  COLOR[1], COLOR[2], COLOR[3], COLOR[4] = r * alpha, g * alpha, b * alpha, alpha
+  return COLOR
+end
+
+-- Flattens legacy `anomaly.layers` records from older saves so the hot per-tick loop indexes fields directly.
+local function upgrade_anomaly(anomaly)
+  local layers = anomaly.layers
+  if layers then
+    local l1, l2 = layers[1], layers[2]
+    anomaly.dx1, anomaly.dy1, anomaly.s1, anomaly.t1, anomaly.sp1, anomaly.obj1 =
+      l1.dx, l1.dy, l1.stretch, l1.turn, l1.spin, l1.object
+    anomaly.dx2, anomaly.dy2, anomaly.s2, anomaly.t2, anomaly.sp2, anomaly.obj2 =
+      l2.dx, l2.dy, l2.stretch, l2.turn, l2.spin, l2.object
+    anomaly.layers = nil
+  end
 end
 
 local function destroy_anomaly(anomaly)
-  for _, layer in pairs(anomaly.layers) do
-    if layer.object.valid then
-      layer.object.destroy()
-    end
+  if anomaly.layers then
+    upgrade_anomaly(anomaly)
+  end
+  if anomaly.obj1 and anomaly.obj1.valid then
+    anomaly.obj1.destroy()
+  end
+  if anomaly.obj2 and anomaly.obj2.valid then
+    anomaly.obj2.destroy()
   end
 end
 
@@ -77,11 +99,18 @@ local function spawn(surface, bounds, pre_aged)
   local age = pre_aged and math.random(0, life - 1) or 0
   local angle = math.random() * 2 * math.pi
   local speed = DRIFT * math.sqrt(math.random())
-  local anomaly = {
+  local x = between(bounds.left, bounds.right)
+  local y = between(bounds.top, bounds.bottom)
+  local first = math.random(SHAPES)
+  local second = (first + math.random(SHAPES - 1) - 1) % SHAPES + 1
+  local dx1, dy1 = between(-6, 6), between(-6, 6)
+  local dx2, dy2 = between(-6, 6), between(-6, 6)
+  local ttl = life - age + FIELD_FADE_TICKS
+  return {
     born = game.tick - age,
     life = life,
-    x = between(bounds.left, bounds.right),
-    y = between(bounds.top, bounds.bottom),
+    x = x,
+    y = y,
     vx = speed * math.cos(angle),
     vy = SOUTH_SPEED + speed * math.sin(angle),
     scale_from = between(SCALE_MIN, SCALE_MAX),
@@ -91,52 +120,58 @@ local function spawn(surface, bounds, pre_aged)
     morph_phase = math.random() * 2 * math.pi,
     -- Radians per tick: the two shapes trade places every 10 to 25 seconds.
     morph_rate = math.pi / math.random(600, 1500),
-    layers = {}
+    dx1 = dx1, dy1 = dy1, s1 = between(0.75, 1.3), t1 = math.random(), sp1 = between(-SPIN, SPIN),
+    obj1 = rendering.draw_animation({
+      animation = ANIMATION,
+      animation_speed = 0,
+      animation_offset = first - 1,
+      surface = surface,
+      target = {x + dx1, y + dy1},
+      render_layer = LAYER,
+      tint = {0, 0, 0, 0},
+      time_to_live = ttl
+    }),
+    dx2 = dx2, dy2 = dy2, s2 = between(0.75, 1.3), t2 = math.random(), sp2 = between(-SPIN, SPIN),
+    obj2 = rendering.draw_animation({
+      animation = ANIMATION,
+      animation_speed = 0,
+      animation_offset = second - 1,
+      surface = surface,
+      target = {x + dx2, y + dy2},
+      render_layer = LAYER,
+      tint = {0, 0, 0, 0},
+      time_to_live = ttl
+    })
   }
-  local first = math.random(SHAPES)
-  for index = 1, 2 do
-    local shape = index == 1 and first or (first + math.random(SHAPES - 1) - 1) % SHAPES + 1
-    local stretch = between(0.75, 1.3)
-    anomaly.layers[index] = {
-      dx = between(-6, 6),
-      dy = between(-6, 6),
-      stretch = stretch,
-      turn = math.random(),
-      spin = between(-SPIN, SPIN),
-      object = rendering.draw_animation({
-        animation = ANIMATION,
-        animation_speed = 0,
-        animation_offset = shape - 1,
-        surface = surface,
-        target = {anomaly.x, anomaly.y},
-        render_layer = LAYER,
-        tint = {0, 0, 0, 0},
-        time_to_live = life - age + FIELD_FADE_TICKS
-      })
-    }
-  end
-  return anomaly
 end
 
--- Scales, turns, recolours, and fades one anomaly for the current tick.
-local function pose(anomaly, field)
-  local age = game.tick - anomaly.born
+-- Scales, turns, recolours, and fades one anomaly for `now`. Positions are already updated by
+-- Anomalies.tick; slow sub-degree spin and scale changes update every 30 ticks.
+local function pose(anomaly, field, now)
+  local age = now - anomaly.born
   local progress = age / anomaly.life
   local fade = smoothstep(progress / FADE) * smoothstep((1 - progress) / FADE) * field * BRIGHTNESS
-  local scale = anomaly.scale_from + (anomaly.scale_to - anomaly.scale_from) * smoothstep(progress)
   local hue = anomaly.hue_from + anomaly.hue_shift * progress
   local morph = 0.5 + 0.5 * math.cos(anomaly.morph_phase + anomaly.morph_rate * age)
-  local x = anomaly.x
-  local y = anomaly.y
-  for index, layer in pairs(anomaly.layers) do
-    local weight = index == 1 and morph or 1 - morph
-    local object = layer.object
-    object.target = {x + layer.dx, y + layer.dy}
-    object.x_scale = scale * layer.stretch
-    object.y_scale = scale / layer.stretch
-    object.orientation = (layer.turn + layer.spin * age) % 1
-    -- Each shape keeps some presence, so the anomaly never thins to one half.
-    object.color = pastel(hue + (index - 1) * 0.08, fade * (0.3 + 0.7 * weight))
+  local obj1, obj2 = anomaly.obj1, anomaly.obj2
+  if not anomaly.posed_at or now - anomaly.posed_at >= 30 then
+    anomaly.posed_at = now
+    local scale = anomaly.scale_from + (anomaly.scale_to - anomaly.scale_from) * smoothstep(progress)
+    local s1, s2 = anomaly.s1, anomaly.s2
+    obj1.x_scale = scale * s1
+    obj1.y_scale = scale / s1
+    obj1.orientation = (anomaly.t1 + anomaly.sp1 * age) % 1
+    obj2.x_scale = scale * s2
+    obj2.y_scale = scale / s2
+    obj2.orientation = (anomaly.t2 + anomaly.sp2 * age) % 1
+  end
+  -- Each shape keeps some presence, so the anomaly never thins to one half.
+  local a1 = fade * (0.3 + 0.7 * morph)
+  local a2 = fade * (1 - 0.7 * morph)
+  if not anomaly.a1 or math.abs(a1 - anomaly.a1) > 0.003 or math.abs(a2 - anomaly.a2) > 0.003 then
+    anomaly.a1, anomaly.a2 = a1, a2
+    obj1.color = pastel(hue, a1)
+    obj2.color = pastel(hue + 0.08, a2)
   end
 end
 
@@ -151,11 +186,33 @@ function Anomalies.destroy(record)
   record.anomaly_field_until = nil
 end
 
+-- Whether any connected player is viewing `surface` directly or through an open Warp Drive window.
+-- Purely visual per-tick LuaRendering updates are skipped while nobody can see the surface, and
+-- wrap cleanly to the current tick the instant a player looks at the platform.
+local function surface_viewed(surface, platform_index)
+  for _, player in pairs(game.connected_players) do
+    if player.surface == surface then
+      return true
+    end
+    if platform_index then
+      local frame = player.gui.screen.bte_warp_drive_window
+      if frame and frame.tags and frame.tags.platform_index == platform_index then
+        return true
+      end
+    end
+  end
+  return false
+end
+
 --- Advances anomaly positions every tick so clouds glide smoothly southward at a speed proportional
 -- to the active warp level, wrapping inside the off-screen effect margin.
-function Anomalies.tick(record)
+function Anomalies.tick(record, force_sync)
   local anomalies = record.anomalies
   if not anomalies then
+    return
+  end
+  local surface = record.surface or (record.entity and record.entity.valid and record.entity.surface)
+  if not force_sync and (not surface or not surface_viewed(surface, record.platform_index)) then
     return
   end
   local tick = game.tick
@@ -165,30 +222,42 @@ function Anomalies.tick(record)
     return
   end
   local bounds = record.anomaly_bounds or record.lightning_bounds
-  local width = bounds and (bounds.right - bounds.left) or 0
-  local height = bounds and (bounds.bottom - bounds.top) or 0
+  local left = bounds and bounds.left or 0
+  local right = bounds and bounds.right or 0
+  local top = bounds and bounds.top or 0
+  local bottom = bounds and bounds.bottom or 0
+  local width = right - left
+  local height = bottom - top
   local step = dt * math.max(1, record.warp_level or 1)
-  for _, anomaly in pairs(anomalies) do
-    if anomaly.vy < SOUTH_SPEED * 0.5 then
-      anomaly.vy = SOUTH_SPEED
+  local target = TARGET
+  for index = 1, #anomalies do
+    local anomaly = anomalies[index]
+    if anomaly.layers then
+      upgrade_anomaly(anomaly)
     end
-    anomaly.x = anomaly.x + anomaly.vx * step
-    anomaly.y = anomaly.y + anomaly.vy * step
-    if width > 0 then
-      if anomaly.x < bounds.left then
-        anomaly.x = anomaly.x + width
-      elseif anomaly.x > bounds.right then
-        anomaly.x = anomaly.x - width
-      end
+    local vy = anomaly.vy
+    if vy < SOUTH_SPEED * 0.5 then
+      vy = SOUTH_SPEED
+      anomaly.vy = vy
     end
-    if height > 0 and anomaly.y > bounds.bottom then
-      anomaly.y = anomaly.y - height
+    local x = anomaly.x + anomaly.vx * step
+    local y = anomaly.y + vy * step
+    if width > 0 and (x < left or x > right) then
+      x = left + (x - left) % width
     end
-    for _, layer in pairs(anomaly.layers) do
-      local object = layer.object
-      if object.valid then
-        object.target = {anomaly.x + layer.dx, anomaly.y + layer.dy}
-      end
+    if height > 0 and y > bottom then
+      y = top + (y - top) % height
+    end
+    anomaly.x, anomaly.y = x, y
+    local obj1 = anomaly.obj1
+    if obj1.valid then
+      target[1], target[2] = x + anomaly.dx1, y + anomaly.dy1
+      obj1.target = target
+    end
+    local obj2 = anomaly.obj2
+    if obj2.valid then
+      target[1], target[2] = x + anomaly.dx2, y + anomaly.dy2
+      obj2.target = target
     end
   end
 end
@@ -225,22 +294,34 @@ function Anomalies.update(record, surface, bounds, active)
   end
   for index = #anomalies, 1, -1 do
     local anomaly = anomalies[index]
-    local valid = anomaly.layers[1].object.valid and anomaly.layers[2].object.valid
+    if anomaly.layers then
+      upgrade_anomaly(anomaly)
+    end
+    local valid = anomaly.obj1.valid and anomaly.obj2.valid
     if not valid or tick - anomaly.born >= anomaly.life then
       destroy_anomaly(anomaly)
       table.remove(anomalies, index)
     end
   end
+  local spawned_from = #anomalies + 1
   if active and bounds then
     local target = math.min(MAX_ANOMALIES, math.floor(
       (bounds.right - bounds.left) * (bounds.bottom - bounds.top) / TILES_PER_ANOMALY))
-    for _ = #anomalies + 1, target do
+    for _ = spawned_from, target do
       anomalies[#anomalies + 1] = spawn(surface, bounds, first_fill)
     end
   end
-  Anomalies.tick(record)
-  for _, anomaly in pairs(anomalies) do
-    pose(anomaly, field)
+  if surface_viewed(surface, record.platform_index) then
+    Anomalies.tick(record, true)
+    for index = 1, #anomalies do
+      pose(anomalies[index], field, tick)
+    end
+  else
+    -- Pose newly created anomalies once so switching Remote View onto an in-flight platform shows
+    -- scaled, tinted clouds on the very first frame.
+    for index = spawned_from, #anomalies do
+      pose(anomalies[index], field, tick)
+    end
   end
 end
 

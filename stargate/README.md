@@ -113,6 +113,8 @@ The rules for trains:
 
 The arrival track has an invisible signal of its own at the gate's edge, which tells the partner whether the way out is free.
 
+When a train with a locomotive only at the head curves into a gate from the left (turning east from south into the northbound approach), Factorio's renderer can jump the remaining wagons along the track by up to two tiles at the moment the locomotive disappears into the ring, because the engine flips which end of the wagon-only remainder counts as its front. Every carriage's real position still moves smoothly and the train arrives whole. Bringing the approach track in straight or from the right avoids the jump, and attaching another locomotive at the rear of the train as well as at the head largely avoids it too.
+
 An open gate with no partner sends you somewhere random: to a planet your force has visited, picked at random (the one you are on included), at the unexplored area closest to that planet's landing site, the nearest chunk your map has not yet charted. There is no gate there: the reversed ripples converge in mid-air on the spot where you appear, and there is no run out. Nothing checks the ground: you may land on an island or by a lake, or among enemies, so bring a jetpack or a way home. A planet counts as visited when your map shows its landing site, as it does once anyone of your force has landed there.
 
 ## Balance
