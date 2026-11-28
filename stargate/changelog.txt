@@ -14,5 +14,7 @@ Date: 2026-11-12
     - Added the Stargate construction kit, which holds the scarce high-end parts of a gate and some structural material.
     - Added the 14x14 Stargate construction site, which takes exactly the bulk materials, a whole number of stacks each.
     - Added the Stargate, built over a minute in six phases with a progress bar, starting from the construction site's own look. It can only be destroyed.
-    - Added the Experimental gates technology.
+    - Added the technology progression: Experimental gates (kit and unpaired random jumps), Controllable Stargate jumps (gate pairing, researchable once a character has travelled through an unpaired gate), and Stargate rail transit (train station mode).
+    - On Aquilo a gate freezes unless heat pipes keep it warm (1 MW): frozen, it cannot charge or open, but still receives. The construction site and the gate under construction keep working in the cold and show frozen pictures while unheated.
+    - Unpaired random destinations now verify collision-free solid ground for the traveller or vehicle, skipping chunks covered by water or lava.
     - The gate is a modern steel ring between two support towers, standing in a concrete basin with a trench that keeps the whole ring visible.

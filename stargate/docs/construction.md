@@ -27,3 +27,7 @@ No setting centres a 14-wide entity on an odd coordinate, so the boxes are offse
 - Entity corpses and anything else keyed to the origin sit one tile north-west of the building's centre.
 - `tests/mods/bte-stargate-runtime-test` pins the snapping and that rails fit flush against all edges but not overlapping, and `tests/prototypes.py` that every sprite's shift follows the boxes.
 - Blueprint and cursor snapping still need a visible-game check.
+
+## Frost
+
+The site and the gate under construction keep working in the cold, but where entities need heating (Aquilo) they look frozen while unheated. A chest and a simple entity cannot freeze, so `scripts/construction.lua` places a hidden `bte-stargate-thermometer` over the footprint: an assembling machine with no collision and the finished gate's `1 MW` heating need, which heat pipes thaw like any machine. `storage.cold`, keyed by surface and position (which the site and the gate under construction share), holds it and, for a site, `bte-stargate-site-frost`, the site's frozen picture placed a hair south of the site so it is drawn over it. The gate under construction switches to its frozen stage pictures, variations 7 to 12. The thermometer goes when the finished gate replaces the gate under construction (which freezes by itself) or the site or build is removed.

@@ -6,7 +6,7 @@ Homecoming Journey is the campaign that brings the Beyond the Edge family togeth
 
 The journey begins with an unexplained signal on Nauvis. It ends with a massive gate carried to the far end of the Shattered Planet route. Between those moments, the player fights for remote footholds, deciphers an ancient technology, and turns scattered ruins into a network connecting planetary factories.
 
-> This is a planned campaign, not implemented gameplay. Power figures are campaign design targets. The implementation roadmap and candidate balance live in [PLAN.md](PLAN.md). Standalone combat belongs to [Mechanoids](../mechanoids/VISION.md), and standalone gate construction and transport belong to [Stargate](../stargate/VISION.md).
+> This is a planned campaign, not implemented gameplay. Power figures are campaign design targets. The implementation roadmap and candidate balance live in [PLAN.md](PLAN.md). Standalone combat belongs to [Mechanoids](../mechanoids/VISION.md), and standalone gate construction and transport belong to [Stargate](../stargate/README.md).
 
 ## The next chapter of Beyond the Edge
 
@@ -15,7 +15,7 @@ Homecoming Journey has hard requirements on all four other family mods:
 - [Space Lab](../spacelab/README.md) makes self-sufficient orbital industry possible.
 - [Warp Drive](../warp-drive/README.md) turns deep-space exploration into research and faster travel.
 - [Mechanoids — Guardians of the Ruins](../mechanoids/VISION.md) supplies the ancient mechanical defenders and encounter behavior.
-- [Stargate](../stargate/VISION.md) supplies gate construction, player transfer, pairing, and train logistics.
+- [Stargate](../stargate/README.md) supplies gate construction, player transfer, pairing, and train logistics.
 
 The campaign gives these capabilities a destination and a personal reason to keep building: learn to live in space, venture beyond familiar routes, and discover a way home. Unlike the other four mods, Homecoming Journey is not standalone. Installing Mechanoids and Stargate together without this campaign does not silently enable its story or restrictions.
 

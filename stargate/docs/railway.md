@@ -13,7 +13,7 @@ The gate never rotates, so lanes are always north-south: trains enter heading no
 - The hidden `bte-stargate-station` train stop beside the departure lane at the far end of the hidden rails, behind the ring, named after the gate and with no collision box. Trains brake to stop there, 1.4 tiles short of the rails' end, so they still cross the edge, where they are taken, at speed: an automatic train from 370 tiles out crossed it at 0.29 tiles a tick (measured). At the edge it would have stopped with its front 0.6 inside, crawling up to it. The gate window opens that stop's own window instead (`player.opened = station` works although the stop is not selectable) and attaches itself to its right as a relative GUI anchored to `train_stop_gui` (`scripts/gui.lua`).
 - The signals, below.
 
-`Gate.remove_railway` removes the rails, the station, and the signals, and clears carriages off the rails. The mode cannot change while a carriage is on the gate's rails or a transfer runs either way.
+`Gate.remove_railway` removes the rails, the station, and the signals, and clears carriages off the rails. Enabling station mode requires `bte-stargate-rail-transit` (`Railway.can_enable`), and neither the station mode nor the gate's pairing can change while a train is passing through (`Railway.in_transfer`; mode changes also require empty gate rails).
 
 `record.rail_layout` marks the layout version (`LAYOUT`), and `Railway.maintain` (every 30 ticks) upgrades older gates there rather than in `on_configuration_changed`, because a reinstall with the same mod version raises none: a gate built before the hidden rails left trains grinding against the old rail end in the ring.
 
@@ -78,7 +78,7 @@ If either gate is removed during a transfer (`Railway.gate_removed`), carriages 
 - A transfer costs no power beyond keeping the gate open, and an automatic train let in or a started train goes even if the gate closes.
 - A train held at the edge stops at once, from whatever speed. It happens only when the partner stops being a station, or another train is still arriving there, while a train is in the gate's block. If the gate stays a station with no partner, the train waits there in manual mode, with no alert, until the gate is paired again or the train is moved.
 - An arriving train that would slow down before all of it is through is pushed straight on, past signals and forks, so it can miss its branch, run past a red signal, or run into the train ahead; it then finds a new path from where it ends up. A train driven by hand, or one whose first locomotive facing out has not come through yet, is pushed straight out the same way. Interrupts can see a train that is only partly through.
-- Untested: a train limit on the gate's station; LTN and Cybersyn; whether `clone` keeps quality and spoilage (assumed); the look of trains at the ring beyond the send glitch above.
+- Untested: LTN and Cybersyn; the look of trains at the ring beyond the send glitch above. (`trains_limit` on the gate's station and rolling-stock quality, spoilage, tags, fluid temperature, equipment grids, burner progress, artillery ammo, temporary stops, and dropped rail-target stops are covered by the runtime suite.)
 
 ## Compared with RiftRail
 

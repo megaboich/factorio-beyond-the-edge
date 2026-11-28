@@ -19,4 +19,15 @@ data:extend({source})
 local load = table.deepcopy(data.raw["electric-energy-interface"]["electric-energy-interface"])
 load.name = "bte-stargate-test-load"
 load.energy_source.usage_priority = "secondary-input"
-data:extend({load})
+data:extend({
+  load,
+  {
+    type = "item-with-tags",
+    name = "bte-stargate-test-tagged",
+    icon = "__base__/graphics/icons/electronic-circuit.png",
+    icon_size = 64,
+    stack_size = 1
+  }
+})
+-- Lets the runtime test verify rolling-stock equipment grid conservation across surface cloning.
+data.raw.locomotive.locomotive.equipment_grid = data.raw.locomotive.locomotive.equipment_grid or "medium-equipment-grid"

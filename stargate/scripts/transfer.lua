@@ -265,7 +265,7 @@ function Transfer.start(entity, record)
       return
     end
   else
-    local surface, position = Destinations.pick(record.entity.force)
+    local surface, position = Destinations.pick(record.entity.force, entity.name)
     if not (surface and allowed(entity, surface)) then
       return
     end
@@ -301,21 +301,62 @@ function Transfer.start(entity, record)
   }
 end
 
+local function fallback_landing(entity)
+  local force = entity and entity.valid and entity.force or game.forces.player
+  local name = entity and entity.valid and entity.name or "character"
+  for _, candidate in pairs({game.surfaces.nauvis, (Destinations.planets(force))[1]}) do
+    if candidate and candidate.valid then
+      local spawn = force.get_spawn_position(candidate)
+      return candidate, candidate.find_non_colliding_position(name, spawn, 32, 0.5) or spawn, nil, false
+    end
+  end
+  for _, candidate in pairs(game.surfaces) do
+    if candidate.valid and candidate.name ~= LIMBO then
+      return candidate, {x = 0, y = 0}, nil, false
+    end
+  end
+end
+
 -- Where the traveller comes out: its random destination, or the partner, or the sending gate if the
--- partner is gone, or failing both where it went in. The third result is the arrival gate, if any.
+-- partner is gone or completely blocked, or failing all of those where it went in (or Nauvis if its
+-- origin surface was deleted). Third result is the arrival gate, if any; fourth is true when an
+-- uncontrolled jump reached its random destination.
 local function landing(transfer)
   local name = transfer.entity.valid and transfer.entity.name or "character"
   local random = transfer.random and game.get_surface(transfer.random.surface)
-  if random then
+  if random and random.valid then
     local position = transfer.random.position
-    return random, random.find_non_colliding_position(name, position, 16, 0.5) or position, nil
+    local found = random.find_non_colliding_position(name, position, 16, 0.5)
+    if found then
+      return random, found, nil, true
+    end
   end
-  local target = Gate.get(transfer.to) or Gate.get(transfer.from)
+  local target = Gate.get(transfer.to)
   if target then
-    local surface, position = Gate.arrival(target, name)
-    return surface, position, target.entity
+    local surface, position, ok = Gate.arrival(target, name)
+    if ok then
+      return surface, position, target.entity, false
+    end
+    local source = Gate.get(transfer.from)
+    if source and source ~= target then
+      local src_surface, src_position, src_ok = Gate.arrival(source, name)
+      if src_ok then
+        return src_surface, src_position, source.entity, false
+      end
+    end
+    return surface, position, target.entity, false
   end
-  return game.get_surface(transfer.origin.surface), transfer.origin.position, nil
+  local source = Gate.get(transfer.from)
+  if source then
+    local surface, position = Gate.arrival(source, name)
+    return surface, position, source.entity, false
+  end
+  local origin = game.get_surface(transfer.origin.surface)
+  if origin and origin.valid then
+    local position = transfer.origin.position
+    return origin, origin.find_non_colliding_position(name, position, 16, 0.5) or position, nil, false
+  end
+  return fallback_landing(transfer.entity)
 end
 
 -- Leaving is over: the camera moves to the arrival gate while the reversed ripples play on it.
@@ -325,6 +366,9 @@ local function arrive(id, transfer)
   end
   transfer.arriving = game.tick
   local surface, position, gate = landing(transfer)
+  if not surface then
+    return
+  end
   if gate then
     transfer.passage = play("bte-stargate-arrival", surface, gate.position, ARRIVAL_TICKS)
   else
@@ -402,8 +446,20 @@ local function finish(id, transfer)
     leave_all(transfer.watchers)
     return
   end
-  local surface, position, gate = landing(transfer)
+  local surface, position, gate, uncontrolled = landing(transfer)
+  if not surface then
+    leave_all(transfer.watchers)
+    return
+  end
+  local riders = uncontrolled and crew(entity) or nil
   entity = move(entity, position, surface)
+  if uncontrolled and entity.valid and entity.surface == surface and riders then
+    for _, character in pairs(riders) do
+      if character.valid then
+        Gate.record_jump(character.force)
+      end
+    end
+  end
   if entity.type ~= "character" then
     entity.disabled_by_script = false
   end

@@ -52,6 +52,14 @@ local stage_pictures = {}
 for stage, path in ipairs(stage_sprites) do
   stage_pictures[stage] = picture(path, false)
 end
+-- The same stages frozen (Aquilo, unheated; tools/sprites/lib/frost.js), as variations stages + 1
+-- to 2 * stages: scripts/construction.lua shows these while the site's thermometer is frozen.
+for stage, path in ipairs(stage_sprites) do
+  stage_pictures[#stage_sprites + stage] = {layers = {
+    sprite(path .. "frozen", {}),
+    sprite(path .. "shadow", {draw_as_shadow = true})
+  }}
+end
 
 -- The 2x2 build grid snaps a 14-tile entity's origin to even coordinates, but the layout wants the
 -- building centred on odd ones: rails sit at odd coordinates, and four tiles of platform, a rail, a
@@ -154,6 +162,13 @@ data:extend({
     flags = {"placeable-neutral", "player-creation", "get-by-unit-number", "not-deconstructable",
       "not-blueprintable", "not-rotatable", "not-upgradable"},
     max_health = 20000,
+    -- Freezes where entities need heating (Aquilo) unless heat pipes keep it warm; scripts/gate.lua
+    -- then keeps it from charging or opening, while it still receives travellers.
+    heating_energy = "1MW",
+    -- Alert icons (frozen, and the like) and alt-mode icons on the footprint's centre, one tile south-east
+    -- of the origin; alert_icon_shift is what moves the frozen icon (seen in game).
+    alert_icon_shift = {1, 1},
+    icon_draw_specification = {shift = {1, 1}},
     -- A building's mask without `player` and `is_object`, the two layers characters collide on, so they
     -- walk through the footprint and can step into the portal (scripts/gate.lua).
     collision_mask = {layers = {item = true, meltable = true, object = true, water_tile = true,
@@ -282,17 +297,28 @@ local function companion(name, render_layer, picture, lights)
       {layers = {track("rails-double"), track("chevrons-right")}},
       {layers = {track("rails-double"), track("chevrons-left")}}
     }
+  elseif lights == "frozen" then
+    -- One frozen picture (the floor's frost).
+    entity.pictures = {{layers = {util.sprite_load(gate_sprites .. picture,
+      {scale = 0.5, priority = "high", shift = {0, -BODY}})}}}
   elseif lights and picture == "main" then
     -- Cyan and red, for no station track, one track, and two tracks: the station's pictures have the
     -- track cut out of the building where it runs over the ring's lower arc, and their lights hidden
     -- behind it. Variation (mode * 2) + 1 is cyan, + 2 red, mode 0 none, 1 one track, 2 two tracks.
+    -- Variations 7 to 9 are the three frozen, lamps dark, for modes 0 to 2.
     entity.pictures = {}
     for _, suffix in pairs({"", "-single", "-double"}) do
       entity.pictures[#entity.pictures + 1] = companion_picture(picture .. suffix, lights .. suffix)
       entity.pictures[#entity.pictures + 1] = companion_picture(picture .. suffix, lights:gsub("^glow%-lights", "glow-lights-red") .. suffix)
     end
+    for _, suffix in pairs({"", "-single", "-double"}) do
+      entity.pictures[#entity.pictures + 1] = {layers = {util.sprite_load(gate_sprites .. picture .. suffix .. "-frozen",
+        {scale = 0.5, priority = "high", shift = {0, -BODY}})}}
+    end
   elseif lights then
-    entity.pictures = {companion_picture(picture, lights), companion_picture(picture, lights:gsub("^glow%-lights", "glow-lights-red"))}
+    -- Cyan, red, and frozen (3).
+    entity.pictures = {companion_picture(picture, lights), companion_picture(picture, lights:gsub("^glow%-lights", "glow-lights-red")),
+      {layers = {util.sprite_load(gate_sprites .. picture .. "-frozen", {scale = 0.5, priority = "high", shift = {0, -BODY}})}}}
   else
     -- The open portal's veil, VEIL_FRAMES frames looping once every 64 ticks (models/stargate.js).
     entity.animations = {util.sprite_load(gate_sprites .. picture, {
@@ -311,8 +337,61 @@ data:extend({
   companion("bte-stargate-veil", "object", "glow-veil"),
   companion("bte-stargate-veil-top", "elevated-object", "glow-veil-high"),
   -- Above the gate's floor and the ground, under trains and everything else.
-  companion("bte-stargate-tracks", "floor-mechanics", nil, "track")
+  companion("bte-stargate-tracks", "floor-mechanics", nil, "track"),
+  -- The frozen floor, over the gate's own floor and under its station track.
+  companion("bte-stargate-floor-frost", "floor-mechanics-under-corpse", "floor-frozen", "frozen")
 })
+
+-- The construction site's frozen picture, placed by scripts/construction.lua over a site whose
+-- thermometer is frozen. A chest has one picture, so this covers it: it stands a hair south of the
+-- site so Factorio draws it after the site, its picture shifted back by as much.
+local FROST_DY = 0.05
+data:extend({{
+  type = "simple-entity-with-owner",
+  name = "bte-stargate-site-frost",
+  icon = "__bte-stargate__/graphics/icons/construction-kit.png",
+  icon_size = 64,
+  localised_name = {"entity-name.bte-stargate-construction-site"},
+  flags = {"placeable-off-grid", "not-on-map", "not-blueprintable", "not-deconstructable", "not-selectable-in-game",
+    "not-upgradable", "no-copy-paste", "not-in-kill-statistics"},
+  hidden = true,
+  selectable_in_game = false,
+  collision_box = {{-5.9, -5.9 - FROST_DY}, {7.9, 7.9 - FROST_DY}},
+  collision_mask = {layers = {}},
+  drawing_box_vertical_extension = 9,
+  render_layer = "object",
+  picture = {layers = {util.sprite_load(site_sprites .. "frozen", {scale = 0.5, priority = "high", shift = {1, 1 - FROST_DY}})}}
+}})
+
+-- Whether a construction site or a gate under construction is heated. Neither a chest nor a simple
+-- entity can freeze, so this hidden machine over the same footprint does, as the finished gate
+-- would: with the gate's heating need, so a warm site promises a warm gate. scripts/construction.lua
+-- reads its `frozen`; it works nothing and collides with nothing.
+data:extend({{
+  type = "assembling-machine",
+  name = "bte-stargate-thermometer",
+  icon = "__bte-stargate__/graphics/icons/stargate.png",
+  icon_size = 64,
+  localised_name = {"entity-name.bte-stargate-construction-site"},
+  flags = {"placeable-off-grid", "not-on-map", "not-blueprintable", "not-deconstructable", "not-selectable-in-game",
+    "not-upgradable", "no-copy-paste", "not-in-kill-statistics", "not-rotatable"},
+  hidden = true,
+  selectable_in_game = false,
+  collision_box = footprint.collision_box,
+  collision_mask = {layers = {}},
+  heating_energy = "1MW",
+  -- No frozen icon of its own: the site's frozen picture says it.
+  alert_icon_scale = 0,
+  icon_draw_specification = {scale = 0, scale_for_many = 0},
+  crafting_categories = {"bte-stargate-portal"},
+  crafting_speed = 1,
+  energy_usage = "1W",
+  energy_source = {type = "void"},
+  module_slots = 0,
+  allowed_effects = {},
+  show_recipe_icon = false,
+  show_recipe_icon_on_map = false
+}})
 
 -- The portal forming and collapsing (models/stargate.js), played once by scripts/gate.lua as it opens
 -- and closes, each split at the ring's centre like the veil. Each frame lasts four ticks; the opening

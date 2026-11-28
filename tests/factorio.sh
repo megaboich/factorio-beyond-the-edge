@@ -82,6 +82,9 @@ EOF
     shift
     fill_mods "$@"
     rm -rf "$WRITE/script-output"
+    # Factorio's crop cache keeps a sprite's old bounds when the file changes under the same mod
+    # version, cutting off what a re-rendered, larger sheet added; screenshots must show the files.
+    rm -f "$WRITE/crop-cache.dat"
     # Started outside Steam, the Steam build's window asks Steam to restart it, and Steam then runs
     # a second copy on its own while this one exits at once. A steam_appid.txt (Factorio's Steam app
     # ID) in the working directory tells the Steam API that the game may run as it is.

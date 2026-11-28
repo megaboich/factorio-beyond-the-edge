@@ -470,7 +470,58 @@ local steps = {
     source.electric_buffer_size = 1e10
     source.energy = 1e10
     storage.source = source
-    remote.call("bte-stargate-test", "pair", a.unit_number, b.unit_number)
+    expect("pairing is locked before Controllable Stargate jumps", remote.call("bte-stargate-test", "can_pair", "player"), false)
+    expect("station mode is locked before Stargate rail transit", remote.call("bte-stargate-test", "can_station", "player"), false)
+    expect("pair() refuses while locked", remote.call("bte-stargate-test", "pair", a.unit_number, b.unit_number), false)
+    expect("locked pair() leaves partner unset", remote.call("bte-stargate-test", "state", b.unit_number).partner, nil)
+    expect("set_station() refuses while locked", remote.call("bte-stargate-test", "set_station", a.unit_number, "single"), false)
+    game.forces.player.technologies["bte-stargate-experimental-gates"].researched = true
+    expect("controlled jumps starts closed to research", game.forces.player.technologies["bte-stargate-controlled-jumps"].enabled, false)
+  end},
+
+  {80, function()
+    local a = storage.a
+    expect("an unpaired experimental gate opens once charged", a.status, defines.entity_status.working)
+    -- An enemy wandering through an unpaired gate must not unlock the player force's research.
+    storage.stray_biter = surface().create_entity({name = "small-biter", position = {1, 3}, force = "enemy"})
+  end},
+
+  {220, function()
+    expect("an enemy jump does not open controlled jumps to research",
+      game.forces.player.technologies["bte-stargate-controlled-jumps"].enabled, false)
+    for _, biter in pairs(surface().find_entities_filtered({name = "small-biter"})) do
+      biter.destroy()
+    end
+    storage.pioneer = surface().create_entity({name = "character", position = {1, 3}, force = "player"})
+  end},
+
+  {100, function()
+    expect("pioneer waits in limbo mid-jump", storage.pioneer.valid and storage.pioneer.surface.name, "bte-stargate-limbo")
+    expect("controlled jumps opens only after landing, not in limbo",
+      game.forces.player.technologies["bte-stargate-controlled-jumps"].enabled, false)
+  end},
+
+  {120, function()
+    local pioneer = storage.pioneer
+    storage.pioneer = nil
+    expect("pioneer arrives on the planet from an uncontrolled jump", pioneer.valid and pioneer.surface.name, "nauvis")
+    local pchunk = {x = math.floor(pioneer.position.x / 32), y = math.floor(pioneer.position.y / 32)}
+    expect("pioneer lands in an uncharted chunk", not game.forces.player.is_chunk_charted(surface(), pchunk), true)
+    pioneer.destroy()
+    expect("an uncontrolled character jump opens controlled jumps to research",
+      game.forces.player.technologies["bte-stargate-controlled-jumps"].enabled, true)
+    expect("pairing still waits for paid Controllable Stargate jumps research",
+      remote.call("bte-stargate-test", "can_pair", "player"), false)
+    game.forces.player.technologies["bte-stargate-controlled-jumps"].researched = true
+    expect("Controllable Stargate jumps unlocks pairing", remote.call("bte-stargate-test", "can_pair", "player"), true)
+    expect("station mode still waits for Stargate rail transit", remote.call("bte-stargate-test", "can_station", "player"), false)
+    game.forces.player.technologies["bte-stargate-rail-transit"].researched = true
+    expect("Stargate rail transit unlocks station mode", remote.call("bte-stargate-test", "can_station", "player"), true)
+    local a, b = storage.a, storage.b
+    remote.call("bte-stargate-test", "set_enabled", a.unit_number, false)
+    remote.call("bte-stargate-test", "take_charge", a.unit_number)
+    remote.call("bte-stargate-test", "set_enabled", a.unit_number, true)
+    expect("pair() succeeds once unlocked", remote.call("bte-stargate-test", "pair", a.unit_number, b.unit_number), true)
     expect("pairing is mutual", remote.call("bte-stargate-test", "state", b.unit_number).partner, a.unit_number)
     expect("a paired gate stays closed until charged", a.disabled_by_script, true)
     expect("paired gates short of charge show red lights", red_bodies(), 2)
@@ -511,6 +562,7 @@ local steps = {
     local behavior = a.get_or_create_control_behavior()
     behavior.circuit_enable_disable = true
     behavior.circuit_condition = {first_signal = {type = "virtual", name = "signal-A"}, comparator = ">", constant = 0}
+    expect("a condition on an unwired gate is ignored", remote.call("bte-stargate-test", "circuit_allows", a.unit_number), true)
     local combinator = surface().create_entity({name = "constant-combinator", position = {-6, 6}, force = "player"})
     storage.combinator = combinator
     local wire = combinator.get_wire_connector(defines.wire_connector_id.circuit_red, true)
@@ -1447,6 +1499,383 @@ local steps = {
     game.delete_surface(w.ws)
   end},
 
+  -- Solid-ground random destinations (skipping 100 % water chunks), legacy 0.1.0 save migration,
+  -- force merges & cross-force unpairing, surface deletion mid-limbo, blocked-arrival fallback,
+  -- station train limits, mid-transfer pair refusal, and full character + train cargo conservation.
+  {5, function()
+    -- Cover chunk (0, 0) on Nauvis with water so Destinations.location must skip it for solid ground.
+    local water_tiles, lab_tiles = {}, {}
+    for x = 0, 31 do
+      for y = 0, 31 do
+        water_tiles[#water_tiles + 1] = {name = "water", position = {x, y}}
+        lab_tiles[#lab_tiles + 1] = {name = "lab-dark-1", position = {x, y}}
+      end
+    end
+    surface().set_tiles(water_tiles)
+    for _, proto in ipairs({"character", "tank", "spidertron"}) do
+      local pos = remote.call("bte-stargate-test", "random_location", "player", "nauvis", proto)
+      expect(proto .. " skips an all-water chunk", pos ~= nil and not (pos.x >= 0 and pos.x < 32 and pos.y >= 0 and pos.y < 32), true)
+      if pos then
+        local tile = surface().get_tile(math.floor(pos.x), math.floor(pos.y))
+        expect(proto .. " lands on non-water ground", not tile.collides_with("water_tile"), true)
+      end
+    end
+    surface().set_tiles(lab_tiles)
+
+    -- Legacy 0.1.0 save-upgrade migration & force merges.
+    local legacy_force = game.create_force("bte-test-legacy")
+    local merged_force = game.create_force("bte-test-merged")
+    local fs = game.create_surface("bte-test-forces")
+    fs.generate_with_lab_tiles = true
+    fs.request_to_generate_chunks({0, 0}, 2)
+    fs.force_generate_chunk_requests()
+    local fg1 = fs.create_entity({name = GATE, position = {0, 0}, force = legacy_force, raise_built = true})
+    local fg2 = fs.create_entity({name = GATE, position = {20, 0}, force = legacy_force, raise_built = true})
+    remote.call("bte-stargate-test", "force_legacy_state", fg1.unit_number, fg2.unit_number, "single")
+    remote.call("bte-stargate-test", "rebuild")
+    for _, tech_name in ipairs({"bte-stargate-experimental-gates",
+        "bte-stargate-controlled-jumps", "bte-stargate-rail-transit"}) do
+      expect("legacy save migration unlocks " .. tech_name, legacy_force.technologies[tech_name].researched, true)
+    end
+    merged_force.technologies["bte-stargate-experimental-gates"].researched = true
+    game.merge_forces(legacy_force, merged_force)
+
+    -- Surface deletion while a site, a gate, and a character in limbo reference that surface.
+    local ds = game.create_surface("bte-test-delete")
+    ds.generate_with_lab_tiles = true
+    ds.request_to_generate_chunks({0, 0}, 2)
+    ds.force_generate_chunk_requests()
+    ds.create_entity({name = SITE, position = {-24, 0}, force = "player", raise_built = true})
+    ds.create_entity({name = "substation", position = {-10, -6}, force = "player"})
+    local dp = ds.create_entity({name = "bte-stargate-test-power", position = {-12, -6}, force = "player"})
+    dp.power_production, dp.electric_buffer_size, dp.energy = 1e9, 1e10, 1e10
+    local dg = ds.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
+    -- Headless runs never chart Nauvis, so a gate on Nauvis marks it visited for unpaired dg.
+    local nauvis_anchor = surface().create_entity({name = GATE, position = {80, 80}, force = "player", raise_built = true})
+    storage.debt = {fs = fs, fg1 = fg1, fg2 = fg2, merged = merged_force, ds = ds, dg = dg, anchor = nauvis_anchor}
+  end},
+
+  {80, function()
+    local debt = storage.debt
+    expect("force merge carries the first jump over", debt.merged.technologies["bte-stargate-controlled-jumps"].enabled, true)
+    -- Scripted force divergence between paired gates must unpair them cleanly on prune.
+    debt.fg2.force = "enemy"
+    debt.dchar = debt.ds.create_entity({name = "character", position = {1, 3}, force = "player"})
+  end},
+
+  {15, function()
+    local debt = storage.debt
+    expect("traveller entered limbo before origin surface deletion",
+      debt.dchar.valid and debt.dchar.surface.name, "bte-stargate-limbo")
+    game.delete_surface(debt.ds)
+  end},
+
+  {210, function()
+    local debt = storage.debt
+    expect("mismatched-force pair is broken by prune", remote.call("bte-stargate-test", "state", debt.fg1.unit_number).partner, nil)
+    game.delete_surface(debt.fs)
+    expect("traveller from a deleted surface recovers safely onto a valid surface",
+      debt.dchar.valid and debt.dchar.surface.valid and debt.dchar.surface.name ~= "bte-stargate-limbo", true)
+    debt.dchar.destroy()
+    debt.anchor.destroy()
+
+    -- Blocked-partner arrival fallback, character conservation, trains_limit, mid-transfer pair refusal,
+    -- and industrial train conservation.
+    local ca_s = game.create_surface("bte-test-cons-a")
+    local cb_s = game.create_surface("bte-test-cons-b")
+    for _, s in ipairs({ca_s, cb_s}) do
+      s.generate_with_lab_tiles = true
+      s.request_to_generate_chunks({0, 40}, 4)
+      s.force_generate_chunk_requests()
+      s.create_entity({name = "substation", position = {-10, -6}, force = "player"})
+      local p = s.create_entity({name = "bte-stargate-test-power", position = {-12, -6}, force = "player"})
+      p.power_production, p.electric_buffer_size, p.energy = 2e9, 1e10, 1e10
+    end
+    local ca = ca_s.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
+    local cb = cb_s.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
+    local cc = ca_s.create_entity({name = GATE, position = {30, 0}, force = "player", raise_built = true})
+    remote.call("bte-stargate-test", "pair", ca.unit_number, cb.unit_number)
+    -- Surround cb outside its (-6,-6)..(8,8) footprint with water and wall off its open lanes so
+    -- Gate.arrival(cb) finds no non-colliding spot while cb itself stays intact.
+    local flood, walls = {}, {}
+    for x = -28, 30 do
+      for y = -28, 36 do
+        if x < -6 or x > 8 or y < -6 or y > 8 then
+          flood[#flood + 1] = {name = "water", position = {x, y}}
+        end
+      end
+    end
+    cb_s.set_tiles(flood)
+    for x = -6, 8, 2 do
+      for y = -6, 8, 2 do
+        local w = cb_s.create_entity({name = "tank", position = {x, y}, force = "player"})
+        if w then
+          walls[#walls + 1] = w
+        end
+      end
+    end
+    debt.ca_s, debt.cb_s, debt.ca, debt.cb, debt.cc, debt.walls = ca_s, cb_s, ca, cb, cc, walls
+  end},
+
+  {80, function()
+    local debt = storage.debt
+    debt.blocked_tank = debt.ca_s.create_entity({name = "tank", position = {1, 3}, force = "player"})
+  end},
+
+  {230, function()
+    local debt = storage.debt
+    expect("blocked partner arrival falls back to sending gate instead of forcing onto water",
+      debt.blocked_tank.valid and debt.blocked_tank.surface == debt.ca_s, true)
+    debt.blocked_tank.destroy()
+    -- Restore solid ground on cb_s, then test rich character conservation + industrial train conservation.
+    for _, w in ipairs(debt.walls) do
+      if w.valid then
+        w.destroy()
+      end
+    end
+    local dry = {}
+    for x = -28, 30 do
+      for y = -28, 36 do
+        if x < -6 or x > 8 or y < -6 or y > 8 then
+          dry[#dry + 1] = {name = "lab-dark-1", position = {x, y}}
+        end
+      end
+    end
+    debt.cb_s.set_tiles(dry)
+
+    local rich = debt.ca_s.create_entity({name = "character", position = {1, 10}, force = "player"})
+    rich.health = 137
+    local armor_inv = rich.get_inventory(defines.inventory.character_armor)
+    armor_inv.insert({name = "power-armor-mk2", count = 1})
+    local grid = armor_inv[1].grid
+    local shield_eq = grid.put({name = "energy-shield-equipment"})
+    local batt_eq = grid.put({name = "battery-equipment"})
+    shield_eq.shield = shield_eq.max_shield
+    shield_eq.energy = shield_eq.max_energy
+    batt_eq.energy = 1234567
+    local main_inv = rich.get_main_inventory()
+    main_inv.insert({name = "iron-plate", count = 17, quality = "rare"})
+    main_inv.insert({name = "yumako", count = 1})
+    local yumako_slot = main_inv.find_item_stack("yumako")
+    yumako_slot.spoil_percent = 0.5
+    main_inv.insert({name = "bte-stargate-test-tagged", count = 1})
+    main_inv.find_item_stack("bte-stargate-test-tagged").tags = {expedition = "chulak", hop = 7}
+    main_inv.insert({name = "firearm-magazine", count = 1})
+    main_inv.find_item_stack("firearm-magazine").ammo = 4
+    main_inv.insert({name = "repair-pack", count = 1})
+    main_inv.find_item_stack("repair-pack").durability = 111
+    rich.teleport({1, 3})
+    debt.rich = rich
+  end},
+
+  {240, function()
+    local debt = storage.debt
+    local rich = debt.rich
+    expect("character arrives on partner surface", rich.valid and rich.surface == debt.cb_s, true)
+    expect("character partial health preserved (not reset to 250)", rich.health >= 137 and rich.health < 200, true)
+    local grid = rich.get_inventory(defines.inventory.character_armor)[1].grid
+    expect("character armor shield HP preserved", grid.shield == grid.max_shield and grid.shield > 0, true)
+    expect("character armor battery energy preserved", math.abs(grid.available_in_batteries - 1234567) < 100, true)
+    local inv = rich.get_main_inventory()
+    expect("character rare item preserved", inv.get_item_count({name = "iron-plate", quality = "rare"}), 17)
+    local ystack = inv.find_item_stack("yumako")
+    expect("character item spoilage preserved", ystack ~= nil and math.abs(ystack.spoil_percent - 0.5) < 0.05, true)
+    local tstack = inv.find_item_stack("bte-stargate-test-tagged")
+    expect("character item tags preserved", tstack ~= nil and tstack.tags.expedition == "chulak" and tstack.tags.hop == 7, true)
+    local astack = inv.find_item_stack("firearm-magazine")
+    expect("character partial magazine preserved", astack ~= nil and astack.ammo == 4, true)
+    local rstack = inv.find_item_stack("repair-pack")
+    expect("character tool durability preserved", rstack ~= nil and math.abs(rstack.durability - 111) < 0.01, true)
+    rich.destroy()
+
+    -- Switch ca and cb to station mode, test trains_limit = 0, mid-transfer pair refusal, and full train conservation.
+    expect("ca enters station mode", remote.call("bte-stargate-test", "set_station", debt.ca.unit_number, "right"), true)
+    expect("cb enters station mode", remote.call("bte-stargate-test", "set_station", debt.cb.unit_number, "left"), true)
+    for _, s in ipairs({debt.ca_s, debt.cb_s}) do
+      for y = 9, 121, 2 do
+        s.create_entity({name = "straight-rail", position = {3, y}, direction = defines.direction.north, force = "player"})
+      end
+    end
+    local temp_stop = debt.cb_s.create_entity({name = "train-stop", position = {1, 71}, direction = defines.direction.south, force = "player"})
+    temp_stop.backer_name = "bte-test-temp-stop"
+    local final_stop = debt.cb_s.create_entity({name = "train-stop", position = {1, 105}, direction = defines.direction.south, force = "player"})
+    final_stop.backer_name = "bte-test-final-stop"
+    local src_rail = debt.ca_s.find_entities_filtered({name = "straight-rail", position = {3, 115}})[1]
+
+    local gate_stop = remote.call("bte-stargate-test", "station", debt.ca.unit_number)
+    gate_stop.trains_limit = 0
+
+    local loco = debt.ca_s.create_entity({name = "locomotive", position = {3, 30}, direction = defines.direction.north, force = "player", quality = "rare"})
+    local cargo = debt.ca_s.create_entity({name = "cargo-wagon", position = {3, 37}, direction = defines.direction.north, force = "player", quality = "rare"})
+    local fluid = debt.ca_s.create_entity({name = "fluid-wagon", position = {3, 44}, direction = defines.direction.north, force = "player"})
+    local arty = debt.ca_s.create_entity({name = "artillery-wagon", position = {3, 51}, direction = defines.direction.north, force = "player"})
+
+    loco.insert({name = "nuclear-fuel", count = 1})
+    loco.burner.currently_burning = "nuclear-fuel"
+    loco.burner.remaining_burning_fuel = 5e8
+    local lgrid = loco.grid
+    local lshield = lgrid.put({name = "energy-shield-equipment"})
+    local lbatt = lgrid.put({name = "battery-equipment"})
+    lshield.shield = lshield.max_shield
+    lshield.energy = lshield.max_energy
+    lbatt.energy = 555555
+
+    local cinv = cargo.get_inventory(defines.inventory.cargo_wagon)
+    cinv.set_bar(8)
+    cinv.set_filter(1, "iron-plate")
+    cinv.insert({name = "iron-plate", count = 25, quality = "rare"})
+    cinv.insert({name = "yumako", count = 1})
+    cinv.find_item_stack("yumako").spoil_percent = 0.5
+    cinv.insert({name = "bte-stargate-test-tagged", count = 1})
+    cinv.find_item_stack("bte-stargate-test-tagged").tags = {cargo = "naquadah", lot = 9}
+    cinv.insert({name = "firearm-magazine", count = 1})
+    cinv.find_item_stack("firearm-magazine").ammo = 3
+    cinv.insert({name = "repair-pack", count = 1})
+    cinv.find_item_stack("repair-pack").durability = 99
+
+    fluid.insert_fluid({name = "steam", amount = 12500, temperature = 500})
+    arty.get_inventory(defines.inventory.artillery_wagon_ammo).insert({name = "artillery-shell", count = 5})
+
+    local sched = loco.train.get_schedule()
+    sched.add_record({station = gate_stop.backer_name, wait_conditions = {}})
+    sched.add_record({station = "bte-test-temp-stop", temporary = true, wait_conditions = {{type = "time", ticks = 6000}}})
+    sched.add_record({station = "bte-test-final-stop", wait_conditions = {{type = "time", ticks = 6000}}})
+    sched.add_record({rail = src_rail, wait_conditions = {{type = "time", ticks = 60}}})
+    sched.go_to_station(1)
+    loco.train.manual_mode = false
+    debt.gate_stop, debt.loco = gate_stop, loco
+  end},
+
+  {25, function()
+    local debt = storage.debt
+    expect("trains_limit = 0 holds automatic train in destination_full",
+      debt.loco.valid and debt.loco.train.state, defines.train_state.destination_full)
+    debt.gate_stop.trains_limit = 1
+    debt.watch_pair = true
+  end},
+
+  {320, function()
+    local debt = storage.debt
+    storage.debt = nil
+    expect("unpairing is refused mid-train-transfer", debt.mid_unpair, false)
+    expect("re-pairing partner is refused mid-train-transfer", debt.mid_repair, false)
+    expect("active pairing stayed intact across refused mid-transfer edits",
+      remote.call("bte-stargate-test", "state", debt.ca.unit_number).partner, debt.cb.unit_number)
+
+    local loco = debt.cb_s.find_entities_filtered({type = "locomotive"})[1]
+    local cargo = debt.cb_s.find_entities_filtered({type = "cargo-wagon"})[1]
+    local fluid = debt.cb_s.find_entities_filtered({type = "fluid-wagon"})[1]
+    local arty = debt.cb_s.find_entities_filtered({type = "artillery-wagon"})[1]
+    expect("all 4 industrial carriages arrived coupled",
+      loco ~= nil and cargo ~= nil and fluid ~= nil and arty ~= nil and #loco.train.carriages == 4, true)
+    expect("locomotive rare quality preserved", loco.quality.name, "rare")
+    expect("locomotive burner fuel progress preserved",
+      loco.burner.currently_burning ~= nil and loco.burner.remaining_burning_fuel > 1e8, true)
+    expect("locomotive equipment shield & battery preserved",
+      loco.grid.shield == loco.grid.max_shield and loco.grid.shield > 0 and math.abs(loco.grid.available_in_batteries - 555555) < 100, true)
+
+    expect("cargo wagon rare quality preserved", cargo.quality.name, "rare")
+    local cinv = cargo.get_inventory(defines.inventory.cargo_wagon)
+    expect("cargo wagon inventory bar preserved", cinv.get_bar(), 8)
+    local filt = cinv.get_filter(1)
+    expect("cargo wagon slot filter preserved", filt and filt.name, "iron-plate")
+    expect("cargo wagon rare stack preserved", cinv.get_item_count({name = "iron-plate", quality = "rare"}), 25)
+    local cy = cinv.find_item_stack("yumako")
+    expect("cargo wagon spoilage preserved", cy ~= nil and math.abs(cy.spoil_percent - 0.5) < 0.05, true)
+    local ct = cinv.find_item_stack("bte-stargate-test-tagged")
+    expect("cargo wagon item tags preserved", ct ~= nil and ct.tags.cargo == "naquadah" and ct.tags.lot == 9, true)
+    local ca_ammo = cinv.find_item_stack("firearm-magazine")
+    expect("cargo wagon partial ammo preserved", ca_ammo ~= nil and ca_ammo.ammo == 3, true)
+    local cr = cinv.find_item_stack("repair-pack")
+    expect("cargo wagon tool durability preserved", cr ~= nil and math.abs(cr.durability - 99) < 0.01, true)
+
+    local steam = fluid.get_fluid(1)
+    expect("fluid wagon amount and 500C temperature preserved",
+      steam ~= nil and steam.name == "steam" and math.abs(steam.amount - 12500) < 1 and math.abs(steam.temperature - 500) < 0.5, true)
+    expect("artillery wagon shells preserved",
+      arty.get_inventory(defines.inventory.artillery_wagon_ammo).get_item_count("artillery-shell"), 5)
+
+    local records = loco.train.get_schedule().get_records()
+    local saw_temp, saw_rail = false, false
+    for _, rec in ipairs(records or {}) do
+      if rec.station == "bte-test-temp-stop" and rec.temporary then
+        saw_temp = true
+      end
+      if rec.rail ~= nil then
+        saw_rail = true
+      end
+    end
+    expect("temporary schedule stop preserved across clone", saw_temp, true)
+    expect("source-surface rail schedule record dropped", saw_rail, false)
+
+    game.delete_surface(debt.ca_s)
+    game.delete_surface(debt.cb_s)
+  end},
+
+  -- Frost on Aquilo: an unheated gate freezes (no charge, frozen pictures, floor frost), and a site
+  -- shows its frozen picture through its thermometer while it keeps working; heat pipes thaw both.
+  {5, function()
+    local fs = game.planets.aquilo.create_surface()
+    fs.request_to_generate_chunks({0, 0}, 3)
+    fs.force_generate_chunk_requests()
+    local tiles = {}
+    for x = -64, 32 do
+      for y = -24, 24 do
+        tiles[#tiles + 1] = {name = "lab-dark-1", position = {x, y}}
+      end
+    end
+    fs.set_tiles(tiles)
+    fs.create_entity({name = "substation", position = {-10, -10}, force = "player"})
+    local power = fs.create_entity({name = "bte-stargate-test-power", position = {-12, -10}, force = "player"})
+    power.power_production, power.electric_buffer_size, power.energy = 1e9, 1e10, 1e10
+    local gate = fs.create_entity({name = GATE, position = {0, 0}, force = "player", raise_built = true})
+    local site = fs.create_entity({name = SITE, position = {-40, 0}, force = "player", raise_built = true})
+    storage.frost = {fs = fs, gate = gate, site = site}
+  end},
+
+  {120, function()
+    local f = storage.frost
+    local count = function(name) return #f.fs.find_entities_filtered({name = name}) end
+    expect("an unheated gate on Aquilo is frozen", f.gate.frozen, true)
+    expect("a frozen gate does not charge", remote.call("bte-stargate-test", "charge", f.gate.unit_number), 0)
+    expect("a frozen gate stays closed", f.gate.disabled_by_script, true)
+    local body = f.fs.find_entities_filtered({name = "bte-stargate-body"})[1]
+    local top = f.fs.find_entities_filtered({name = "bte-stargate-top"})[1]
+    expect("a frozen gate shows its frozen building", body and body.graphics_variation, 7)
+    expect("a frozen gate shows its frozen arc", top and top.graphics_variation, 3)
+    expect("a frozen gate has floor frost", count("bte-stargate-floor-frost"), 1)
+    expect("a cold site gets a thermometer", count("bte-stargate-thermometer"), 1)
+    expect("a cold site shows its frozen picture", count("bte-stargate-site-frost"), 1)
+    expect("a cold site still takes its materials",
+      f.site.get_inventory(defines.inventory.chest).insert({name = "tungsten-plate", count = 50}), 50)
+    -- Heat lines along the gate's east edge (its footprint ends at x 7.9) and the site's (-32.1).
+    for _, x in ipairs({8.5, -31.5}) do
+      local source = f.fs.create_entity({name = "heat-interface", position = {x, -7.5}, force = "player"})
+      source.set_heat_setting({temperature = 1000, mode = "at-least"})
+      for y = -6.5, 8.5 do
+        f.fs.create_entity({name = "heat-pipe", position = {x, y}, force = "player"})
+      end
+    end
+  end},
+
+  {600, function()
+    local f = storage.frost
+    storage.frost = nil
+    local count = function(name) return #f.fs.find_entities_filtered({name = name}) end
+    expect("a heated gate thaws", f.gate.frozen, false)
+    expect("a thawed gate charges", remote.call("bte-stargate-test", "charge", f.gate.unit_number) > 0, true)
+    local body = f.fs.find_entities_filtered({name = "bte-stargate-body"})[1]
+    expect("a thawed gate shows its lit building", body and body.graphics_variation ~= 7, true)
+    expect("a thawed gate loses its floor frost", count("bte-stargate-floor-frost"), 0)
+    expect("a heated site loses its frozen picture", count("bte-stargate-site-frost"), 0)
+    f.site.destroy({raise_destroy = true})
+  end},
+
+  {40, function()
+    local fs = game.get_surface("aquilo")
+    expect("a removed site takes its thermometer with it", #fs.find_entities_filtered({name = "bte-stargate-thermometer"}), 0)
+    game.delete_surface(fs)
+  end},
   -- Mining a half-filled site returns the kit and everything delivered, and builds nothing.
   {5, function()
     local half = build_site(20)
@@ -1564,6 +1993,11 @@ script.on_event(defines.events.on_tick, function()
       abort.a.die()
       abort.killed = true
     end
+  end
+  local debt = storage.debt
+  if debt and debt.watch_pair and debt.mid_unpair == nil and remote.call("bte-stargate-test", "rail_transfers") > 0 then
+    debt.mid_unpair = remote.call("bte-stargate-test", "pair", debt.ca.unit_number, nil)
+    debt.mid_repair = remote.call("bte-stargate-test", "pair", debt.cb.unit_number, debt.cc.unit_number)
   end
   local watch = storage.rail_watch
   if watch then

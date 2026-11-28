@@ -33,6 +33,7 @@ The arrival sound waits a few ticks after the cutscene camera has moved to the a
 
 `scripts/destinations.lua` picks destinations for unpaired gates:
 
-- A planet counts as visited when the force has charted the chunk at its spawn position.
-- Across visited planets in random order, the destination is the uncharted chunk nearest the force's spawn position, found by walking the four edges of each square ring out to 256 chunks (bounded by `floor(sqrt(best_distance))`) and generated on the spot.
-- Whether any destination exists is cached for 60 ticks (`storage.destinations_any`), and a planet fully charted out to 256 chunks is cached for 600 ticks (`storage.destinations_exhausted`).
+- A planet counts as visited when the force has charted the chunk at its spawn position, or a gate of that force already stands on it.
+- Across visited planets in random order, the destination is the nearest uncharted chunk to the force's spawn position (up to 32 candidates inspected per planet out to 256 chunks) that has collision-free solid ground inside the chunk (`radius = 15`) for the traveller's prototype (`spider-vehicle` also checks `"character"` so its legs have dry ground), skipping chunks covered by water, lava, or obstacles rather than forcing placement onto the chunk centre.
+- Completing an uncontrolled jump with a character (on foot or crewing a vehicle) calls `Gate.record_jump(force)`, which enables `bte-stargate-controlled-jumps` (disabled but visible until then) for research. If a paired gate's arrival area is completely blocked (`Gate.arrival` finds no spot within 24 tiles), `Transfer.landing` falls back to the sending gate; if an origin or destination surface was deleted mid-transit, it falls back to a valid planet surface.
+- Whether any destination exists is cached for 60 ticks (`storage.destinations_any`), a fully charted planet is cached for 600 ticks, and an all-water candidate scan for 60 ticks (`storage.destinations_exhausted`).

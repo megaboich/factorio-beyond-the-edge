@@ -1,10 +1,10 @@
 # Beyond the Edge: Stargate
 
-**Beyond the Edge: Stargate** is a standalone Factorio: Space Age mod. This first version adds the way a gate is built and travel through it, on foot, by vehicle, and by train: one technology (**Experimental Gates**), one craftable <img src="../docs/icons/bte-stargate-construction-kit.png" width="24" height="24" alt=""> **Stargate Construction Kit**, a `14x14` **Stargate Construction Site** that takes a large delivery of bulk materials, and the **Stargate** itself, which is built there over a minute. Characters, vehicles, enemies, and trains travel between paired gates; for the first uncontrolled jump and the campaign still planned, see the [vision](VISION.md) and [plan](PLAN.md).
+**Beyond the Edge: Stargate** is a standalone Factorio: Space Age mod. It adds a progression from an uncontrolled experimental gate to paired interplanetary gates and train stations: three technologies (**Experimental Gates**, **Controllable Stargate Jumps**, and **Stargate Rail Transit**), one craftable <img src="../docs/icons/bte-stargate-construction-kit.png" width="24" height="24" alt=""> **Stargate Construction Kit**, a `14x14` **Stargate Construction Site** that takes a large delivery of bulk materials, and the **Stargate** itself, which is built there over a minute. Characters, vehicles, enemies, and trains travel between paired gates; for future campaign integration and optional ideas, see the [plan](PLAN.md).
 
 The mod requires `base >= 2.1.0` and `space-age >= 2.1.0`. It has no other dependencies.
 
-Safe to add to an existing late-game save: the mod only adds a technology, a recipe, and three buildings (the site, the gate under construction, and the finished gate).
+Safe to add to an existing late-game save: the mod only adds three technologies, a recipe, and three buildings (the site, the gate under construction, and the finished gate), and preserves active gate pairings and station lines from earlier saves.
 
 ## A modern gate
 
@@ -12,13 +12,15 @@ The gate is a human-built machine. A segmented steel ring with a dark tungsten c
 
 The concrete floor is level with the ground at the border and slopes down into a shallow basin. A trench across the basin, under the ring, holds the ring's lower arc, so the whole ring is visible, while its opening at basin level is wide enough for a train on either lane. In station mode, ramped train tracks cross the basin and the trench into the ring. The site, the gate under construction, and the finished gate all snap to the same two-tile grid as rails, offset so that the layout across the 14 tiles is four tiles of platform, a lane (2 tiles), a 2-tile gap, a second lane (2 tiles), and four more tiles of platform. The edges of the building fall on rail cell edges, so incoming and outgoing track can be laid flush against it and line up with the lanes.
 
-## Technology
+## Technologies
 
 | Technology | Cost | Unlock |
 | --- | --- | --- |
-| <img src="../docs/icons/technology/bte-stargate-experimental-gates.png" width="48" height="48" alt=""><br>**Experimental Gates** | `1,000` units at 60 seconds each | Unlocks the <img src="../docs/icons/bte-stargate-construction-kit.png" width="24" height="24" alt=""> **Stargate Construction Kit** recipe. |
+| <img src="../docs/icons/technology/bte-stargate-experimental-gates.png" width="48" height="48" alt=""><br>**Experimental Gates** | `1,000` units at 60 seconds each | Unlocks the <img src="../docs/icons/bte-stargate-construction-kit.png" width="24" height="24" alt=""> **Stargate Construction Kit** recipe. Newly built gates open to uncontrolled random destinations until pairing is researched. |
+| <img src="../docs/icons/technology/bte-stargate-controlled-jumps.png" width="48" height="48" alt=""><br>**Controllable Stargate Jumps** | `2,000` units at 60 seconds each | Unlocks **Paired gate** selection so two Stargates of your force can link across any planetary surfaces. It stays greyed out until someone of your force has travelled through an open, unpaired Stargate (on foot or in a vehicle): the experiment comes first. |
+| <img src="../docs/icons/technology/bte-stargate-rail-transit.png" width="48" height="48" alt=""><br>**Stargate Rail Transit** | `5,000` units at 60 seconds each | Unlocks **Train station** mode (`One track` or `Two tracks`) on Stargates so trains pass between paired stations. |
 
-It requires <img src="../docs/icons/technology/quantum-processor.png" width="24" height="24" alt=""> Quantum Processor, <img src="../docs/icons/technology/fusion-reactor.png" width="24" height="24" alt=""> Fusion Reactor, and the Speed, Productivity, Efficiency, and Quality Module 3 technologies. It consumes ten science packs, everything except Military and Promethium: <img src="../docs/icons/automation-science-pack.png" width="24" height="24" alt=""> Automation, <img src="../docs/icons/logistic-science-pack.png" width="24" height="24" alt=""> Logistic, <img src="../docs/icons/chemical-science-pack.png" width="24" height="24" alt=""> Chemical, <img src="../docs/icons/production-science-pack.png" width="24" height="24" alt=""> Production, <img src="../docs/icons/utility-science-pack.png" width="24" height="24" alt=""> Utility, <img src="../docs/icons/space-science-pack.png" width="24" height="24" alt=""> Space, <img src="../docs/icons/metallurgic-science-pack.png" width="24" height="24" alt=""> Metallurgic, <img src="../docs/icons/agricultural-science-pack.png" width="24" height="24" alt=""> Agricultural, <img src="../docs/icons/electromagnetic-science-pack.png" width="24" height="24" alt=""> Electromagnetic, and <img src="../docs/icons/cryogenic-science-pack.png" width="24" height="24" alt=""> Cryogenic. The cost is provisional.
+**Experimental Gates** requires <img src="../docs/icons/technology/quantum-processor.png" width="24" height="24" alt=""> Quantum Processor, <img src="../docs/icons/technology/fusion-reactor.png" width="24" height="24" alt=""> Fusion Reactor, and the Speed, Productivity, Efficiency, and Quality Module 3 technologies. All three science-pack technologies consume ten packs, everything except Military and Promethium: <img src="../docs/icons/automation-science-pack.png" width="24" height="24" alt=""> Automation, <img src="../docs/icons/logistic-science-pack.png" width="24" height="24" alt=""> Logistic, <img src="../docs/icons/chemical-science-pack.png" width="24" height="24" alt=""> Chemical, <img src="../docs/icons/production-science-pack.png" width="24" height="24" alt=""> Production, <img src="../docs/icons/utility-science-pack.png" width="24" height="24" alt=""> Utility, <img src="../docs/icons/space-science-pack.png" width="24" height="24" alt=""> Space, <img src="../docs/icons/metallurgic-science-pack.png" width="24" height="24" alt=""> Metallurgic, <img src="../docs/icons/agricultural-science-pack.png" width="24" height="24" alt=""> Agricultural, <img src="../docs/icons/electromagnetic-science-pack.png" width="24" height="24" alt=""> Electromagnetic, and <img src="../docs/icons/cryogenic-science-pack.png" width="24" height="24" alt=""> Cryogenic. The costs are provisional.
 
 ## Stargate Construction Kit
 
@@ -56,9 +58,9 @@ The **Stargate Construction Site** can be mined for a refund of the kit and its 
 A finished **Stargate** carries people between two places. Open it to see its window:
 
 - **Name**: a new gate gets a random name, such as `Abydos-417`. Rename it freely.
-- **Paired gate**: pick another gate of your force, on any surface, from the list. Pairing works both ways: the chosen gate is paired back, and any earlier pairs of either gate are broken. If a paired gate is destroyed, its partner is left unpaired. A gate with no partner still opens, and leads somewhere random (below).
-- **Enabled**: switches the gate on or off.
-- **Enable or disable by circuit condition**: connect a red or green wire to the foot of the west tower and set a condition, as for any machine. The gate stays closed while the condition is false.
+- **Paired gate** (unlocked by **Controllable Stargate Jumps**): pick another gate of your force, on any surface, from the list. Pairing works both ways: the chosen gate is paired back, and any earlier pairs of either gate are broken. Pairing cannot be changed while a train is actively passing through an affected gate. If a paired gate is destroyed, its partner is left unpaired. A gate with no partner still opens, and leads somewhere random (below).
+- **Engage gate**: switches the gate on or off.
+- **Engage when** (shown once a red or green wire is connected to the foot of the west tower): a circuit condition, as on an inserter. Once a signal is chosen, the gate stays closed while the condition is false; with no signal chosen, or with the wires removed, it is ignored.
 
 You can walk anywhere on a gate except into its machinery (the capacitor banks, towers, and corner cabinets along its west and east sides): through the ring, in front of it, and behind it. While the gate is open, stepping into the ring from either side sends you; while it is closed, you just walk through. Cars, tanks, spidertron legs, and ground enemies are kept out of the machinery the same way.
 
@@ -72,13 +74,13 @@ Each gate runs on its own **power bank**, a `10 GJ` store of capacitors charged 
 | Opening | needs a full store and spends `8 GJ` of it, leaving `2 GJ` |
 | Open | `1 GW` upkeep from the store; draws up to `1.25 GW` (upkeep, leak, and `200 MW` to refill), `1.05 GW` once full again |
 
-A gate that is switched on and allowed by its circuit condition opens once its store is full: the veil forms in its ring with a rush and a shimmer. Right after opening, the `2 GJ` left carries the upkeep for two seconds on its own, and the network refills the store while the gate stays open, in about 37 seconds with enough spare power. If the network cannot keep up, the store drains, and when it runs dry the gate closes and must charge fully before it opens again.
+A gate that is engaged and allowed by its circuit condition opens once its store is full: the veil forms in its ring with a rush and a shimmer. Right after opening, the `2 GJ` left carries the upkeep for two seconds on its own, and the network refills the store while the gate stays open, in about 37 seconds with enough spare power. If the network cannot keep up, the store drains, and when it runs dry the gate closes and must charge fully before it opens again.
 
 The gate never takes power your factory needs: it asks the network for a little more every tick while it gets everything it asks for, backs off at once when the network falls short, and waits two seconds before asking again, so your machines see at most a brief dip. Several gates on one network share the spare power between them. Like any machine, it is fed by your accumulators when the generators fall short. A full gate fed without a break for five seconds draws its steady need without any script work, and returns to asking tick by tick within a second of a shortage.
 
-The gate's window shows what it draws from the network now, in three lines: keeping the portal open, charging the store, and covering the store's leak.
+The gate's window shows what it draws from the network now, in three lines: holding the wormhole open, charging capacitors, and capacitor leakage.
 
-A gate switched off or closed by its circuit condition stops charging and its store runs down, unless **Keep charged when deactivated** is ticked in its window: then it keeps the store full (`50 MW`) and opens as soon as it is activated again.
+A gate disengaged or closed by its circuit condition stops charging and its store runs down, unless **Keep charged when disengaged** is ticked in its window: then it keeps the store full (`50 MW`) and opens as soon as it is engaged again.
 
 The gate's status lights are cyan, and turn red while a switched-on gate charges, or while an open gate gets less than its upkeep. The window shows the charge and why the gate is closed.
 
@@ -90,12 +92,20 @@ Vehicles travel too. Drive a car or tank into the ring, or walk a spidertron's b
 
 Biters, spitters, and pentapods that wander into an open ring travel the same way, whatever their force, and come out in front of the partner heading south, so an open gate can bring enemies to your base.
 
+### On Aquilo
+
+Like Aquilo's machines, a gate there freezes unless it is kept warm: it needs `1 MW` of heat from heat pipes beside it, as an assembler needs `100 kW` and a rocket silo `300 kW`. A frozen gate is covered in ice, its lamps are dark, and its window says so: it does not charge (its store leaks away), and it cannot open, so nothing can be sent through it. It still receives travellers and trains from its partner, which needs no power at this end. Once heated it thaws, charges, and opens as usual.
+
+The construction site and the gate under construction keep working in the cold: deliveries are accepted and the build runs its minute. While they are not heated they look frozen too, judged by the same `1 MW` the finished gate will need, so a site that looks warm will give a gate that stays warm.
+
 ### Train station
 
-Trains travel between two gates that are both set up as train stations. Choose **Train station** in the gate's window:
+Trains travel between two gates that are both set up as train stations (unlocked by **Stargate Rail Transit**). Choose **Train station** in the gate's window:
 
-- **One track, both ways:** a single track along the centre of the gate. Trains leave and arrive on the same track, so a train is not sent here while another stands on it. Two gates whose tracks each hold a train waiting for the other will wait for ever.
-- **Two tracks, departures on the right** or **on the left:** one track into the gate and one out of it, two tiles either side of the centre. "Right" means on the right of a train driving into the gate.
+- **Single track, bidirectional:** a single track along the centre of the gate. Trains leave and arrive on the same track, so a train is not sent here while another stands on it. Two gates whose tracks each hold a train waiting for the other will wait for ever.
+- **Double track, right-hand running** or **left-hand running:** one track into the gate and one out of it, two tiles either side of the centre. Trains keep to the named side: with right-hand running, departures use the track on the right of a train driving into the gate.
+
+The gate window shows the chosen layout under the drop-down: a top-down diagram, with arrows for the direction of travel on each track, and a short explanation beside it.
 
 The gate then has track running from its south edge up a low ramp, over the ring's lower arc and just into the ring, and an invisible train stop named after the gate beside the departure track, behind the ring. Trains brake for it as for any stop, but since it lies beyond the ring they still enter the gate at speed. Clicking the gate now opens that stop's own window, with the gate's window beside it. Renaming either one renames both. Connect your rails to the gate's tracks at its south edge. Your own signals go further out, as the gate's machinery and its own hidden signals take up the edge tiles. Characters, vehicles, and enemies still travel through a station gate, coming out between the two tracks or beside a single track.
 
@@ -115,7 +125,7 @@ The arrival track has an invisible signal of its own at the gate's edge, which t
 
 When a train with a locomotive only at the head curves into a gate from the left (turning east from south into the northbound approach), Factorio's renderer can jump the remaining wagons along the track by up to two tiles at the moment the locomotive disappears into the ring, because the engine flips which end of the wagon-only remainder counts as its front. Every carriage's real position still moves smoothly and the train arrives whole. Bringing the approach track in straight or from the right avoids the jump, and attaching another locomotive at the rear of the train as well as at the head largely avoids it too.
 
-An open gate with no partner sends you somewhere random: to a planet your force has visited, picked at random (the one you are on included), at the unexplored area closest to that planet's landing site, the nearest chunk your map has not yet charted. There is no gate there: the reversed ripples converge in mid-air on the spot where you appear, and there is no run out. Nothing checks the ground: you may land on an island or by a lake, or among enemies, so bring a jetpack or a way home. A planet counts as visited when your map shows its landing site, as it does once anyone of your force has landed there.
+An open gate with no partner sends you somewhere random: to a planet your force has visited, picked at random (the one you are on included), at the nearest unexplored chunk to that planet's landing site that has solid collision-free ground for you or your vehicle (skipping chunks that are entirely water or lava). Completing your first jump through an unpaired gate (on foot or in a vehicle) makes **Controllable Stargate Jumps** available to research. There is no gate at the destination: the reversed ripples converge in mid-air on the spot where you appear, and there is no run out. Islands, cliffs, and enemies are not filtered out, so bring a jetpack or a way home. A planet counts as visited when your map shows its landing site (or a gate of your force stands on it).
 
 ## Balance
 

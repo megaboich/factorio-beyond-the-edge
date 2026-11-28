@@ -16,6 +16,9 @@ local PowerBank = require("scripts.power_bank")
 local Gate = {}
 
 local GATE = "bte-stargate"
+local EXPERIMENTAL_TECH = "bte-stargate-experimental-gates"
+local CONTROLLED_TECH = "bte-stargate-controlled-jumps"
+local RAIL_TECH = "bte-stargate-rail-transit"
 -- The building's centre is one tile south-east of its position (prototypes/entities.lua).
 local CENTER = 1
 -- The ring stands this far south of the centre (tools/sprites/lib/stargate-parts.js, RING_Z).
@@ -82,6 +85,41 @@ local TRAVELLERS = {"character", "car", "spider-vehicle", "unit", "spider-unit"}
 function Gate.init_storage()
   storage.gates = storage.gates or {}
   storage.active_gates = storage.active_gates or {}
+  storage.experiment_completed = storage.experiment_completed or {}
+end
+
+function Gate.can_pair(force)
+  local tech = force and force.valid and force.technologies[CONTROLLED_TECH]
+  return tech ~= nil and tech.researched
+end
+
+-- Marks a force's first uncontrolled jump complete, which enables Controllable Stargate Jumps for
+-- research (prototypes/technologies.lua: shown but disabled until then). A technology's `enabled` is
+-- kept in the save, and also set again by Gate.rebuild from storage.experiment_completed.
+function Gate.record_jump(force)
+  if not (force and force.valid) then
+    return
+  end
+  storage.experiment_completed = storage.experiment_completed or {}
+  storage.experiment_completed[force.index] = true
+  local controlled = force.technologies[CONTROLLED_TECH]
+  if controlled and not controlled.enabled then
+    controlled.enabled = true
+  end
+end
+
+function Gate.forces_merging(source, destination)
+  if not (source and source.valid and destination and destination.valid) then
+    return
+  end
+  local controlled = source.technologies[CONTROLLED_TECH]
+  if (storage.experiment_completed and storage.experiment_completed[source.index])
+      or (controlled and controlled.enabled) then
+    Gate.record_jump(destination)
+  end
+  if storage.experiment_completed then
+    storage.experiment_completed[source.index] = nil
+  end
 end
 
 -- Gates whose power bank needs per-tick work (charging, refilling, or leaking down). Built lazily
@@ -245,7 +283,7 @@ local function remove_companions(record)
     end
   end
   record.veil_fx = nil
-  for _, key in pairs({"body", "top", "veil", "veil_top", "veil_light", "lights", "lights_high", "tracks"}) do
+  for _, key in pairs({"body", "top", "veil", "veil_top", "veil_light", "lights", "lights_high", "tracks", "frost"}) do
     if record[key] and record[key].valid then
       record[key].destroy()
     end
@@ -302,7 +340,8 @@ local function collect(id, record, active)
   local spec = power()
   local cap = spec.capacity
   -- record.ready is the switch and circuit condition as apply() last read them, every few ticks.
-  local charging = record.keep_charged or record.ready
+  -- A frozen gate (Aquilo, unheated) does not charge at all; its store leaks down.
+  local charging = (record.keep_charged and not record.frozen) or record.ready
   local load = record.open and spec.upkeep or 0
   local refill = record.open and spec.refill or spec.charge_rate
   local options = OPTIONS
@@ -472,10 +511,18 @@ function Gate.charge(record)
   return (bank(record).charge or 0) / capacity()
 end
 
--- Whether the circuit condition, if the gate uses one, lets it open.
+-- Whether a red or green wire reaches the gate: the window shows the circuit condition only then.
+function Gate.wired(record)
+  local entity = record.entity
+  return entity.get_circuit_network(defines.wire_connector_id.circuit_red) ~= nil
+    or entity.get_circuit_network(defines.wire_connector_id.circuit_green) ~= nil
+end
+
+-- Whether the circuit condition, if the gate uses one, lets it open. A condition left on a gate whose
+-- wires were removed is ignored rather than read against no signals.
 function Gate.circuit_allows(record)
   local behavior = record.entity.get_control_behavior()
-  return not (behavior and behavior.circuit_enable_disable and behavior.disabled)
+  return not (behavior and behavior.circuit_enable_disable and behavior.disabled and Gate.wired(record))
 end
 
 -- The building and its status lights (prototypes/entities.lua): bte-stargate-body on the ring's
@@ -489,7 +536,22 @@ local function show_body(record, red)
   -- The station's track (scripts/railway.lua) is a companion of its own, and the body's picture for
   -- it has the track cut out where it crosses the ring's lower arc (prototypes/entities.lua).
   local mode = TRACK_MODES[record.railway] or 0
-  local variation = mode * 2 + (red and 2 or 1)
+  local frozen = record.frozen
+  -- Frozen, the building, the arc, and the floor show their frosted pictures, lamps dark.
+  local variation = frozen and 7 + mode or mode * 2 + (red and 2 or 1)
+  local frost = record.frost
+  if frozen and not (frost and frost.valid) then
+    local c = center(record)
+    frost = record.entity.surface.create_entity({name = "bte-stargate-floor-frost", position = {c.x, c.y + RING_Z},
+      force = record.entity.force, create_build_effect_smoke = false})
+    frost.destructible = false
+    record.frost = frost
+  elseif not frozen and frost then
+    if frost.valid then
+      frost.destroy()
+    end
+    record.frost = nil
+  end
   local tracks = record.tracks
   if mode == 0 or not (tracks and tracks.valid) then
     if tracks and tracks.valid and mode == 0 then
@@ -531,7 +593,7 @@ local function show_body(record, red)
       entity.destructible = false
       record[key] = entity
     end
-    local wanted = key == "body" and variation or (red and 2 or 1)
+    local wanted = key == "body" and variation or (frozen and 3 or red and 2 or 1)
     if entity.graphics_variation ~= wanted then
       entity.graphics_variation = wanted
     end
@@ -616,7 +678,11 @@ local function apply(record, quick, now)
   now = now or game.tick
   -- A gate without a partner opens too: it sends travellers to random destinations.
   local was_ready = record.ready
-  local ready = record.enabled and Gate.circuit_allows(record)
+  -- Frozen where entities need heating (heating_energy, prototypes/entities.lua): the engine decides,
+  -- from the heat pipes around it. A frozen gate cannot open; it still receives.
+  local frozen = record.entity.frozen
+  record.frozen = frozen
+  local ready = record.enabled and Gate.circuit_allows(record) and not frozen
   record.ready = ready
   local was_open = record.open
   local store = bank(record)
@@ -640,11 +706,11 @@ local function apply(record, quick, now)
     record.veil_from = nil
   end
   -- Red while a switched-on gate charges, or while an open one is short of power.
-  local red = record.enabled and (record.open and (store.received or 0) * 60 < spec.upkeep * 0.999
+  local red = record.enabled and not frozen and (record.open and (store.received or 0) * 60 < spec.upkeep * 0.999
     or (not record.open and (store.charge or 0) < cap * FULL))
   -- Everything the companions show, packed as an integer so the 3-tick poll allocates no strings.
   local shown = (SHOWN_RAILWAY[record.railway] or 0) + (red and 4 or 0) + (record.open and 2 or 0)
-    + (record.open and now >= (record.veil_from or 0) and 1 or 0)
+    + (record.open and now >= (record.veil_from or 0) and 1 or 0) + (frozen and 32 or 0)
   if quick and shown == record.shown and was_open == record.open then
     return
   end
@@ -668,6 +734,7 @@ function Gate.register(entity)
   local record = {entity = entity, name = random_name(), enabled = true, open = false}
   geometry(record)
   storage.gates[entity.unit_number] = record
+  Destinations.clear_cache()
   apply(record)
 end
 
@@ -681,16 +748,49 @@ local function unpair(record)
   apply(record)
 end
 
--- Pairs two gates both ways, breaking their earlier pairs; `other` nil just unpairs.
+local function busy_in_rail_transfer(record)
+  return record ~= nil and Gate.in_rail_transfer ~= nil and Gate.in_rail_transfer(record)
+end
+
+-- Pairs two gates both ways, breaking their earlier pairs; `other` nil just unpairs. Refused while
+-- Controllable Stargate Jumps is unresearched (for new pairings) or while a train transfer runs
+-- through any affected gate.
 function Gate.pair(record, other)
+  if not (record and record.entity.valid) then
+    return false
+  end
+  if other == record then
+    other = nil
+  end
+  local old_partner = partner_of(record)
+  if other == old_partner then
+    return true
+  end
+  if other and not other.entity.valid then
+    return false
+  end
+  if other then
+    if other.entity.force ~= record.entity.force then
+      return false
+    end
+    if not Gate.can_pair(record.entity.force) then
+      return false, {"bte-stargate-gui.pair-locked"}
+    end
+  end
+  local other_old = other and partner_of(other) or nil
+  if busy_in_rail_transfer(record) or busy_in_rail_transfer(old_partner)
+      or busy_in_rail_transfer(other) or busy_in_rail_transfer(other_old) then
+    return false, {"bte-stargate-gui.transfer-in-progress"}
+  end
   unpair(record)
-  if other and other ~= record then
+  if other then
     unpair(other)
     record.partner = other.entity.unit_number
     other.partner = record.entity.unit_number
     apply(other)
   end
   apply(record)
+  return true
 end
 
 function Gate.partner(record)
@@ -729,7 +829,8 @@ function Gate.candidates(record)
   return list
 end
 
--- Drops records of gates that are gone, unpairing their partners.
+-- Drops records of gates that are gone, unpairing their partners and breaking pairs whose forces
+-- diverged outside an active train transfer.
 local function prune(on_removed)
   for id, record in pairs(storage.gates) do
     if not record.entity.valid then
@@ -750,6 +851,12 @@ local function prune(on_removed)
           end
         end
       end
+    elseif record.partner then
+      local other = storage.gates[record.partner]
+      if other and other.entity.valid and other.entity.force ~= record.entity.force
+          and not busy_in_rail_transfer(record) and not busy_in_rail_transfer(other) then
+        unpair(record)
+      end
     end
   end
 end
@@ -763,12 +870,44 @@ function Gate.rebuild(on_removed)
     end
   end
   for _, record in pairs(storage.gates) do
+    -- Saves from 0.1.0, before the progression, keep their active pairings and station lines.
+    local force = record.entity.force
+    if force and force.valid and (record.partner ~= nil or record.railway ~= nil) then
+      for _, tech_name in ipairs({EXPERIMENTAL_TECH, CONTROLLED_TECH}) do
+        if force.technologies[tech_name] then
+          force.technologies[tech_name].researched = true
+        end
+      end
+      storage.experiment_completed[force.index] = true
+      if record.railway ~= nil and force.technologies[RAIL_TECH] then
+        force.technologies[RAIL_TECH].researched = true
+      end
+    end
     -- Placed afresh, so a configuration change also repairs any that went missing.
     record.search_filter, record.count_filter = nil, nil
     geometry(record)
     remove_barriers(record)
     apply(record)
   end
+  for index in pairs(storage.experiment_completed) do
+    local force = game.forces[index]
+    if force then
+      Gate.record_jump(force)
+    end
+  end
+end
+
+function Gate.surface_deleted(surface_index, on_removed)
+  local to_remove = {}
+  for _, record in pairs(storage.gates or {}) do
+    if record.entity.valid and record.entity.surface_index == surface_index then
+      to_remove[#to_remove + 1] = record.entity
+    end
+  end
+  for _, entity in ipairs(to_remove) do
+    Gate.removed(entity, on_removed)
+  end
+  prune(on_removed)
 end
 
 function Gate.removed(entity, on_removed)
@@ -816,15 +955,16 @@ end
 
 -- Where a gate receives a traveller (a prototype name, "character" by default): in front of its
 -- portal (and west of the centre rail on a single-track station gate), its box just clear of the
--- zone, at the nearest free spot for its kind.
+-- zone, at the nearest free spot for its kind. Third result is true when a non-colliding spot fit.
 function Gate.arrival(target, name)
   name = name or "character"
   geometry(target)
   local surface = target.surface
   local dx = target.railway == "single" and SINGLE_ARRIVAL_DX or 0
-  local front = {target.cx + dx, target.cy + RING_Z + PORTAL_FRONT + extent(name) + ARRIVAL_MARGIN}
-  local position = surface.find_non_colliding_position(name, front, 8, 0.1) or front
-  return surface, position
+  local front = {x = target.cx + dx, y = target.cy + RING_Z + PORTAL_FRONT + extent(name) + ARRIVAL_MARGIN}
+  local position = surface.find_non_colliding_position(name, front, 8, 0.1)
+    or surface.find_non_colliding_position(name, front, 24, 0.5)
+  return surface, position or front, position ~= nil
 end
 
 -- Where a character at `position` beside an open, paired gate is sent, or nil outside the portal.
@@ -842,7 +982,8 @@ function Gate.update(enter)
   local now = game.tick
   local gates = storage.gates
   for _, record in pairs(gates) do
-    if (record.enabled or record.open or not record.shown) and record.entity.valid then
+    -- A switched-off gate is looked at too when it freezes or thaws, for its pictures.
+    if record.entity.valid and (record.enabled or record.open or not record.shown or record.entity.frozen ~= record.frozen) then
       apply(record, true, now)
       if record.open and ((record.partner and gates[record.partner] ~= nil) or Destinations.any(record.entity.force)) then
         geometry(record)

@@ -14,6 +14,9 @@ local COMPARATORS = {">", "<", "=", "≥", "≤", "≠"}
 local STATION = "bte-stargate-station"
 -- The station-mode choices, in the drop-down's order; nil is off.
 local MODES = {false, "single", "right", "left"}
+-- The window's content width (the preview's), and the width of the fields beside their labels.
+local WIDTH = 380
+local FIELD_WIDTH = 260
 
 -- The window, wherever it is shown: on its own, or beside the station's train stop window.
 local function window_of(player)
@@ -27,6 +30,9 @@ end
 local function status(record)
   if not record.enabled then
     return {"bte-stargate-gui.status-off"}, "utility/status_not_working"
+  end
+  if record.entity.frozen then
+    return {"bte-stargate-gui.status-frozen"}, "utility/status_not_working"
   end
   if Gate.is_open(record) then
     if Gate.short_of_power(record) then
@@ -119,6 +125,20 @@ local function refresh(player, record)
   for _, key in pairs({"upkeep", "charging", "leak"}) do
     view["bte_stargate_power_" .. key].caption = watts(flow[key])
   end
+  local force = record.entity.force
+  local can_pair = Gate.can_pair(force)
+  local partner_tip = {"bte-stargate-gui." .. (can_pair and "partner-tooltip" or "partner-locked-tooltip")}
+  view.bte_stargate_partner.enabled = can_pair or record.partner ~= nil
+  view.bte_stargate_partner.tooltip = partner_tip
+  view.bte_stargate_partner_label.tooltip = partner_tip
+  local can_rail = Railway.can_enable(force)
+  local station_tip = {"bte-stargate-gui." .. (can_rail and "station-tooltip" or "station-locked-tooltip")}
+  view.bte_stargate_station.enabled = can_rail or record.railway ~= nil
+  view.bte_stargate_station.tooltip = station_tip
+  view.bte_stargate_station_label.tooltip = station_tip
+  local wired = Gate.wired(record)
+  view.bte_stargate_circuit_label.visible = wired
+  view.bte_stargate_condition.visible = wired
 end
 
 local function close(player)
@@ -158,7 +178,10 @@ local function open(player, record, beside)
   local status_row = inner.add({type = "flow", direction = "horizontal"})
   status_row.style.vertical_align = "center"
   status_row.add({type = "sprite", name = "bte_stargate_status_light"})
-  status_row.add({type = "label", name = "bte_stargate_status"})
+  local status_label = status_row.add({type = "label", name = "bte_stargate_status"})
+  -- Long statuses wrap rather than widen the window past the preview.
+  status_label.style.single_line = false
+  status_label.style.maximal_width = WIDTH - 24
   -- The charge as a label beside the bar: a progress bar's own caption does not fit inside it.
   local charge_row = inner.add({type = "flow", direction = "horizontal"})
   charge_row.style.vertical_align = "center"
@@ -178,52 +201,42 @@ local function open(player, record, beside)
     row.add({type = "empty-widget"}).style.horizontally_stretchable = true
     row.add({type = "label", name = "bte_stargate_power_" .. key, tooltip = tooltip})
   end
+  -- The window is as wide as the preview. Beside the train stop window it stretches to that window's
+  -- height, and the preview takes the extra.
   local preview = inner.add({type = "frame", style = "deep_frame_in_shallow_frame"})
   local camera = preview.add({type = "camera", position = {entity.position.x + 1, entity.position.y + 1},
     surface_index = entity.surface.index, zoom = 0.35})
-  camera.style.width = 360
-  camera.style.height = 220
+  camera.style.width = WIDTH
+  camera.style.minimal_height = 220
+  if beside then
+    window.style.vertically_stretchable = true
+    inner.style.vertically_stretchable = true
+    preview.style.vertically_stretchable = true
+    camera.style.vertically_stretchable = true
+  end
+
+  -- One switch, as on a vanilla inserter: the circuit condition (bte_stargate_condition, in the
+  -- grid below) shows only while a wire is connected (refresh()) and applies once it names a signal.
+  local switches = inner.add({type = "flow", direction = "vertical"})
+  switches.style.top_margin = 8
+  switches.add({type = "checkbox", name = "bte_stargate_enabled", state = record.enabled,
+    caption = {"bte-stargate-gui.enabled"}, tooltip = {"bte-stargate-gui.enabled-tooltip"}})
+  switches.add({type = "checkbox", name = "bte_stargate_keep_charged", state = record.keep_charged == true,
+    caption = {"bte-stargate-gui.keep-charged"}, tooltip = {"bte-stargate-gui.keep-charged-tooltip"}})
 
   local grid = inner.add({type = "table", column_count = 2})
   grid.style.vertical_spacing = 8
   grid.style.top_margin = 8
-  grid.add({type = "label", caption = {"bte-stargate-gui.name"}})
-  local name = grid.add({type = "textfield", name = "bte_stargate_name", text = record.name})
-  name.style.width = 220
-  grid.add({type = "label", caption = {"bte-stargate-gui.partner"}, tooltip = {"bte-stargate-gui.partner-tooltip"}})
-  local partner = grid.add({type = "drop-down", name = "bte_stargate_partner"})
-  partner.style.width = 220
-  grid.add({type = "label", caption = {"bte-stargate-gui.enabled"}})
-  grid.add({type = "checkbox", name = "bte_stargate_enabled", state = record.enabled})
-  grid.add({type = "label", caption = {"bte-stargate-gui.keep-charged"}, tooltip = {"bte-stargate-gui.keep-charged-tooltip"}})
-  grid.add({type = "checkbox", name = "bte_stargate_keep_charged", state = record.keep_charged == true,
-    tooltip = {"bte-stargate-gui.keep-charged-tooltip"}})
-  grid.add({type = "label", caption = {"bte-stargate-gui.station"}, tooltip = {"bte-stargate-gui.station-tooltip"}})
-  local mode = 1
-  for index, value in ipairs(MODES) do
-    if value == (record.railway or false) then
-      mode = index
-    end
-  end
-  local modes = grid.add({type = "drop-down", name = "bte_stargate_station", selected_index = mode,
-    tooltip = {"bte-stargate-gui.station-tooltip"}, items = {
-      {"bte-stargate-gui.station-off"}, {"bte-stargate-gui.station-single"},
-      {"bte-stargate-gui.station-right"}, {"bte-stargate-gui.station-left"}
-    }})
-  modes.style.width = 220
-
   -- get_control_behavior avoids creating an empty control behaviour on every gate whose window is
   -- opened, so unwired gates return nil immediately in Gate.circuit_allows.
   local behavior = entity.get_control_behavior()
-  local condition = behavior and behavior.circuit_condition or {}
-  local circuit_enabled = behavior ~= nil and behavior.circuit_enable_disable
-  inner.add({type = "line"}).style.top_margin = 8
-  inner.add({type = "checkbox", name = "bte_stargate_circuit", state = circuit_enabled,
-    caption = {"bte-stargate-gui.circuit"}, tooltip = {"bte-stargate-gui.circuit-tooltip"}})
-  local row = inner.add({type = "flow", name = "bte_stargate_condition", direction = "horizontal"})
+  local condition = behavior and behavior.circuit_enable_disable and behavior.circuit_condition or {}
+  grid.add({type = "label", name = "bte_stargate_circuit_label", caption = {"bte-stargate-gui.circuit"},
+    tooltip = {"bte-stargate-gui.circuit-tooltip"}})
+  local row = grid.add({type = "flow", name = "bte_stargate_condition", direction = "horizontal"})
   row.style.vertical_align = "center"
   row.add({type = "choose-elem-button", name = "bte_stargate_signal", elem_type = "signal",
-    signal = condition.first_signal})
+    signal = condition.first_signal, tooltip = {"bte-stargate-gui.circuit-tooltip"}})
   local comparator = 1
   for index, value in ipairs(COMPARATORS) do
     if value == condition.comparator then
@@ -236,7 +249,41 @@ local function open(player, record, beside)
   local constant = row.add({type = "textfield", name = "bte_stargate_constant", text = tostring(condition.constant or 0),
     numeric = true, allow_negative = true})
   constant.style.width = 80
-  row.visible = circuit_enabled
+  grid.add({type = "label", caption = {"bte-stargate-gui.name"}})
+  local name = grid.add({type = "textfield", name = "bte_stargate_name", text = record.name})
+  name.style.width = FIELD_WIDTH
+  grid.add({type = "label", name = "bte_stargate_partner_label", caption = {"bte-stargate-gui.partner"},
+    tooltip = {"bte-stargate-gui.partner-tooltip"}})
+  local partner = grid.add({type = "drop-down", name = "bte_stargate_partner",
+    tooltip = {"bte-stargate-gui.partner-tooltip"}})
+  partner.style.width = FIELD_WIDTH
+  grid.add({type = "label", name = "bte_stargate_station_label", caption = {"bte-stargate-gui.station"},
+    tooltip = {"bte-stargate-gui.station-tooltip"}})
+  local mode = 1
+  for index, value in ipairs(MODES) do
+    if value == (record.railway or false) then
+      mode = index
+    end
+  end
+  local modes = grid.add({type = "drop-down", name = "bte_stargate_station", selected_index = mode,
+    tooltip = {"bte-stargate-gui.station-tooltip"}, items = {
+      {"bte-stargate-gui.station-off"}, {"bte-stargate-gui.station-single"},
+      {"bte-stargate-gui.station-right"}, {"bte-stargate-gui.station-left"}
+    }})
+  modes.style.width = FIELD_WIDTH
+  -- The chosen layout drawn from above, with which way trains run on each track. The window is
+  -- rebuilt when the mode changes (show()), so this needs no refresh.
+  if record.railway then
+    local layout = inner.add({type = "flow", name = "bte_stargate_layout", direction = "horizontal"})
+    layout.style.top_margin = 8
+    layout.style.horizontal_spacing = 8
+    layout.style.vertical_align = "center"
+    local frame = layout.add({type = "frame", style = "deep_frame_in_shallow_frame"})
+    frame.add({type = "sprite", sprite = "bte-stargate-station-" .. record.railway})
+    local text = layout.add({type = "label", caption = {"bte-stargate-gui.station-" .. record.railway .. "-explanation"}})
+    text.style.single_line = false
+    text.style.maximal_width = WIDTH - 112 - 20
+  end
 
   fill_partners(partner, record)
   storage.open_gui[player.index] = entity.unit_number
@@ -267,8 +314,11 @@ end
 -- Writes the circuit condition from the window's signal, comparator, and constant.
 local function write_condition(window, record)
   local behavior = record.entity.get_or_create_control_behavior()
+  local signal = find(window, "bte_stargate_signal").elem_value
+  -- The condition applies once it names a signal; clearing the signal sets the gate free of the wire.
+  behavior.circuit_enable_disable = signal ~= nil
   behavior.circuit_condition = {
-    first_signal = find(window, "bte_stargate_signal").elem_value,
+    first_signal = signal,
     comparator = COMPARATORS[find(window, "bte_stargate_comparator").selected_index] or "<",
     constant = tonumber(find(window, "bte_stargate_constant").text) or 0
   }
@@ -339,7 +389,11 @@ function Gui.on_selection_changed(event)
   local player = game.get_player(event.player_index)
   if element.name == "bte_stargate_partner" then
     local id = element.tags.ids[element.selected_index]
-    Gate.pair(record, id ~= 0 and Gate.get(id) or nil)
+    local ok, reason = Gate.pair(record, id ~= 0 and Gate.get(id) or nil)
+    if not ok and reason then
+      player.create_local_flying_text({text = reason, create_at_cursor = true})
+      player.play_sound({path = "utility/cannot_build"})
+    end
     fill_partners(element, record)
     refresh(player, record)
   elseif element.name == "bte_stargate_station" then
@@ -379,9 +433,6 @@ function Gui.on_checked(event)
     Gate.set_enabled(record, element.state)
   elseif element.name == "bte_stargate_keep_charged" then
     Gate.set_keep_charged(record, element.state)
-  elseif element.name == "bte_stargate_circuit" then
-    record.entity.get_or_create_control_behavior().circuit_enable_disable = element.state
-    find(window_of(player), "bte_stargate_condition").visible = element.state
   end
   refresh(player, record)
 end

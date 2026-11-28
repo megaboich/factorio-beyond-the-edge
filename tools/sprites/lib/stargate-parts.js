@@ -370,8 +370,9 @@ export const TRACK_LANES = { single: [0], double: [-2, 2] };
 // Where the track stops: an eighth of a tile into the ring's front face. It runs over the ring's
 // lower arc, which lies in the trench below it.
 const TRACK_END = RING_Z + RING_DEPTH / 2 - 0.125;
-// Half the rail gauge, from the game's rail-metals sheet (36 px from the centre at 64 px a tile).
-const GAUGE = 0.5625;
+// Half the rail gauge: the game's rail heads are 38 px from the centre at 64 px a tile (measured
+// against vanilla rails in game; 36 px left ours two pixels inside theirs at the gate's edge).
+const GAUGE = 0.59375;
 
 // The track's height on its ramp: level with the ground at the gate's edge, rising gently to
 // RAMP_TOP at the ring, so it crosses the basin and the ring's lower arc above them.
@@ -393,7 +394,15 @@ function laneTrack(root, m, x) {
   // itself and both lanes look alike: in game the gate's shadow layer falls over it anyway.
   const add = (mesh) => { mesh.userData.track = x; return mesh; };
   const step = 0.25;
-  const base = (z) => Math.min(floorHeight(x, z), trackHeight(z)) - 0.05;
+  // Over the last EASE tiles before the gate's edge every layer above the ramp sinks to nothing, so
+  // the track meets the game's rails flush: a raised end there showed its front face as a dark band.
+  const EASE = 0.8;
+  // Only the rail heads run on OVER past the edge, flat on the ground, to meet the game's rail metal,
+  // which starts a little inside its tile; the deck stops at the edge so it never covers the game's
+  // ties (seen in game). Sunk to ground level there, the deck's end is drawn where the edge is.
+  const OVER = 0.25;
+  const k = (z) => Math.min(1, Math.max(0, (HALF - z) / EASE));
+  const base = (z) => Math.min(floorHeight(x, z), trackHeight(z)) - 0.05 * k(z);
   for (let z = TRACK_FAR; z < HALF - 0.001; z += step) {
     const zc = z + step / 2;
     const top = trackHeight(zc);
@@ -406,7 +415,8 @@ function laneTrack(root, m, x) {
   const along = (top, w, h, material) => {
     for (let z = TRACK_FAR; z < HALF - 0.001; z += step) {
       const zc = z + step / 2;
-      add(part(root, new THREE.BoxGeometry(w, h, step + 0.01), material, [x, trackHeight(zc) + top - h / 2, zc]));
+      const e = Math.max(k(zc), 0.02);
+      add(part(root, new THREE.BoxGeometry(w, h * e, step + 0.01), material, [x, trackHeight(zc) + (top - h / 2) * e, zc]));
     }
   };
   along(0.05, 2.06, 0.05, m.ballast);
@@ -414,7 +424,7 @@ function laneTrack(root, m, x) {
   // Steel lips along the deck's edges, with a cyan marker stud every tile.
   for (const side of [-1, 1]) {
     const lip = [];
-    for (let z = TRACK_FAR; z <= HALF + 0.001; z += 0.25) lip.push([x + side * 0.98, trackHeight(z) + 0.07, z]);
+    for (let z = TRACK_FAR; z <= HALF + 0.001; z += 0.25) lip.push([x + side * 0.98, trackHeight(z) + 0.07 * k(z), z]);
     add(tube(root, lip, 0.04, m.plate, 48));
     for (let z = HALF - 0.5; z > TRACK_FAR + 0.3; z -= 1) {
       add(part(root, new THREE.BoxGeometry(0.08, 0.03, 0.14), m.glow, [x + side * 0.86, trackHeight(z) + 0.065, z]));
@@ -423,14 +433,21 @@ function laneTrack(root, m, x) {
   // From the gate's edge inwards, the first tie flush with it; tall enough to read as blocks with
   // shaded sides.
   for (let z = HALF - 0.08; z > TRACK_FAR + 0.08; z -= 0.406) {
-    add(part(root, new THREE.BoxGeometry(1.5, 0.1, 0.16), m.sleeper, [x, trackHeight(z) + 0.1, z]));
+    const e = Math.max(k(z), 0.3);
+    add(part(root, new THREE.BoxGeometry(1.5, 0.1 * e, 0.16), m.sleeper, [x, trackHeight(z) + 0.1 * e, z]));
   }
   for (const dx of [-GAUGE, GAUGE]) {
     const plates = [], heads = [];
-    // Run a little past the edge: raised above the deck, they would otherwise end short of it on screen.
-    for (let z = TRACK_FAR; z <= HALF + 0.21; z += 0.25) {
-      plates.push([x + dx, trackHeight(z) + 0.13, z]);
-      heads.push([x + dx, trackHeight(z) + 0.17, z]);
+    // Every 0.25 tiles from the back, then the edge and OVER past it, so they reach the game's rails
+    // without a dark break (the steps alone stopped short of it).
+    const zs = [];
+    for (let z = TRACK_FAR; z < HALF - 0.05; z += 0.25) zs.push(z);
+    zs.push(HALF, HALF + OVER);
+    for (const z of zs) {
+      // Flat past the edge, lying on the game's rail heads rather than standing above them.
+      const e = z > HALF ? 0.15 : 0.35 + 0.65 * k(z);
+      plates.push([x + dx, trackHeight(z) + 0.13 * e, z]);
+      heads.push([x + dx, trackHeight(z) + 0.17 * e, z]);
     }
     add(tube(root, plates, 0.07, m.backplate, 64));
     add(tube(root, heads, 0.035, m.rail, 64));

@@ -33,4 +33,4 @@ The exact standalone spawning policy remains open, but infinite reinforcements a
 
 [Homecoming Journey](../homecoming-journey/VISION.md) can ask this mod to defend authored ruins on all five planets. The campaign decides where those sites are, what their clearance unlocks, and which artifacts they contain. Mechanoids remains responsible for its enemies and their encounter behavior.
 
-[Stargate](../stargate/VISION.md) stays independent: building experimental gates does not require fighting Mechanoids, and exploring guarded Fulgoran ruins does not require researching a gate.
+[Stargate](../stargate/README.md) stays independent: building experimental gates does not require fighting Mechanoids, and exploring guarded Fulgoran ruins does not require researching a gate.

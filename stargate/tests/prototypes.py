@@ -29,8 +29,18 @@ def check(t):
     check_construction_plan(t)
     check_buildings(t)
     check_graphics(t)
+    check_gui_sprites(t)
     check_technology(t)
     t.locale("bte-")
+
+
+def check_gui_sprites(t):
+    """The gate window shows a diagram for each station mode (scripts/gui.lua)."""
+    for mode in ("single", "right", "left"):
+        sprite = t.prototype("sprite", f"bte-stargate-station-{mode}")
+        if sprite:
+            t.check(f"station {mode} diagram", sprite.get("filename"),
+                    f"__bte-stargate__/graphics/gui/station-{mode}.png")
 
 
 def stack_size(t, name):
@@ -164,7 +174,9 @@ def check_buildings(t):
         # The body also has pictures for a station gate's one and two tracks (scripts/gate.lua, show_body).
         suffixes = ("", "-single", "-double") if label == "body" else ("",)
         expected = [(picture + x, glow + x) for x in suffixes for glow in (lights, red)]
-        t.check(f"{label} has {len(expected)} variations", len(companion.get("pictures", [])), len(expected))
+        # Then the frozen pictures, one per station mode (checked with the graphics).
+        t.check(f"{label} has {len(expected)} lit variations, then frozen ones",
+                len(companion.get("pictures", [])), len(expected) + len(suffixes))
         for n, (variation, (pic, glow)) in enumerate(zip(companion.get("pictures", []), expected), 1):
             sprites = variation["layers"]
             t.check(f"{label} variation {n} layers", [x["filename"].rsplit("stargate-", 1)[-1] for x in sprites], [f"{pic}.png", f"{glow}.png"])
@@ -233,12 +245,13 @@ def check_graphics(t):
 
     The assembling gate has one picture per build stage, which the runtime switches between.
     """
-    suffixes = ("glow-lights.png", "main.png", "shadow.png")
+    suffixes = ("glow-lights.png", "main.png", "frozen.png", "shadow.png")
 
     def layers(sprites):
         return [(next(x for x in suffixes if s["filename"].endswith(x)), bool(s.get("draw_as_shadow"))) for s in sprites]
 
     plain = [("main.png", False), ("shadow.png", True)]
+    frozen = [("frozen.png", False), ("shadow.png", True)]
     site = t.prototype("container", "bte-stargate-construction-site")
     assembling = t.prototype("simple-entity-with-owner", "bte-stargate-assembling")
     gate = t.prototype("assembling-machine", "bte-stargate")
@@ -246,8 +259,10 @@ def check_graphics(t):
     if site:
         pictures["construction site"] = [site["picture"]]
     if assembling:
-        pictures.update({f"assembling stage {n}": [p] for n, p in enumerate(assembling["pictures"], 1)})
-        t.check("assembling gate stage pictures", len(assembling["pictures"]), 6)
+        pictures.update({f"assembling stage {n}": [p] for n, p in enumerate(assembling["pictures"][:6], 1)})
+        pictures.update({f"frozen assembling stage {n}": [p] for n, p in enumerate(assembling["pictures"][6:], 1)})
+        # Six stages, then the same six frozen (scripts/construction.lua adds six while frozen).
+        t.check("assembling gate stage pictures", len(assembling["pictures"]), 12)
         if site:
             t.check("the first build stage reuses the construction site's picture",
                     [s["filename"] for s in assembling["pictures"][0]["layers"]],
@@ -261,6 +276,25 @@ def check_graphics(t):
             t.check("gate floor patch shift follows the box", [round(v, 4) for v in patch["shift"]],
                     [round(v + 1, 4) for v in exported_shift(t, patch["filename"])])
         t.check("gate leaves the veil to its companions", gate["graphics_set"].get("working_visualisations"), None)
+        t.check("gate freezes unless heated with 1 MW", gate.get("heating_energy"), "1MW")
+    thermometer = t.prototype("assembling-machine", "bte-stargate-thermometer")
+    if thermometer:
+        t.check("thermometer needs the gate's heating", thermometer.get("heating_energy"), "1MW")
+        t.check("thermometer collides with nothing", thermometer.get("collision_mask", {}).get("layers"), {})
+    body = t.prototype("simple-entity-with-owner", "bte-stargate-body")
+    if body:
+        t.check("body has cyan, red, and frozen pictures for each station mode", len(body["pictures"]), 9)
+        t.check("frozen body pictures", [p["layers"][0]["filename"].rsplit("/", 1)[-1] for p in body["pictures"][6:]],
+                ["stargate-main-frozen.png", "stargate-main-single-frozen.png", "stargate-main-double-frozen.png"])
+    top = t.prototype("simple-entity-with-owner", "bte-stargate-top")
+    if top:
+        t.check("top's third picture is frozen", top["pictures"][2]["layers"][0]["filename"].endswith("stargate-top-frozen.png"), True)
+    for name, sheet in (("bte-stargate-floor-frost", "stargate-floor-frozen.png"), ("bte-stargate-site-frost", "construction-site-frozen.png")):
+        frost = t.prototype("simple-entity-with-owner", name)
+        if frost:
+            pictures_of = frost.get("pictures") or [frost.get("picture")]
+            t.check(f"{name} draws {sheet}", pictures_of[0]["layers"][0]["filename"].endswith(sheet), True)
+            t.check(f"{name} collides with nothing", frost.get("collision_mask", {}).get("layers"), {})
     # The veil, split like the ring: the lower part sorts with characters, the upper over spidertrons.
     for name, layer, sheet in (("bte-stargate-veil", "object", "glow-veil"), ("bte-stargate-veil-top", "elevated-object", "glow-veil-high")):
         companion = t.prototype("simple-entity-with-owner", name)
@@ -278,7 +312,8 @@ def check_graphics(t):
     for label, [picture] in pictures.items():
         sprites = picture["layers"]
         # The gate's building is its body (above); the gate itself draws only the shadow.
-        t.check(f"{label} layers", layers(sprites), [("shadow.png", True)] if label == "gate" else plain)
+        t.check(f"{label} layers", layers(sprites),
+                [("shadow.png", True)] if label == "gate" else frozen if label.startswith("frozen") else plain)
         t.check(f"{label} glow layer is additive",
                 [s.get("blend_mode") for s in sprites if s["filename"].endswith("glow-lights.png")],
                 [])
@@ -305,3 +340,17 @@ def check_technology(t):
                  prerequisites=["quantum-processor", "fusion-reactor", "speed-module-3", "productivity-module-3",
                                 "efficiency-module-3", "quality-module-3"],
                  unlocks=["bte-stargate-construction-kit"])
+    t.technology("bte-stargate-controlled-jumps", count=2000, time=60, packs=STARGATE_PACKS,
+                 prerequisites=["bte-stargate-experimental-gates"])
+    controlled = t.prototype("technology", "bte-stargate-controlled-jumps")
+    if controlled:
+        # Closed until the first jump (scripts/gate.lua, Gate.record_jump), but shown in the tree.
+        t.check("controlled jumps starts disabled", controlled.get("enabled"), False)
+        t.check("controlled jumps is shown while disabled", controlled.get("visible_when_disabled"), True)
+    t.technology("bte-stargate-rail-transit", count=5000, time=60, packs=STARGATE_PACKS,
+                 prerequisites=["bte-stargate-controlled-jumps"])
+    t.check("all stargate technologies", t.names("technology", "bte-stargate-"), [
+        "bte-stargate-controlled-jumps",
+        "bte-stargate-experimental-gates",
+        "bte-stargate-rail-transit",
+    ])

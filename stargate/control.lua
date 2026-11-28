@@ -90,6 +90,21 @@ script.on_event(defines.events.on_gui_text_changed, Gui.on_text_changed)
 script.on_event(defines.events.on_gui_selection_state_changed, Gui.on_selection_changed)
 script.on_event(defines.events.on_gui_elem_changed, Gui.on_elem_changed)
 script.on_event(defines.events.on_gui_checked_state_changed, Gui.on_checked)
+script.on_event(defines.events.on_research_finished, function()
+  Gui.update()
+end)
+script.on_event(defines.events.on_pre_surface_deleted, function(event_data)
+  Construction.surface_deleted(event_data.surface_index)
+  Gate.surface_deleted(event_data.surface_index, Railway.gate_removed)
+  Destinations.clear_cache()
+end)
+script.on_event(defines.events.on_surface_deleted, function()
+  Destinations.clear_cache()
+end)
+script.on_event(defines.events.on_forces_merging, function(event_data)
+  Gate.forces_merging(event_data.source, event_data.destination)
+  Destinations.clear_cache()
+end)
 
 -- Lets the headless runtime test drive what the window does; registered only alongside its helper mod.
 if script.active_mods["bte-stargate-runtime-test"] then
@@ -99,7 +114,23 @@ if script.active_mods["bte-stargate-runtime-test"] then
       return record and {name = record.name, partner = record.partner, enabled = record.enabled}
     end,
     pair = function(a, b)
-      Gate.pair(Gate.get(a), b and Gate.get(b))
+      return Gate.pair(Gate.get(a), b and Gate.get(b))
+    end,
+    can_pair = function(force)
+      return Gate.can_pair(game.forces[force])
+    end,
+    can_station = function(force)
+      return Railway.can_enable(game.forces[force])
+    end,
+    rebuild = rebuild,
+    force_legacy_state = function(a, b, mode)
+      local ra, rb = Gate.get(a), b and Gate.get(b) or nil
+      if ra and rb then
+        ra.partner, rb.partner = b, a
+      end
+      if ra and mode then
+        ra.railway = mode
+      end
     end,
     set_enabled = function(id, enabled)
       Gate.set_enabled(Gate.get(id), enabled)
@@ -139,6 +170,9 @@ if script.active_mods["bte-stargate-runtime-test"] then
     is_open = function(id)
       return Gate.is_open(Gate.get(id))
     end,
+    circuit_allows = function(id)
+      return Gate.circuit_allows(Gate.get(id))
+    end,
     -- Headless runs do not chart, so no planet counts as visited there; this tests the landing spot.
     charge = function(id)
       return Gate.charge(Gate.get(id))
@@ -158,8 +192,8 @@ if script.active_mods["bte-stargate-runtime-test"] then
     power_flow = function(id)
       return Gate.power_flow(Gate.get(id))
     end,
-    random_location = function(force, surface)
-      local position = Destinations.location(game.forces[force], game.get_surface(surface))
+    random_location = function(force, surface, name)
+      local position = Destinations.location(game.forces[force], game.get_surface(surface), name)
       return position and {x = position.x or position[1], y = position.y or position[2]}
     end,
     destination = function(id, x, y)

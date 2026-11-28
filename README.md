@@ -53,7 +53,7 @@ See the Warp Drive manual [for all details](warp-drive/README.md).
 These are not installable yet, or only partly:
 
 - **Mechanoids — Guardians of the Ruins:** independent robotic enemies and finite ruin encounters. Standalone placement is provisionally Fulgora-only; detailed placement and rewards remain open. [Vision](mechanoids/VISION.md) · [Plan](mechanoids/PLAN.md).
-- **Stargate (the rest of it):** construction and paired travel for characters, vehicles, trains, and enemies exist today; the uncontrolled first jump does not. No enemy or campaign mod required. [Vision](stargate/VISION.md) · [Plan](stargate/PLAN.md).
+- **Stargate:** standalone construction, uncontrolled experimental first jump, paired interplanetary travel for characters, vehicles, and enemies, and carriage-by-carriage train stations exist today; campaign integration for ancient ruins remains planned. No enemy or campaign mod required. [Manual](stargate/README.md) · [Plan](stargate/PLAN.md).
 - **Homecoming Journey:** requires Space Lab, Warp Drive, Mechanoids, and Stargate. It owns the ancient ruins, artifact hunt, enormous research effort, and orbital gate that brings the engineer home. [Vision](homecoming-journey/VISION.md) · [Plan](homecoming-journey/PLAN.md).
 
 ## Playing Them Together
@@ -81,7 +81,7 @@ Publishing copy, screenshots, and demo-video sources are grouped under [media-po
 
 Space Lab and Warp Drive are published on the Factorio Mod Portal and are in their first public release. See each mod's **Asset Attribution** section for the origin of its art and sounds.
 
-Mechanoids and Homecoming Journey are in planning, and Stargate is only partly built (construction and travel), each with a separate vision and development plan linked above. Their mod identifiers are planned; none of the three has been verified in a visible game yet.
+Mechanoids and Homecoming Journey are in planning, each with a separate vision and development plan linked above, while Stargate's standalone gameplay is implemented and in development ([plan](stargate/PLAN.md)).
 
 ## Links
 

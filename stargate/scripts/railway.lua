@@ -148,6 +148,14 @@ local function busy(record)
   return false
 end
 
+Railway.in_transfer = busy
+Gate.in_rail_transfer = busy
+
+function Railway.can_enable(force)
+  local tech = force and force.valid and force.technologies["bte-stargate-rail-transit"]
+  return tech ~= nil and tech.researched
+end
+
 -- The layout's version: gates built with an earlier one get the missing pieces and a moved station.
 local LAYOUT = 7
 
@@ -274,10 +282,17 @@ local function exit_clear(target)
 end
 
 -- Switches station mode: nil (off) or one of Railway.MODES. Refused, returning false and a reason,
--- while a train is on the gate's rails or passing through either way.
+-- while Stargate rail transit is unresearched (for enabling) or while a train is on the gate's rails
+-- or passing through either way.
 function Railway.set_mode(record, mode)
+  if not (record and record.entity.valid) then
+    return false
+  end
   if mode == record.railway then
     return true
+  end
+  if mode and not Railway.can_enable(record.entity.force) then
+    return false, {"bte-stargate-gui.station-locked"}
   end
   if record.railway and (busy(record) or #stock_on_rails(record, record.railway) > 0) then
     return false, {"bte-stargate-gui.station-occupied"}

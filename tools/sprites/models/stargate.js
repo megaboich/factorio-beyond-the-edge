@@ -18,6 +18,7 @@
 // is drawn twice. TOP is the ring's centre, so the upper half is elevated; anyone in front of the
 // ring close enough to reach that height on screen is already in the portal zone.
 import * as THREE from "three";
+import { frost } from "../lib/frost.js";
 import { build, drawPassage, drawSplash, drawVeil, drawVeilTransition, RING, TRACK_LANES } from "../lib/stargate-parts.js";
 
 // The ring's centre height: the upper half of the ring is the elevated part.
@@ -62,90 +63,10 @@ const CLOSING_FRAMES = 18;
 const PASSAGE_FRAMES = 32;
 const SPLASH_FRAMES = 32;
 
-export default {
-  tiles: [14, 14],
-  height: 10,
-  elevation: 50,
-  frames: 1,
-  loop: VEIL_FRAMES,
-  fps: 16,
-  variants: ["active", "opening", "closing", "passage", "alarm"],
-  labels: { variant: "State", idle: "Idle" },
-  layers: [
-    // The floor goes under everything (the gate's integration patch); top over the building.
-    { name: "floor", tag: "floor", variant: "floor", frames: 1, preview: { building: true, order: -3 } },
-    { name: "top", tag: "top", variant: "top", frames: 1, preview: { building: true } },
-    { name: "glow-lights-high", tag: "light", glow: true, variant: "high", frames: 1 },
-    { name: "glow-lights-red-high", tag: "light", glow: true, variant: "alarm-high", frames: 1, preview: { variant: "alarm" } },
-    // The veil in two parts, split at TOP like the ring (two companions in game).
-    { name: "glow-veil", tag: "veil", glow: true, variant: "active", frames: VEIL_FRAMES, preview: { variant: "active" } },
-    { name: "glow-veil-high", tag: "veil", glow: true, variant: "active-high", frames: VEIL_FRAMES, preview: { variant: "active" } },
-    // Opening and closing, each split at TOP like the veil.
-    { name: "glow-opening", tag: "veil", glow: true, variant: "opening", frames: OPENING_FRAMES, preview: { variant: "opening" } },
-    { name: "glow-opening-high", tag: "veil", glow: true, variant: "opening-high", frames: OPENING_FRAMES, preview: { variant: "opening" } },
-    { name: "glow-closing", tag: "veil", glow: true, variant: "closing", frames: CLOSING_FRAMES, preview: { variant: "closing" } },
-    { name: "glow-closing-high", tag: "veil", glow: true, variant: "closing-high", frames: CLOSING_FRAMES, preview: { variant: "closing" } },
-    // The status lights in red, which scripts/gate.lua shows instead of glow-lights while the gate lacks power.
-    { name: "glow-lights-red", tag: "light", glow: true, variant: "alarm", frames: 1, preview: { variant: "alarm" } },
-    // Station-mode track, one picture per layout, drawn by a companion just above the floor
-    // (stargate/scripts/railway.lua); hidden from every other layer.
-    { name: "rails-single", tag: "rails", variant: "rails-single", frames: 1 },
-    { name: "rails-double", tag: "rails", variant: "rails-double", frames: 1 },
-    // The two-track station's direction chevrons, one picture per layout, drawn over its track.
-    { name: "chevrons-right", tag: "rails", variant: "chevrons-right", frames: 1 },
-    { name: "chevrons-left", tag: "rails", variant: "chevrons-left", frames: 1 },
-    // The building with the track cut out where it passes over the ring's lower arc into the ring,
-    // so the track (drawn under the building) shows there: main for a station gate.
-    { name: "main-single", tag: "body", variant: "body-single", frames: 1 },
-    { name: "main-double", tag: "body", variant: "body-double", frames: 1 },
-    // The status lights below TOP, cyan and red, with the track in front of them hiding them.
-    { name: "glow-lights-single", tag: "light", glow: true, variant: "lights-single", frames: 1 },
-    { name: "glow-lights-double", tag: "light", glow: true, variant: "lights-double", frames: 1 },
-    { name: "glow-lights-red-single", tag: "light", glow: true, variant: "alarm-single", frames: 1 },
-    { name: "glow-lights-red-double", tag: "light", glow: true, variant: "alarm-double", frames: 1 },
-    // One train carriage passing the veil, drawn by scripts/railway.lua at its lane, 32 frames at 2 ticks.
-    { name: "glow-splash", tag: "veil", glow: true, variant: "splash", frames: SPLASH_FRAMES, span: 0.5 },
-    // Drawn over the veil by script while someone passes through.
-    { name: "glow-passage", tag: "veil", glow: true, variant: "passage", frames: PASSAGE_FRAMES, span: 2, preview: { variant: "passage" } }
-  ],
-  export: "stargate/graphics/entity/stargate/stargate",
-  // The gate's sounds in the preview: opening and closing as the veil comes and goes, and a trip
-  // during the passage, leaving at its start and arriving (at the partner, in game) halfway.
-  sounds: {
-    states: [{ variants: ["active", "opening", "passage"], enter: "repo:stargate/resources/audio/stargate-open.ogg", leave: "repo:stargate/resources/audio/stargate-close.ogg" }],
-    cues: [
-      { variant: "passage", at: 0, file: "repo:stargate/resources/audio/stargate-depart.ogg" },
-      { variant: "passage", at: 0.5, file: "repo:stargate/resources/audio/stargate-arrive.ogg" }
-    ]
-  },
-  // Nauvis grass around the gate in the preview, with the construction stages beside it; render
-  // stargate-site and stargate-stage1 to stargate-stage5 before this model.
-  // grass-1.png holds sixteen 4x4-tile variants in the row at y = 320.
-  ground: { file: "factorio:base/graphics/terrain/grass-1.png", y: 320, size: 256, count: 16 },
-  references: [
-    { model: "stargate-site", label: "Construction site (first phase)" },
-    { model: "stargate-stage1", label: "Phase 2" },
-    { model: "stargate-stage2", label: "Phase 3" },
-    { model: "stargate-stage3", label: "Phase 4" },
-    { model: "stargate-stage4", label: "Phase 5" },
-    { model: "stargate-stage5", label: "Phase 6" },
-    {
-      label: "Vanilla Fusion Reactor (6x6), for scale",
-      tiles: [6, 6],
-      layers: [
-        { file: "factorio:space-age/graphics/entity/fusion-reactor/fusion-reactor-shadow.png", width: 542, height: 346, shift: [40 / 32, 9.5 / 32], blend: "shadow" },
-        { file: "factorio:space-age/graphics/entity/fusion-reactor/fusion-reactor-main.png", width: 444, height: 456, shift: [1 / 32, -5.5 / 32], blend: "normal" },
-        { file: "factorio:space-age/graphics/entity/fusion-reactor/fusion-reactor-glow.png", width: 396, height: 428, shift: [1.5 / 32, -11 / 32], blend: "additive" }
-      ]
-    }
-  ],
-
-  build() {
-    return build({ state: "complete", tracks: [...TRACK_LANES.single, ...TRACK_LANES.double] });
-  },
-
-  setVariant(root, name) {
-    root.userData.variant = name;
+// The gate's own variants (null, the companions' layers, the station's, and the veil's); the
+// frozen ones are these, frosted (setVariant).
+function setBase(root, name) {
+  root.userData.variant = name;
     // Restore every mesh, then cut the floor out of main or isolate it for the floor layer.
     root.traverse((mesh) => {
       if (!mesh.isMesh) return;
@@ -210,6 +131,107 @@ export default {
     });
     // The passage is drawn whole, by script.
     root.userData.veil.material.clippingPlanes = !VEILS.includes(name) ? null : name.endsWith("-high") ? topClip : lowClip;
+}
+
+export default {
+  tiles: [14, 14],
+  height: 10,
+  elevation: 50,
+  frames: 1,
+  loop: VEIL_FRAMES,
+  fps: 16,
+  variants: ["active", "opening", "closing", "passage", "alarm", "frozen"],
+  labels: { variant: "State", idle: "Idle" },
+  layers: [
+    // The floor goes under everything (the gate's integration patch); top over the building.
+    { name: "floor", tag: "floor", variant: "floor", frames: 1, preview: { building: true, order: -3 } },
+    { name: "top", tag: "top", variant: "top", frames: 1, preview: { building: true } },
+    { name: "glow-lights-high", tag: "light", glow: true, variant: "high", frames: 1 },
+    { name: "glow-lights-red-high", tag: "light", glow: true, variant: "alarm-high", frames: 1, preview: { variant: "alarm" } },
+    // The veil in two parts, split at TOP like the ring (two companions in game).
+    { name: "glow-veil", tag: "veil", glow: true, variant: "active", frames: VEIL_FRAMES, preview: { variant: "active" } },
+    { name: "glow-veil-high", tag: "veil", glow: true, variant: "active-high", frames: VEIL_FRAMES, preview: { variant: "active" } },
+    // Opening and closing, each split at TOP like the veil.
+    { name: "glow-opening", tag: "veil", glow: true, variant: "opening", frames: OPENING_FRAMES, preview: { variant: "opening" } },
+    { name: "glow-opening-high", tag: "veil", glow: true, variant: "opening-high", frames: OPENING_FRAMES, preview: { variant: "opening" } },
+    { name: "glow-closing", tag: "veil", glow: true, variant: "closing", frames: CLOSING_FRAMES, preview: { variant: "closing" } },
+    { name: "glow-closing-high", tag: "veil", glow: true, variant: "closing-high", frames: CLOSING_FRAMES, preview: { variant: "closing" } },
+    // The status lights in red, which scripts/gate.lua shows instead of glow-lights while the gate lacks power.
+    { name: "glow-lights-red", tag: "light", glow: true, variant: "alarm", frames: 1, preview: { variant: "alarm" } },
+    // Station-mode track, one picture per layout, drawn by a companion just above the floor
+    // (stargate/scripts/railway.lua); hidden from every other layer.
+    { name: "rails-single", tag: "rails", variant: "rails-single", frames: 1 },
+    { name: "rails-double", tag: "rails", variant: "rails-double", frames: 1 },
+    // The two-track station's direction chevrons, one picture per layout, drawn over its track.
+    { name: "chevrons-right", tag: "rails", variant: "chevrons-right", frames: 1 },
+    { name: "chevrons-left", tag: "rails", variant: "chevrons-left", frames: 1 },
+    // The building with the track cut out where it passes over the ring's lower arc into the ring,
+    // so the track (drawn under the building) shows there: main for a station gate.
+    { name: "main-single", tag: "body", variant: "body-single", frames: 1 },
+    { name: "main-double", tag: "body", variant: "body-double", frames: 1 },
+    // The status lights below TOP, cyan and red, with the track in front of them hiding them.
+    { name: "glow-lights-single", tag: "light", glow: true, variant: "lights-single", frames: 1 },
+    { name: "glow-lights-double", tag: "light", glow: true, variant: "lights-double", frames: 1 },
+    { name: "glow-lights-red-single", tag: "light", glow: true, variant: "alarm-single", frames: 1 },
+    { name: "glow-lights-red-double", tag: "light", glow: true, variant: "alarm-double", frames: 1 },
+    // One train carriage passing the veil, drawn by scripts/railway.lua at its lane, 32 frames at 2 ticks.
+    { name: "glow-splash", tag: "veil", glow: true, variant: "splash", frames: SPLASH_FRAMES, span: 0.5 },
+    // Drawn over the veil by script while someone passes through.
+    { name: "glow-passage", tag: "veil", glow: true, variant: "passage", frames: PASSAGE_FRAMES, span: 2, preview: { variant: "passage" } },
+    // Frozen (Aquilo, unheated; lib/frost.js): the building with and without each station's track
+    // cut, the upper arc, and the floor, all frosted, with dark lamps and no veil. scripts/gate.lua
+    // shows these instead of the others while the gate is frozen.
+    { name: "main-frozen", tag: "body", variant: "frozen:body-", frames: 1, preview: { variant: "frozen" } },
+    { name: "main-single-frozen", tag: "body", variant: "frozen:body-single", frames: 1 },
+    { name: "main-double-frozen", tag: "body", variant: "frozen:body-double", frames: 1 },
+    { name: "top-frozen", tag: "top", variant: "frozen:top", frames: 1, preview: { variant: "frozen" } },
+    { name: "floor-frozen", tag: "floor", variant: "frozen:floor", frames: 1, preview: { variant: "frozen", order: -2 } }
+  ],
+  export: "stargate/graphics/entity/stargate/stargate",
+  // The gate's sounds in the preview: opening and closing as the veil comes and goes, and a trip
+  // during the passage, leaving at its start and arriving (at the partner, in game) halfway.
+  sounds: {
+    states: [{ variants: ["active", "opening", "passage"], enter: "repo:stargate/resources/audio/stargate-open.ogg", leave: "repo:stargate/resources/audio/stargate-close.ogg" }],
+    cues: [
+      { variant: "passage", at: 0, file: "repo:stargate/resources/audio/stargate-depart.ogg" },
+      { variant: "passage", at: 0.5, file: "repo:stargate/resources/audio/stargate-arrive.ogg" }
+    ]
+  },
+  // Nauvis grass around the gate in the preview, with the construction stages beside it; render
+  // stargate-site and stargate-stage1 to stargate-stage5 before this model.
+  // grass-1.png holds sixteen 4x4-tile variants in the row at y = 320.
+  ground: { file: "factorio:base/graphics/terrain/grass-1.png", y: 320, size: 256, count: 16 },
+  references: [
+    { model: "stargate-site", label: "Construction site (first phase)" },
+    { model: "stargate-stage1", label: "Phase 2" },
+    { model: "stargate-stage2", label: "Phase 3" },
+    { model: "stargate-stage3", label: "Phase 4" },
+    { model: "stargate-stage4", label: "Phase 5" },
+    { model: "stargate-stage5", label: "Phase 6" },
+    {
+      label: "Vanilla Fusion Reactor (6x6), for scale",
+      tiles: [6, 6],
+      layers: [
+        { file: "factorio:space-age/graphics/entity/fusion-reactor/fusion-reactor-shadow.png", width: 542, height: 346, shift: [40 / 32, 9.5 / 32], blend: "shadow" },
+        { file: "factorio:space-age/graphics/entity/fusion-reactor/fusion-reactor-main.png", width: 444, height: 456, shift: [1 / 32, -5.5 / 32], blend: "normal" },
+        { file: "factorio:space-age/graphics/entity/fusion-reactor/fusion-reactor-glow.png", width: 396, height: 428, shift: [1.5 / 32, -11 / 32], blend: "additive" }
+      ]
+    }
+  ],
+
+  build() {
+    return build({ state: "complete", tracks: [...TRACK_LANES.single, ...TRACK_LANES.double] });
+  },
+
+  setVariant(root, name) {
+    const frozen = /^frozen:(.*)$/.exec(String(name));
+    setBase(root, frozen ? frozen[1] : name);
+    if (!frozen) return;
+    // A frozen gate never opens, so no veil, and no veil-shaped cut in a station's building.
+    root.traverse((object) => {
+      if (object.isMesh && object.userData.original?.userData.tag === "veil") object.visible = false;
+    });
+    frost(root);
   },
 
   animate(root, t) {
