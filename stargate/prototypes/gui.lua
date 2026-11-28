@@ -9,3 +9,14 @@ for _, mode in pairs({"single", "right", "left"}) do
     flags = {"gui-icon"}
   }})
 end
+
+-- The gate on the map, closed and open (scripts/gate.lua), drawn from the inventory icon's model by
+-- tools/sprites/models/stargate-map.js and stargate-map-open.js.
+for _, name in pairs({"bte-stargate-map", "bte-stargate-map-open"}) do
+  data:extend({{
+    type = "sprite",
+    name = name,
+    filename = "__bte-stargate__/graphics/map/" .. name:gsub("^bte%-", "") .. ".png",
+    size = 256
+  }})
+end

@@ -283,14 +283,14 @@ local function remove_companions(record)
     end
   end
   record.veil_fx = nil
-  for _, key in pairs({"body", "top", "veil", "veil_top", "veil_light", "lights", "lights_high", "tracks", "frost"}) do
+  for _, key in pairs({"body", "top", "veil", "veil_top", "veil_light", "lights", "lights_high", "tracks", "frost", "map"}) do
     if record[key] and record[key].valid then
       record[key].destroy()
     end
   end
   record.capacitor, record.capacitor_idle = nil, nil
   record.body, record.lights, record.lights_high, record.lights_state, record.top = nil, nil, nil, nil, nil
-  record.veil, record.veil_top, record.veil_light, record.tracks = nil, nil, nil, nil
+  record.veil, record.veil_top, record.veil_light, record.tracks, record.map = nil, nil, nil, nil, nil
 end
 
 -- The gate's store is a power bank (scripts/power_bank.lua, a copy of Warp Drive's; see
@@ -663,6 +663,27 @@ local function show_veil(record, was_open)
   end
 end
 
+-- The gate's picture on the map: the icon's model over its 14x14 footprint (256 px at 32 px a tile
+-- is 8 tiles, so scale 1.75), with the veil while open. Map view shows no entity sprites. On the
+-- lowest layer, so the station's train stop icon stays on top (the default `arrow` layer covered it).
+local MAP_SCALE = 14 / 8
+local function show_map(record)
+  local sprite = record.open and "bte-stargate-map-open" or "bte-stargate-map"
+  local map = record.map
+  if not (map and map.valid) then
+    record.map = rendering.draw_sprite({sprite = sprite, target = center(record), surface = record.entity.surface,
+      x_scale = MAP_SCALE, y_scale = MAP_SCALE, render_mode = "chart", render_layer = "zero"})
+  else
+    if map.sprite ~= sprite then
+      map.sprite = sprite
+    end
+    -- Gates drawn before the layer was set.
+    if map.render_layer ~= "zero" then
+      map.render_layer = "zero"
+    end
+  end
+end
+
 -- Opens or closes the portal from the switch, pairing, circuit condition, and charge, and keeps the
 -- engine's state, the capacitor's draw, the lights, and the barriers in step.
 --
@@ -717,6 +738,7 @@ local function apply(record, quick, now)
   record.shown = shown
   show_body(record, red)
   show_veil(record, was_open)
+  show_map(record)
   if was_open ~= record.open and (was_open or record.open) then
     local c = center(record)
     record.surface.play_sound({path = record.open and "bte-stargate-open" or "bte-stargate-close", position = c})
